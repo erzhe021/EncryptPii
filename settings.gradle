@@ -1,0 +1,2 @@
+rootProject.name = 'EncryptPii'
+include 'common', 'server', 'client'
