@@ -51,7 +51,7 @@ public class HybridCryptoClient {
         byte[] encryptedAesKey = rsaCipher.doFinal(aesKey.getEncoded());
 
         return new HybridCipherPayload(
-                "RSA-OAEP + AES-256-GCM",
+                CryptoConstants.ALGORITHM_HYBRID,
                 EncodingUtils.toBase64(encryptedAesKey),
                 null,
                 EncodingUtils.toBase64(iv),
@@ -103,7 +103,7 @@ public class HybridCryptoClient {
         LOGGER.info("ECDH client payload ready: sending A(client ephemeral public key) + AES-GCM ciphertext");
 
         return new HybridCipherPayload(
-                "ECDH-P256 + HKDF-SHA256 + AES-256-GCM",
+                CryptoConstants.ALGORITHM_ECDH_HKDF_AES,
                 null,
                 clientEphemeralPublicKeyBase64,
                 EncodingUtils.toBase64(iv),
