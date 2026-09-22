@@ -16,7 +16,7 @@ public class HttpHybridCryptoClient implements PublicKeyProvider {
     private final String keyAlgorithm;
 
     public HttpHybridCryptoClient(URI serverBaseUri) {
-        this(serverBaseUri, "RSA");
+        this(serverBaseUri, CryptoConstants.ALGORITHM_RSA);
     }
 
     public HttpHybridCryptoClient(URI serverBaseUri, String keyAlgorithm) {
@@ -46,15 +46,15 @@ public class HttpHybridCryptoClient implements PublicKeyProvider {
         }
     }
 
-    public String submitEncryptedPhone(HybridCipherPayload payload) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve("/api/crypto/decrypt-phone"))
+    public String decryptEncryptedData(HybridCipherPayload payload) throws IOException, InterruptedException {
+        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve("/api/crypto/decrypt-data"))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
                 .build();
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            throw new IOException("Failed to decrypt phone, status=" + response.statusCode());
+            throw new IOException("Failed to decrypt data, status=" + response.statusCode());
         }
-        return objectMapper.readValue(response.body(), DecryptPhoneResponse.class).phoneNumber();
+        return objectMapper.readValue(response.body(), DecryptDataResponse.class).data();
     }
 }

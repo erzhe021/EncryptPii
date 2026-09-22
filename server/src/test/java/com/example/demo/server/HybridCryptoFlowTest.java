@@ -1,9 +1,6 @@
 package com.example.demo.server;
 
-import com.example.demo.crypto.HybridCipherPayload;
-import com.example.demo.crypto.HybridCryptoClient;
-import com.example.demo.crypto.HybridCryptoServer;
-import com.example.demo.crypto.HttpHybridCryptoClient;
+import com.example.demo.crypto.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -29,34 +26,34 @@ class HybridCryptoFlowTest {
     int port;
 
     @Test
-    void shouldEncryptAndDecryptPhoneNumberWithPerRequestAesKey() throws Exception {
+    void shouldEncryptAndDecryptDataWithPerRequestAesKey() throws Exception {
         HttpHybridCryptoClient publicKeyProvider = new HttpHybridCryptoClient(
                 URI.create("http://localhost:" + port)
         );
         HybridCryptoClient client = new HybridCryptoClient(publicKeyProvider);
 
-        HybridCipherPayload firstPayload = client.encryptPhone("13800138000");
-        HybridCipherPayload secondPayload = client.encryptPhone("13800138000");
+        HybridCipherPayload firstPayload = client.encrypt("13800138000");
+        HybridCipherPayload secondPayload = client.encrypt("13800138000");
 
-        assertEquals("13800138000", publicKeyProvider.submitEncryptedPhone(firstPayload));
-        assertEquals("13800138000", publicKeyProvider.submitEncryptedPhone(secondPayload));
+        assertEquals("13800138000", publicKeyProvider.decryptEncryptedData(firstPayload));
+        assertEquals("13800138000", publicKeyProvider.decryptEncryptedData(secondPayload));
         assertNotEquals(firstPayload.encryptedAesKeyBase64(), secondPayload.encryptedAesKeyBase64());
         assertNotEquals(firstPayload.ivBase64(), secondPayload.ivBase64());
     }
 
     @Test
-    void shouldEncryptAndDecryptPhoneNumberWithEcdhKeyAgreement() throws Exception {
+    void shouldEncryptAndDecryptDataWithEcdhKeyAgreement() throws Exception {
         HttpHybridCryptoClient publicKeyProvider = new HttpHybridCryptoClient(
                 URI.create("http://localhost:" + port),
-                "ECDH"
+                CryptoConstants.ALGORITHM_ECDH
         );
         HybridCryptoClient client = new HybridCryptoClient(publicKeyProvider);
 
-        HybridCipherPayload firstPayload = client.encryptPhone("13800138000");
-        HybridCipherPayload secondPayload = client.encryptPhone("13800138000");
+        HybridCipherPayload firstPayload = client.encrypt("13800138000");
+        HybridCipherPayload secondPayload = client.encrypt("13800138000");
 
-        assertEquals("13800138000", publicKeyProvider.submitEncryptedPhone(firstPayload));
-        assertEquals("13800138000", publicKeyProvider.submitEncryptedPhone(secondPayload));
+        assertEquals("13800138000", publicKeyProvider.decryptEncryptedData(firstPayload));
+        assertEquals("13800138000", publicKeyProvider.decryptEncryptedData(secondPayload));
         assertNotEquals(firstPayload.clientEphemeralPublicKeyBase64(), secondPayload.clientEphemeralPublicKeyBase64());
         assertNotEquals(firstPayload.ivBase64(), secondPayload.ivBase64());
     }
@@ -68,12 +65,12 @@ class HybridCryptoFlowTest {
         HybridCryptoServer secondServer = HybridCryptoServer.create(keyDirectory);
 
         assertEquals(
-                firstServer.publicKey().getEncoded().length,
-                secondServer.publicKey().getEncoded().length
+                firstServer.rsaPublicKey().getEncoded().length,
+                secondServer.rsaPublicKey().getEncoded().length
         );
         assertEquals(
-                java.util.Base64.getEncoder().encodeToString(firstServer.publicKey().getEncoded()),
-                java.util.Base64.getEncoder().encodeToString(secondServer.publicKey().getEncoded())
+                java.util.Base64.getEncoder().encodeToString(firstServer.rsaPublicKey().getEncoded()),
+                java.util.Base64.getEncoder().encodeToString(secondServer.rsaPublicKey().getEncoded())
         );
     }
 
