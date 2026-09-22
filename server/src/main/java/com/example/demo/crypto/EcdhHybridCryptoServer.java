@@ -1,5 +1,7 @@
 package com.example.demo.crypto;
 
+import com.github.benmanes.caffeine.cache.Cache;
+import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.Cipher;
@@ -15,17 +17,46 @@ import java.security.*;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.time.Duration;
 
 public class EcdhHybridCryptoServer {
+    static final Duration DEFAULT_EPHEMERAL_KEY_TTL = Duration.ofMinutes(5);
+    static final long DEFAULT_MAX_EPHEMERAL_KEYS = 10_000L;
+
     private final PrivateKey longTermIdentityPrivateKey;
     private final PublicKey longTermIdentityPublicKey;
-    private final Map<String, PrivateKey> ephemeralEcdhPrivateKeys = new ConcurrentHashMap<>();
+    private final Cache<String, PrivateKey> ephemeralEcdhPrivateKeys;
 
     public EcdhHybridCryptoServer(PrivateKey longTermIdentityPrivateKey, PublicKey longTermIdentityPublicKey) {
+        this(longTermIdentityPrivateKey, longTermIdentityPublicKey, DEFAULT_EPHEMERAL_KEY_TTL, DEFAULT_MAX_EPHEMERAL_KEYS);
+    }
+
+    public EcdhHybridCryptoServer(
+            PrivateKey longTermIdentityPrivateKey,
+            PublicKey longTermIdentityPublicKey,
+            Duration ephemeralKeyTtl,
+            long maxEphemeralKeys
+    ) {
+        if (ephemeralKeyTtl == null || ephemeralKeyTtl.isZero() || ephemeralKeyTtl.isNegative()) {
+            throw new IllegalArgumentException("Ephemeral key TTL must be greater than zero.");
+        }
+        if (maxEphemeralKeys <= 0) {
+            throw new IllegalArgumentException("Maximum ephemeral key count must be greater than zero.");
+        }
         this.longTermIdentityPrivateKey = longTermIdentityPrivateKey;
         this.longTermIdentityPublicKey = longTermIdentityPublicKey;
+        this.ephemeralEcdhPrivateKeys = Caffeine.newBuilder()
+                .expireAfterWrite(ephemeralKeyTtl)
+                .maximumSize(maxEphemeralKeys)
+                .build();
+    }
+
+    PrivateKey getLongTermIdentityPrivateKey() {
+        return longTermIdentityPrivateKey;
+    }
+
+    PublicKey getLongTermIdentityPublicKey() {
+        return longTermIdentityPublicKey;
     }
 
     public static EcdhHybridCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
@@ -54,10 +85,6 @@ public class EcdhHybridCryptoServer {
         Files.write(privateKeyPath, keyPair.getPrivate().getEncoded());
         Files.write(publicKeyPath, keyPair.getPublic().getEncoded());
         return keyPair;
-    }
-
-    public PublicKey longTermIdentityPublicKey() {
-        return longTermIdentityPublicKey;
     }
 
     public EcdhPublicKeyResponse generateEphemeralEcdhPublicKey() throws GeneralSecurityException {
@@ -89,7 +116,7 @@ public class EcdhHybridCryptoServer {
     public String decrypt(EcdhHybridCipherPayload payload) throws GeneralSecurityException {
         validatePayload(payload);
         String serverPublicKeyBase64 = payload.serverEphemeralPublicKeyBase64();
-        PrivateKey serverPrivateKey = ephemeralEcdhPrivateKeys.get(serverPublicKeyBase64);
+        PrivateKey serverPrivateKey = ephemeralEcdhPrivateKeys.getIfPresent(serverPublicKeyBase64);
         if (serverPrivateKey == null) {
             throw new IllegalArgumentException(
                     "No matching ephemeral server private key found for this ECDH request. " +
@@ -113,7 +140,9 @@ public class EcdhHybridCryptoServer {
         );
 
         SecretKey aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
-        return decryptWithAes(payload, aesKey);
+        String decryptedValue = decryptWithAes(payload, aesKey);
+        ephemeralEcdhPrivateKeys.invalidate(serverPublicKeyBase64);
+        return decryptedValue;
     }
 
     public String decryptEcdhData(EcdhHybridCipherPayload payload) throws GeneralSecurityException {
