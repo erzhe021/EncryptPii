@@ -1,9 +1,8 @@
 package com.example.demo.crypto;
 
-public record HybridCipherPayload(
+public record RsaHybridCipherPayload(
         String algorithm,
         String encryptedAesKeyBase64,
-        String clientEphemeralPublicKeyBase64,
         String ivBase64,
         String encryptedDataBase64
 ) {

@@ -1,6 +1,6 @@
 package com.example.demo.crypto;
 
-public record DecryptDataResponse(
+public record EcdhDecryptDataResponse(
         String data
 ) {
 }

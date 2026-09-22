@@ -11,12 +11,18 @@ public final class CryptoConstants {
     public static final String ALGORITHM_HYBRID = "RSA-OAEP + AES-256-GCM";
     public static final String ALGORITHM_ECDH_HKDF_AES = "ECDH-P256 + HKDF-SHA256 + AES-256-GCM";
 
+    // -- Signature Algorithms ---
+    public static final String SIGNATURE_ALGORITHM_SHA256_WITH_ECDSA = "SHA256withECDSA";
+
     // --- Cipher Transformations ---
     public static final String TRANSFORMATION_RSA = "RSA/ECB/OAEPWithSHA-256AndMGF1Padding";
     public static final String TRANSFORMATION_AES = "AES/GCM/NoPadding";
 
     // --- Elliptic Curves ---
     public static final String CURVE_ECDH = "secp256r1";
+
+    // --- Key Derivation (HKDF) Info/Context Strings ---
+    public static final String HKDF_INFO_DATA_AES_KEY = "data-aes-key";
 
     // --- Key Sizes & Lengths ---
     public static final int AES_KEY_SIZE_BITS = 256;

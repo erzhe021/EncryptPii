@@ -1,8 +1,7 @@
 package com.example.demo.crypto;
 
-public record PublicKeyResponse(
+public record RsaPublicKeyResponse(
         String algorithm,
-        String curve,
         String publicKeyBase64
 ) {
 }
