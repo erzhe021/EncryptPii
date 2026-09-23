@@ -104,6 +104,14 @@
 
 ./gradlew client:bootRun
 
-curl -X POST http://localhost:8080/crypto/client/rsa -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'
+curl -X POST http://localhost:8080/crypto/client/rsa/bidirectional -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'
 
-curl -X POST http://localhost:8080/crypto/client/ecdh -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'
+curl -X POST http://localhost:8080/crypto/client/ecdh/bidirectional -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'
+
+curl -X POST http://localhost:8080/crypto/client/rsa/request-only -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'
+
+curl -X POST http://localhost:8080/crypto/client/ecdh/request-only -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'
+
+curl -X POST http://localhost:8080/crypto/client/rsa/response-only -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'
+
+curl -X POST http://localhost:8080/crypto/client/ecdh/response-only -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'

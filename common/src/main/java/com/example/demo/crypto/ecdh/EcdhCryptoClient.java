@@ -18,6 +18,8 @@ public class EcdhCryptoClient {
     private final PublicKeyProvider publicKeyProvider;
     private final SecureRandom secureRandom;
     private SecretKey aesKey;
+    private PrivateKey clientEphemeralPrivateKey;
+    private PublicKey serverEphemeralPublicKey;
 
     public EcdhCryptoClient(PublicKeyProvider publicKeyProvider) {
         this.publicKeyProvider = publicKeyProvider;
@@ -49,6 +51,8 @@ public class EcdhCryptoClient {
                 CryptoConstants.HKDF_INFO_DATA_AES_KEY.getBytes(StandardCharsets.UTF_8),
                 CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
         );
+        this.clientEphemeralPrivateKey = ephemeralKeyPair.getPrivate();
+        this.serverEphemeralPublicKey = serverPublicKey;
         this.aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
 
         byte[] encryptedData = encryptWithAes(data, aesKey, iv);
@@ -65,8 +69,23 @@ public class EcdhCryptoClient {
         if (payload == null) {
             throw new IllegalArgumentException("payload cannot be null");
         }
-        if (aesKey == null) {
-            throw new IllegalStateException("No AES session key available for local ECDH decryption");
+        if (clientEphemeralPrivateKey == null || serverEphemeralPublicKey == null) {
+            if (aesKey == null) {
+                throw new IllegalStateException("No AES session key available for local ECDH decryption");
+            }
+        } else {
+            KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
+            keyAgreement.init(clientEphemeralPrivateKey);
+            keyAgreement.doPhase(serverEphemeralPublicKey, true);
+            byte[] sharedSecret = keyAgreement.generateSecret();
+            byte[] iv = EncodingUtils.fromBase64(payload.ivBase64());
+            byte[] derivedAesKey = HkdfUtils.deriveAesKey(
+                    sharedSecret,
+                    iv,
+                    CryptoConstants.HKDF_INFO_DATA_AES_KEY.getBytes(StandardCharsets.UTF_8),
+                    CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
+            );
+            this.aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
         }
 
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
