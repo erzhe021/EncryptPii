@@ -15,6 +15,9 @@ public class EcdhHttpCryptoClient implements PublicKeyProvider {
     private final URI serverBaseUri;
     private final ObjectMapper objectMapper;
 
+    private static final String PUBLIC_KEY_ENDPOINT = "/api/crypto/ecdh/public-key";
+    private static final String DECRYPT_ENDPOINT = "/api/crypto/ecdh/decrypt";
+
     public EcdhHttpCryptoClient(URI serverBaseUri) {
         this.httpClient = HttpClient.newHttpClient();
         this.serverBaseUri = serverBaseUri;
@@ -23,7 +26,7 @@ public class EcdhHttpCryptoClient implements PublicKeyProvider {
 
     @Override
     public Object fetchServerPublicKey() throws GeneralSecurityException {
-        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve("/api/crypto/ecdh/public-key"))
+        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(PUBLIC_KEY_ENDPOINT))
                 .GET()
                 .build();
         try {
@@ -41,7 +44,7 @@ public class EcdhHttpCryptoClient implements PublicKeyProvider {
     }
 
     public String decryptEncryptedData(EcdhCipherPayload payload) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve("/api/crypto/ecdh/decrypt"))
+        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(DECRYPT_ENDPOINT))
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
                 .build();
@@ -52,7 +55,4 @@ public class EcdhHttpCryptoClient implements PublicKeyProvider {
         return objectMapper.readValue(response.body(), EcdhDecryptDataResponse.class).data();
     }
 
-    public URI serverBaseUri() {
-        return serverBaseUri;
-    }
 }

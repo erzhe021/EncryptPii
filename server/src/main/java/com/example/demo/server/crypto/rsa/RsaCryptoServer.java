@@ -3,6 +3,7 @@ package com.example.demo.server.crypto.rsa;
 import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.rsa.RsaCipherPayload;
+import lombok.Getter;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.Cipher;
@@ -18,7 +19,11 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 
 public class RsaCryptoServer {
+
+    @Getter
     private final PrivateKey rsaPrivateKey;
+
+    @Getter
     private final PublicKey rsaPublicKey;
 
     public RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) {
@@ -54,10 +59,6 @@ public class RsaCryptoServer {
         return keyPair;
     }
 
-    public PublicKey rsaPublicKey() {
-        return rsaPublicKey;
-    }
-
     public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
         validatePayload(payload);
         Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
@@ -65,10 +66,6 @@ public class RsaCryptoServer {
         byte[] aesKeyBytes = rsaCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedAesKeyBase64()));
         SecretKey aesKey = new SecretKeySpec(aesKeyBytes, CryptoConstants.ALGORITHM_AES);
         return decryptWithAes(payload, aesKey);
-    }
-
-    public String decryptRsaData(RsaCipherPayload payload) throws GeneralSecurityException {
-        return decrypt(payload);
     }
 
     private void validatePayload(RsaCipherPayload payload) {

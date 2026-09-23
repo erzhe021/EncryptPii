@@ -7,6 +7,7 @@ import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
 import com.example.demo.crypto.ecdh.HkdfUtils;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
+import lombok.Getter;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.Cipher;
@@ -26,10 +27,13 @@ import java.time.Duration;
 
 public class EcdhCryptoServer {
     public static final Duration DEFAULT_EPHEMERAL_KEY_TTL = Duration.ofMinutes(5);
-    public static final long DEFAULT_MAX_EPHEMERAL_KEYS = 10_000L;
+    public static final long DEFAULT_MAX_EPHEMERAL_KEYS = 10000L;
 
+    @Getter
     private final PrivateKey longTermIdentityPrivateKey;
+    @Getter
     private final PublicKey longTermIdentityPublicKey;
+
     private final Cache<String, PrivateKey> ephemeralEcdhPrivateKeys;
 
     public EcdhCryptoServer(PrivateKey longTermIdentityPrivateKey, PublicKey longTermIdentityPublicKey) {
@@ -54,14 +58,6 @@ public class EcdhCryptoServer {
                 .expireAfterWrite(ephemeralKeyTtl)
                 .maximumSize(maxEphemeralKeys)
                 .build();
-    }
-
-    public PrivateKey getLongTermIdentityPrivateKey() {
-        return longTermIdentityPrivateKey;
-    }
-
-    public PublicKey getLongTermIdentityPublicKey() {
-        return longTermIdentityPublicKey;
     }
 
     public static EcdhCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {

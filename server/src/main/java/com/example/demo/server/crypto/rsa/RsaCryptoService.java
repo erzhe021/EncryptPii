@@ -17,7 +17,7 @@ public class RsaCryptoService {
     public RsaPublicKeyResponse getPublicKey() {
         return new RsaPublicKeyResponse(
                 CryptoConstants.ALGORITHM_RSA,
-                EncodingUtils.toBase64(cryptoServer.rsaPublicKey().getEncoded())
+                EncodingUtils.toBase64(cryptoServer.getRsaPublicKey().getEncoded())
         );
     }
 
