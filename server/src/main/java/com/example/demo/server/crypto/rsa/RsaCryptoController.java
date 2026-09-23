@@ -1,14 +1,12 @@
 package com.example.demo.server.crypto.rsa;
 
-import com.example.demo.crypto.rsa.RsaCipherPayload;
-import com.example.demo.crypto.rsa.RsaDecryptDataResponse;
 import com.example.demo.crypto.rsa.RsaPublicKeyResponse;
-import org.springframework.web.bind.annotation.*;
-
-import java.security.GeneralSecurityException;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/crypto/rsa")
+@RequestMapping("/crypto/server/rsa")
 public class RsaCryptoController {
 
     private final RsaCryptoService rsaCryptoService;
@@ -22,8 +20,4 @@ public class RsaCryptoController {
         return rsaCryptoService.getPublicKey();
     }
 
-    @PostMapping("/decrypt")
-    public RsaDecryptDataResponse decryptRsa(@RequestBody RsaCipherPayload payload) throws GeneralSecurityException {
-        return new RsaDecryptDataResponse(rsaCryptoService.decrypt(payload));
-    }
 }

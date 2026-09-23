@@ -15,8 +15,7 @@ public class RsaHttpCryptoClient implements PublicKeyProvider {
     private final URI serverBaseUri;
     private final ObjectMapper objectMapper;
 
-    private static final String PUBLIC_KEY_ENDPOINT = "/api/crypto/rsa/public-key";
-    private static final String DECRYPT_ENDPOINT = "/api/crypto/rsa/decrypt";
+    private static final String PUBLIC_KEY_ENDPOINT = "/crypto/server/rsa/public-key";
 
     public RsaHttpCryptoClient(URI serverBaseUri) {
         this.httpClient = HttpClient.newHttpClient();
@@ -42,17 +41,4 @@ public class RsaHttpCryptoClient implements PublicKeyProvider {
             throw new GeneralSecurityException("Failed to fetch RSA public key", e);
         }
     }
-
-    public String decryptEncryptedData(RsaCipherPayload payload) throws IOException, InterruptedException {
-        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(DECRYPT_ENDPOINT))
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(payload)))
-                .build();
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        if (response.statusCode() != 200) {
-            throw new IOException("Failed to decrypt RSA payload, status=" + response.statusCode());
-        }
-        return objectMapper.readValue(response.body(), RsaDecryptDataResponse.class).data();
-    }
-
 }

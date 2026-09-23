@@ -97,4 +97,13 @@
 3. **客户端做好密钥缓存**：服务端公钥可以缓存，避免每次请求都拉取；但客户端临时密钥对必须每次新生成。
 4. **日志脱敏同步推进**：即使接口加密了，如果服务端日志打印了明文手机号，风险依然存在。
 
-需要我帮你出一份更详细的技术方案设计文档（含接口定义和时序图）吗？
+
+
+### 怎么运行
+./gradlew server:bootRun
+
+./gradlew client:bootRun
+
+curl -X POST http://localhost:8080/crypto/client/rsa -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'
+
+curl -X POST http://localhost:8080/crypto/client/ecdh -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'

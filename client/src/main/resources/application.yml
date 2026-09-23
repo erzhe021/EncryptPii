@@ -1,0 +1,5 @@
+server:
+  port: 8080
+crypto:
+  server:
+    base-url: http://localhost:9090

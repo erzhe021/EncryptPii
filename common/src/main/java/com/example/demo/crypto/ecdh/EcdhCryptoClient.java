@@ -17,6 +17,7 @@ import java.security.spec.X509EncodedKeySpec;
 public class EcdhCryptoClient {
     private final PublicKeyProvider publicKeyProvider;
     private final SecureRandom secureRandom;
+    private SecretKey aesKey;
 
     public EcdhCryptoClient(PublicKeyProvider publicKeyProvider) {
         this.publicKeyProvider = publicKeyProvider;
@@ -48,17 +49,34 @@ public class EcdhCryptoClient {
                 CryptoConstants.HKDF_INFO_DATA_AES_KEY.getBytes(StandardCharsets.UTF_8),
                 CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
         );
-        SecretKey aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
+        this.aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
 
         byte[] encryptedData = encryptWithAes(data, aesKey, iv);
 
         return new EcdhCipherPayload(
-                CryptoConstants.ALGORITHM_ECDH_HKDF_AES,
                 clientEphemeralPublicKeyBase64,
                 publicKeyResponse.ephemeralPublicKeyBase64(),
                 EncodingUtils.toBase64(iv),
                 EncodingUtils.toBase64(encryptedData)
         );
+    }
+
+    public String decrypt(EcdhCipherPayload payload) throws GeneralSecurityException {
+        if (payload == null) {
+            throw new IllegalArgumentException("payload cannot be null");
+        }
+        if (aesKey == null) {
+            throw new IllegalStateException("No AES session key available for local ECDH decryption");
+        }
+
+        Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
+        aesCipher.init(
+                Cipher.DECRYPT_MODE,
+                aesKey,
+                new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, EncodingUtils.fromBase64(payload.ivBase64()))
+        );
+        byte[] plainBytes = aesCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedDataBase64()));
+        return new String(plainBytes, StandardCharsets.UTF_8);
     }
 
     private void verifyServerEphemeralPublicKey(EcdhPublicKeyResponse response) throws GeneralSecurityException {

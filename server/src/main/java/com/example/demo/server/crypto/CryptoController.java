@@ -7,7 +7,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/secure")
-public class CryptoDemoController {
+public class CryptoController {
 
     @PostMapping("/rsa/echo")
     @DecryptRequest(CryptoAlgorithm.RSA)

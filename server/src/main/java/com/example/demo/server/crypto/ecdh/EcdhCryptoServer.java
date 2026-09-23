@@ -196,7 +196,6 @@ public class EcdhCryptoServer {
         byte[] encryptedData = encryptWithAes(data, aesKey, iv);
 
         return new EcdhCipherPayload(
-                CryptoConstants.ALGORITHM_ECDH_HKDF_AES,
                 EncodingUtils.toBase64(clientEphemeralKeyPair.getPublic().getEncoded()),
                 serverPublicKeyBase64,
                 EncodingUtils.toBase64(iv),
@@ -230,7 +229,6 @@ public class EcdhCryptoServer {
         byte[] encryptedData = encryptWithAes(data, aesKey, iv);
 
         return new EcdhCipherPayload(
-                requestPayload.algorithm(),
                 requestPayload.clientEphemeralPublicKeyBase64(),
                 requestPayload.serverEphemeralPublicKeyBase64(),
                 EncodingUtils.toBase64(iv),
@@ -245,9 +243,6 @@ public class EcdhCryptoServer {
     private void validatePayload(EcdhCipherPayload payload) {
         if (payload == null) {
             throw new IllegalArgumentException("Payload cannot be null");
-        }
-        if (!StringUtils.hasLength(payload.algorithm())) {
-            throw new IllegalArgumentException("Algorithm is required but was not provided.");
         }
         if (!StringUtils.hasLength(payload.clientEphemeralPublicKeyBase64())) {
             throw new IllegalArgumentException("Client ephemeral public key is required for ECDH decryption but was not provided.");

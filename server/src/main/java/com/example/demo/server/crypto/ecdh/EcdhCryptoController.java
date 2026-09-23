@@ -1,14 +1,14 @@
 package com.example.demo.server.crypto.ecdh;
 
-import com.example.demo.crypto.ecdh.EcdhCipherPayload;
-import com.example.demo.crypto.ecdh.EcdhDecryptDataResponse;
 import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.security.GeneralSecurityException;
 
 @RestController
-@RequestMapping("/api/crypto/ecdh")
+@RequestMapping("/crypto/server/ecdh")
 public class EcdhCryptoController {
 
     private final EcdhCryptoService ecdhCryptoService;
@@ -22,8 +22,4 @@ public class EcdhCryptoController {
         return ecdhCryptoService.getPublicKey();
     }
 
-    @PostMapping("/decrypt")
-    public EcdhDecryptDataResponse decryptEcdh(@RequestBody EcdhCipherPayload payload) throws GeneralSecurityException {
-        return new EcdhDecryptDataResponse(ecdhCryptoService.decrypt(payload));
-    }
 }

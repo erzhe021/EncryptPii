@@ -18,6 +18,7 @@ import java.security.spec.X509EncodedKeySpec;
 public class RsaCryptoClient {
     private final PublicKeyProvider publicKeyProvider;
     private final SecureRandom secureRandom;
+    private SecretKey aesKey;
 
     public RsaCryptoClient(PublicKeyProvider publicKeyProvider) {
         this.publicKeyProvider = publicKeyProvider;
@@ -32,7 +33,7 @@ public class RsaCryptoClient {
 
         KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS, secureRandom);
-        SecretKey aesKey = keyGenerator.generateKey();
+        this.aesKey = keyGenerator.generateKey();
 
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         secureRandom.nextBytes(iv);
@@ -43,11 +44,28 @@ public class RsaCryptoClient {
         byte[] encryptedAesKey = rsaCipher.doFinal(aesKey.getEncoded());
 
         return new RsaCipherPayload(
-                CryptoConstants.ALGORITHM_RSA_AES,
                 EncodingUtils.toBase64(encryptedAesKey),
                 EncodingUtils.toBase64(iv),
                 EncodingUtils.toBase64(encryptedData)
         );
+    }
+
+    public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
+        if (payload == null) {
+            throw new IllegalArgumentException("payload cannot be null");
+        }
+        if (aesKey == null) {
+            throw new IllegalStateException("No AES session key available for local RSA decryption");
+        }
+
+        Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
+        aesCipher.init(
+                Cipher.DECRYPT_MODE,
+                aesKey,
+                new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, EncodingUtils.fromBase64(payload.ivBase64()))
+        );
+        byte[] plainBytes = aesCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedDataBase64()));
+        return new String(plainBytes, StandardCharsets.UTF_8);
     }
 
     private byte[] encryptWithAes(String data, SecretKey aesKey, byte[] iv) throws GeneralSecurityException {

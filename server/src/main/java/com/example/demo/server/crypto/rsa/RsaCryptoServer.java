@@ -86,7 +86,6 @@ public class RsaCryptoServer {
         new SecureRandom().nextBytes(iv);
         byte[] encryptedData = encryptWithAes(data, aesKey, iv);
         return new RsaCipherPayload(
-                requestPayload.algorithm(),
                 requestPayload.encryptedAesKeyBase64(),
                 EncodingUtils.toBase64(iv),
                 EncodingUtils.toBase64(encryptedData)
@@ -107,7 +106,6 @@ public class RsaCryptoServer {
         byte[] encryptedAesKey = rsaCipher.doFinal(aesKey.getEncoded());
 
         return new RsaCipherPayload(
-                CryptoConstants.ALGORITHM_RSA_AES,
                 EncodingUtils.toBase64(encryptedAesKey),
                 EncodingUtils.toBase64(iv),
                 EncodingUtils.toBase64(encryptedData)
@@ -117,9 +115,6 @@ public class RsaCryptoServer {
     private void validatePayload(RsaCipherPayload payload) {
         if (payload == null) {
             throw new IllegalArgumentException("Payload cannot be null");
-        }
-        if (!StringUtils.hasLength(payload.algorithm())) {
-            throw new IllegalArgumentException("Algorithm is required but was not provided.");
         }
         if (!StringUtils.hasLength(payload.encryptedAesKeyBase64())) {
             throw new IllegalArgumentException("Encrypted AES key is required for RSA decryption but was not provided.");

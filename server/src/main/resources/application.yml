@@ -1,3 +1,6 @@
+server:
+  port: 9090
+
 ecdh:
   crypto:
     key-directory: src/main/resources/keys
