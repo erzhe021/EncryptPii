@@ -1,4 +1,8 @@
-package com.example.demo.crypto;
+package com.example.demo.crypto.rsa;
+
+import com.example.demo.crypto.CryptoConstants;
+import com.example.demo.crypto.EncodingUtils;
+import com.example.demo.crypto.PublicKeyProvider;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
@@ -11,16 +15,16 @@ import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.spec.X509EncodedKeySpec;
 
-public class RsaHybridCryptoClient {
+public class RsaCryptoClient {
     private final PublicKeyProvider publicKeyProvider;
     private final SecureRandom secureRandom;
 
-    public RsaHybridCryptoClient(PublicKeyProvider publicKeyProvider) {
+    public RsaCryptoClient(PublicKeyProvider publicKeyProvider) {
         this.publicKeyProvider = publicKeyProvider;
         this.secureRandom = new SecureRandom();
     }
 
-    public RsaHybridCipherPayload encrypt(String data) throws GeneralSecurityException {
+    public RsaCipherPayload encrypt(String data) throws GeneralSecurityException {
         RsaPublicKeyResponse publicKeyResponse = (RsaPublicKeyResponse) publicKeyProvider.fetchServerPublicKey();
         PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(publicKeyResponse.publicKeyBase64()))
@@ -38,8 +42,8 @@ public class RsaHybridCryptoClient {
         rsaCipher.init(Cipher.ENCRYPT_MODE, serverPublicKey);
         byte[] encryptedAesKey = rsaCipher.doFinal(aesKey.getEncoded());
 
-        return new RsaHybridCipherPayload(
-                CryptoConstants.ALGORITHM_HYBRID,
+        return new RsaCipherPayload(
+                CryptoConstants.ALGORITHM_RSA_AES,
                 EncodingUtils.toBase64(encryptedAesKey),
                 EncodingUtils.toBase64(iv),
                 EncodingUtils.toBase64(encryptedData)

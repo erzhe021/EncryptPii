@@ -1,5 +1,8 @@
-package com.example.demo.crypto;
+package com.example.demo.server.crypto.rsa;
 
+import com.example.demo.crypto.CryptoConstants;
+import com.example.demo.crypto.EncodingUtils;
+import com.example.demo.crypto.rsa.RsaCipherPayload;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.Cipher;
@@ -14,16 +17,16 @@ import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 
-public class RsaHybridCryptoServer {
+public class RsaCryptoServer {
     private final PrivateKey rsaPrivateKey;
     private final PublicKey rsaPublicKey;
 
-    public RsaHybridCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) {
+    public RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) {
         this.rsaPrivateKey = rsaPrivateKey;
         this.rsaPublicKey = rsaPublicKey;
     }
 
-    public static RsaHybridCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
+    public static RsaCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
         Files.createDirectories(keyDirectory);
         KeyFactory rsaKeyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA);
         KeyPair rsaKeyPair = loadOrCreateKeyPair(
@@ -32,7 +35,7 @@ public class RsaHybridCryptoServer {
                 rsaKeyFactory,
                 2048
         );
-        return new RsaHybridCryptoServer(rsaKeyPair.getPrivate(), rsaKeyPair.getPublic());
+        return new RsaCryptoServer(rsaKeyPair.getPrivate(), rsaKeyPair.getPublic());
     }
 
     private static KeyPair loadOrCreateKeyPair(Path privateKeyPath, Path publicKeyPath, KeyFactory keyFactory, int keySize)
@@ -55,7 +58,7 @@ public class RsaHybridCryptoServer {
         return rsaPublicKey;
     }
 
-    public String decrypt(RsaHybridCipherPayload payload) throws GeneralSecurityException {
+    public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
         validatePayload(payload);
         Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
         rsaCipher.init(Cipher.DECRYPT_MODE, rsaPrivateKey);
@@ -64,11 +67,11 @@ public class RsaHybridCryptoServer {
         return decryptWithAes(payload, aesKey);
     }
 
-    public String decryptRsaData(RsaHybridCipherPayload payload) throws GeneralSecurityException {
+    public String decryptRsaData(RsaCipherPayload payload) throws GeneralSecurityException {
         return decrypt(payload);
     }
 
-    private void validatePayload(RsaHybridCipherPayload payload) {
+    private void validatePayload(RsaCipherPayload payload) {
         if (payload == null) {
             throw new IllegalArgumentException("Payload cannot be null");
         }
@@ -86,7 +89,7 @@ public class RsaHybridCryptoServer {
         }
     }
 
-    private String decryptWithAes(RsaHybridCipherPayload payload, SecretKey aesKey) throws GeneralSecurityException {
+    private String decryptWithAes(RsaCipherPayload payload, SecretKey aesKey) throws GeneralSecurityException {
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(
                 Cipher.DECRYPT_MODE,

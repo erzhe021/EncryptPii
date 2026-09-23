@@ -1,4 +1,8 @@
-package com.example.demo.crypto;
+package com.example.demo.crypto.ecdh;
+
+import com.example.demo.crypto.CryptoConstants;
+import com.example.demo.crypto.EncodingUtils;
+import com.example.demo.crypto.PublicKeyProvider;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyAgreement;
@@ -10,16 +14,16 @@ import java.security.*;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.X509EncodedKeySpec;
 
-public class EcdhHybridCryptoClient {
+public class EcdhCryptoClient {
     private final PublicKeyProvider publicKeyProvider;
     private final SecureRandom secureRandom;
 
-    public EcdhHybridCryptoClient(PublicKeyProvider publicKeyProvider) {
+    public EcdhCryptoClient(PublicKeyProvider publicKeyProvider) {
         this.publicKeyProvider = publicKeyProvider;
         this.secureRandom = new SecureRandom();
     }
 
-    public EcdhHybridCipherPayload encrypt(String data) throws GeneralSecurityException {
+    public EcdhCipherPayload encrypt(String data) throws GeneralSecurityException {
         EcdhPublicKeyResponse publicKeyResponse = (EcdhPublicKeyResponse) publicKeyProvider.fetchServerPublicKey();
         verifyServerEphemeralPublicKey(publicKeyResponse);
         PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
@@ -48,7 +52,7 @@ public class EcdhHybridCryptoClient {
 
         byte[] encryptedData = encryptWithAes(data, aesKey, iv);
 
-        return new EcdhHybridCipherPayload(
+        return new EcdhCipherPayload(
                 CryptoConstants.ALGORITHM_ECDH_HKDF_AES,
                 clientEphemeralPublicKeyBase64,
                 publicKeyResponse.ephemeralPublicKeyBase64(),

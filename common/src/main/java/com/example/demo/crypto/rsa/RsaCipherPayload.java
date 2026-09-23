@@ -1,6 +1,6 @@
-package com.example.demo.crypto;
+package com.example.demo.crypto.rsa;
 
-public record RsaHybridCipherPayload(
+public record RsaCipherPayload(
         String algorithm,
         String encryptedAesKeyBase64,
         String ivBase64,

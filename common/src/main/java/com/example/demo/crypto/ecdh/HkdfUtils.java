@@ -1,4 +1,6 @@
-package com.example.demo.crypto;
+package com.example.demo.crypto.ecdh;
+
+import com.example.demo.crypto.CryptoConstants;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;

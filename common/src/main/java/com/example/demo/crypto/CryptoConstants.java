@@ -8,7 +8,7 @@ public final class CryptoConstants {
     public static final String ALGORITHM_EC = "EC";
     public static final String ALGORITHM_ECDH = "ECDH";
     public static final String ALGORITHM_HMAC_SHA256 = "HmacSHA256";
-    public static final String ALGORITHM_HYBRID = "RSA-OAEP + AES-256-GCM";
+    public static final String ALGORITHM_RSA_AES = "RSA-OAEP + AES-256-GCM";
     public static final String ALGORITHM_ECDH_HKDF_AES = "ECDH-P256 + HKDF-SHA256 + AES-256-GCM";
 
     // -- Signature Algorithms ---

@@ -1,4 +1,4 @@
-package com.example.demo.crypto;
+package com.example.demo.crypto.rsa;
 
 public record RsaPublicKeyResponse(
         String algorithm,

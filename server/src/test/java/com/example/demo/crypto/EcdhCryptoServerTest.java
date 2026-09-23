@@ -1,5 +1,10 @@
 package com.example.demo.crypto;
 
+import com.example.demo.crypto.ecdh.EcdhCipherPayload;
+import com.example.demo.crypto.ecdh.EcdhCryptoClient;
+import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
+import com.example.demo.server.crypto.ecdh.EcdhCryptoServer;
+import com.github.benmanes.caffeine.cache.Cache;
 import org.junit.jupiter.api.Test;
 
 import java.lang.reflect.Field;
@@ -7,26 +12,22 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 
-import com.github.benmanes.caffeine.cache.Cache;
+import static org.junit.jupiter.api.Assertions.*;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertThrows;
-
-class EcdhHybridCryptoServerTest {
+class EcdhCryptoServerTest {
 
     @Test
     void decryptShouldInvalidateEphemeralPrivateKeyAfterSuccessfulUse() throws Exception {
         Path tempDir = Files.createTempDirectory("ecdh-server-test");
-        EcdhHybridCryptoServer server = EcdhHybridCryptoServer.create(tempDir);
+        EcdhCryptoServer server = EcdhCryptoServer.create(tempDir);
         EcdhPublicKeyResponse response = server.generateEphemeralEcdhPublicKey();
 
-        EcdhHybridCryptoClient client = new EcdhHybridCryptoClient(() -> response);
-        EcdhHybridCipherPayload payload = client.encrypt("13800138000");
+        EcdhCryptoClient client = new EcdhCryptoClient(() -> response);
+        EcdhCipherPayload payload = client.encrypt("13800138000");
 
         assertEquals("13800138000", server.decryptEcdhData(payload));
 
-        Field field = EcdhHybridCryptoServer.class.getDeclaredField("ephemeralEcdhPrivateKeys");
+        Field field = EcdhCryptoServer.class.getDeclaredField("ephemeralEcdhPrivateKeys");
         field.setAccessible(true);
         @SuppressWarnings("unchecked")
         Cache<String, ?> privateKeys = (Cache<String, ?>) field.get(server);
@@ -45,16 +46,16 @@ class EcdhHybridCryptoServerTest {
     @Test
     void decryptShouldRejectExpiredEphemeralPrivateKey() throws Exception {
         Path tempDir = Files.createTempDirectory("ecdh-server-expire-test");
-        EcdhHybridCryptoServer baselineServer = EcdhHybridCryptoServer.create(tempDir);
-        EcdhHybridCryptoServer server = new EcdhHybridCryptoServer(
+        EcdhCryptoServer baselineServer = EcdhCryptoServer.create(tempDir);
+        EcdhCryptoServer server = new EcdhCryptoServer(
                 baselineServer.getLongTermIdentityPrivateKey(),
                 baselineServer.getLongTermIdentityPublicKey(),
                 Duration.ofMillis(1),
-                EcdhHybridCryptoServer.DEFAULT_MAX_EPHEMERAL_KEYS
+                EcdhCryptoServer.DEFAULT_MAX_EPHEMERAL_KEYS
         );
         EcdhPublicKeyResponse response = server.generateEphemeralEcdhPublicKey();
-        EcdhHybridCryptoClient client = new EcdhHybridCryptoClient(() -> response);
-        EcdhHybridCipherPayload payload = client.encrypt("13800138000");
+        EcdhCryptoClient client = new EcdhCryptoClient(() -> response);
+        EcdhCipherPayload payload = client.encrypt("13800138000");
 
         Thread.sleep(20L);
 
@@ -71,18 +72,18 @@ class EcdhHybridCryptoServerTest {
     @Test
     void generateEphemeralEcdhPublicKeyShouldEvictOldKeysWhenCacheIsFull() throws Exception {
         Path tempDir = Files.createTempDirectory("ecdh-server-capacity-test");
-        EcdhHybridCryptoServer baselineServer = EcdhHybridCryptoServer.create(tempDir);
-        EcdhHybridCryptoServer server = new EcdhHybridCryptoServer(
+        EcdhCryptoServer baselineServer = EcdhCryptoServer.create(tempDir);
+        EcdhCryptoServer server = new EcdhCryptoServer(
                 baselineServer.getLongTermIdentityPrivateKey(),
                 baselineServer.getLongTermIdentityPublicKey(),
-                EcdhHybridCryptoServer.DEFAULT_EPHEMERAL_KEY_TTL,
+                EcdhCryptoServer.DEFAULT_EPHEMERAL_KEY_TTL,
                 1
         );
 
         EcdhPublicKeyResponse first = server.generateEphemeralEcdhPublicKey();
         EcdhPublicKeyResponse second = server.generateEphemeralEcdhPublicKey();
 
-        Field field = EcdhHybridCryptoServer.class.getDeclaredField("ephemeralEcdhPrivateKeys");
+        Field field = EcdhCryptoServer.class.getDeclaredField("ephemeralEcdhPrivateKeys");
         field.setAccessible(true);
         @SuppressWarnings("unchecked")
         Cache<String, ?> privateKeys = (Cache<String, ?>) field.get(server);

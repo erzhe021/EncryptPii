@@ -1,17 +1,16 @@
-package com.example.demo.server.crypto;
+package com.example.demo.server.crypto.rsa;
 
 import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.EncodingUtils;
-import com.example.demo.crypto.RsaHybridCipherPayload;
-import com.example.demo.crypto.RsaHybridCryptoServer;
-import com.example.demo.crypto.RsaPublicKeyResponse;
+import com.example.demo.crypto.rsa.RsaCipherPayload;
+import com.example.demo.crypto.rsa.RsaPublicKeyResponse;
 
 import java.security.GeneralSecurityException;
 
 public class RsaCryptoService {
-    private final RsaHybridCryptoServer cryptoServer;
+    private final RsaCryptoServer cryptoServer;
 
-    public RsaCryptoService(RsaHybridCryptoServer cryptoServer) {
+    public RsaCryptoService(RsaCryptoServer cryptoServer) {
         this.cryptoServer = cryptoServer;
     }
 
@@ -22,7 +21,7 @@ public class RsaCryptoService {
         );
     }
 
-    public String decrypt(RsaHybridCipherPayload payload) throws GeneralSecurityException {
+    public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
         return cryptoServer.decrypt(payload);
     }
 }

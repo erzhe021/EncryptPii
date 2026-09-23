@@ -1,6 +1,12 @@
 package com.example.demo.client;
 
 import com.example.demo.crypto.*;
+import com.example.demo.crypto.ecdh.EcdhHttpCryptoClient;
+import com.example.demo.crypto.ecdh.EcdhCipherPayload;
+import com.example.demo.crypto.ecdh.EcdhCryptoClient;
+import com.example.demo.crypto.rsa.RsaHttpCryptoClient;
+import com.example.demo.crypto.rsa.RsaCipherPayload;
+import com.example.demo.crypto.rsa.RsaCryptoClient;
 
 import java.net.URI;
 import java.util.logging.Logger;
@@ -18,9 +24,9 @@ public class ClientApplication {
     }
 
     private static void ecdhTest(String data) throws Exception {
-        EcdhHttpHybridCryptoClient httpClient = new EcdhHttpHybridCryptoClient(serverBaseUri);
-        EcdhHybridCryptoClient cryptoClient = new EcdhHybridCryptoClient(httpClient);
-        EcdhHybridCipherPayload payload = cryptoClient.encrypt(data);
+        EcdhHttpCryptoClient httpClient = new EcdhHttpCryptoClient(serverBaseUri);
+        EcdhCryptoClient cryptoClient = new EcdhCryptoClient(httpClient);
+        EcdhCipherPayload payload = cryptoClient.encrypt(data);
         String decryptedData = httpClient.decryptEncryptedData(payload);
         LOGGER.info("=== " + CryptoConstants.ALGORITHM_ECDH + " Client Request Payload ===");
         LOGGER.info("algorithm: " + payload.algorithm());
@@ -33,9 +39,9 @@ public class ClientApplication {
     }
 
     private static void rsaTest(String data) throws Exception {
-        RsaHttpHybridCryptoClient httpClient = new RsaHttpHybridCryptoClient(serverBaseUri);
-        RsaHybridCryptoClient cryptoClient = new RsaHybridCryptoClient(httpClient);
-        RsaHybridCipherPayload payload = cryptoClient.encrypt(data);
+        RsaHttpCryptoClient httpClient = new RsaHttpCryptoClient(serverBaseUri);
+        RsaCryptoClient cryptoClient = new RsaCryptoClient(httpClient);
+        RsaCipherPayload payload = cryptoClient.encrypt(data);
         String decryptedData = httpClient.decryptEncryptedData(payload);
 
         LOGGER.info("=== " + CryptoConstants.ALGORITHM_RSA + " Client Request Payload ===");

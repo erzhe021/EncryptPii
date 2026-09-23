@@ -1,5 +1,10 @@
-package com.example.demo.crypto;
+package com.example.demo.server.crypto.ecdh;
 
+import com.example.demo.crypto.CryptoConstants;
+import com.example.demo.crypto.EncodingUtils;
+import com.example.demo.crypto.ecdh.EcdhCipherPayload;
+import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
+import com.example.demo.crypto.ecdh.HkdfUtils;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import org.springframework.util.StringUtils;
@@ -19,19 +24,19 @@ import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Duration;
 
-public class EcdhHybridCryptoServer {
-    static final Duration DEFAULT_EPHEMERAL_KEY_TTL = Duration.ofMinutes(5);
-    static final long DEFAULT_MAX_EPHEMERAL_KEYS = 10_000L;
+public class EcdhCryptoServer {
+    public static final Duration DEFAULT_EPHEMERAL_KEY_TTL = Duration.ofMinutes(5);
+    public static final long DEFAULT_MAX_EPHEMERAL_KEYS = 10_000L;
 
     private final PrivateKey longTermIdentityPrivateKey;
     private final PublicKey longTermIdentityPublicKey;
     private final Cache<String, PrivateKey> ephemeralEcdhPrivateKeys;
 
-    public EcdhHybridCryptoServer(PrivateKey longTermIdentityPrivateKey, PublicKey longTermIdentityPublicKey) {
+    public EcdhCryptoServer(PrivateKey longTermIdentityPrivateKey, PublicKey longTermIdentityPublicKey) {
         this(longTermIdentityPrivateKey, longTermIdentityPublicKey, DEFAULT_EPHEMERAL_KEY_TTL, DEFAULT_MAX_EPHEMERAL_KEYS);
     }
 
-    public EcdhHybridCryptoServer(
+    public EcdhCryptoServer(
             PrivateKey longTermIdentityPrivateKey,
             PublicKey longTermIdentityPublicKey,
             Duration ephemeralKeyTtl,
@@ -51,15 +56,15 @@ public class EcdhHybridCryptoServer {
                 .build();
     }
 
-    PrivateKey getLongTermIdentityPrivateKey() {
+    public PrivateKey getLongTermIdentityPrivateKey() {
         return longTermIdentityPrivateKey;
     }
 
-    PublicKey getLongTermIdentityPublicKey() {
+    public PublicKey getLongTermIdentityPublicKey() {
         return longTermIdentityPublicKey;
     }
 
-    public static EcdhHybridCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
+    public static EcdhCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
         Files.createDirectories(keyDirectory);
         KeyFactory ecdhKeyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC);
         KeyPair identityKeyPair = loadOrCreateKeyPair(
@@ -68,7 +73,7 @@ public class EcdhHybridCryptoServer {
                 ecdhKeyFactory,
                 CryptoConstants.CURVE_ECDH
         );
-        return new EcdhHybridCryptoServer(identityKeyPair.getPrivate(), identityKeyPair.getPublic());
+        return new EcdhCryptoServer(identityKeyPair.getPrivate(), identityKeyPair.getPublic());
     }
 
     private static KeyPair loadOrCreateKeyPair(Path privateKeyPath, Path publicKeyPath, KeyFactory keyFactory, String curve)
@@ -113,7 +118,7 @@ public class EcdhHybridCryptoServer {
         );
     }
 
-    public String decrypt(EcdhHybridCipherPayload payload) throws GeneralSecurityException {
+    public String decrypt(EcdhCipherPayload payload) throws GeneralSecurityException {
         validatePayload(payload);
         String serverPublicKeyBase64 = payload.serverEphemeralPublicKeyBase64();
         PrivateKey serverPrivateKey = ephemeralEcdhPrivateKeys.getIfPresent(serverPublicKeyBase64);
@@ -145,11 +150,11 @@ public class EcdhHybridCryptoServer {
         return decryptedValue;
     }
 
-    public String decryptEcdhData(EcdhHybridCipherPayload payload) throws GeneralSecurityException {
+    public String decryptEcdhData(EcdhCipherPayload payload) throws GeneralSecurityException {
         return decrypt(payload);
     }
 
-    private void validatePayload(EcdhHybridCipherPayload payload) {
+    private void validatePayload(EcdhCipherPayload payload) {
         if (payload == null) {
             throw new IllegalArgumentException("Payload cannot be null");
         }
@@ -170,7 +175,7 @@ public class EcdhHybridCryptoServer {
         }
     }
 
-    private String decryptWithAes(EcdhHybridCipherPayload payload, SecretKey aesKey) throws GeneralSecurityException {
+    private String decryptWithAes(EcdhCipherPayload payload, SecretKey aesKey) throws GeneralSecurityException {
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(
                 Cipher.DECRYPT_MODE,

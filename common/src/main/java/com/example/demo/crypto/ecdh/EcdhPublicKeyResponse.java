@@ -1,4 +1,4 @@
-package com.example.demo.crypto;
+package com.example.demo.crypto.ecdh;
 
 public record EcdhPublicKeyResponse(
         String algorithm,

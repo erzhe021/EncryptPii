@@ -1,6 +1,6 @@
-package com.example.demo.crypto;
+package com.example.demo.crypto.ecdh;
 
-public record EcdhHybridCipherPayload(
+public record EcdhCipherPayload(
         String algorithm,
         String clientEphemeralPublicKeyBase64,
         String serverEphemeralPublicKeyBase64,
