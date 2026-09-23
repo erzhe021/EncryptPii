@@ -1,0 +1,8 @@
+ecdh:
+  crypto:
+    key-directory: src/main/resources/keys
+    one-time-used-key: false
+
+rsa:
+  crypto:
+    key-directory: src/main/resources/keys

@@ -1,0 +1,12 @@
+package com.example.demo.server.crypto;
+
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+@Target({ElementType.METHOD, ElementType.TYPE})
+@Retention(RetentionPolicy.RUNTIME)
+public @interface DecryptRequest {
+    CryptoAlgorithm value() default CryptoAlgorithm.RSA;
+}

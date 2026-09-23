@@ -142,8 +142,100 @@ public class EcdhCryptoServer {
 
         SecretKey aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
         String decryptedValue = decryptWithAes(payload, aesKey);
-        ephemeralEcdhPrivateKeys.invalidate(serverPublicKeyBase64);
+        if (EcdhCryptoConfiguration.oneTimeUsedKey) {
+            ephemeralEcdhPrivateKeys.invalidate(serverPublicKeyBase64);
+        }
         return decryptedValue;
+    }
+
+    public EcdhCipherPayload encrypt(String data) throws GeneralSecurityException {
+        EcdhPublicKeyResponse publicKeyResponse = generateEphemeralEcdhPublicKey();
+        return encryptWithServerPublicKey(data, publicKeyResponse.ephemeralPublicKeyBase64(), false);
+    }
+
+    public EcdhCipherPayload encryptWithRequestPayload(String data, EcdhCipherPayload requestPayload) throws GeneralSecurityException {
+        if (requestPayload == null) {
+            return encrypt(data);
+        }
+        validatePayload(requestPayload);
+        String serverPublicKeyBase64 = requestPayload.serverEphemeralPublicKeyBase64();
+        PrivateKey serverPrivateKey = ephemeralEcdhPrivateKeys.getIfPresent(serverPublicKeyBase64);
+        if (serverPrivateKey == null) {
+            throw new IllegalArgumentException("No matching ephemeral server private key found for response encryption");
+        }
+        return encryptWithServerPrivateKeyAndClientPublicKey(
+                data,
+                requestPayload,
+                serverPrivateKey,
+                requestPayload.clientEphemeralPublicKeyBase64()
+        );
+    }
+
+    private EcdhCipherPayload encryptWithServerPublicKey(String data, String serverPublicKeyBase64, boolean reuseSameServerEphemeralKey) throws GeneralSecurityException {
+        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
+        keyPairGenerator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
+        KeyPair clientEphemeralKeyPair = keyPairGenerator.generateKeyPair();
+
+        PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
+                new X509EncodedKeySpec(EncodingUtils.fromBase64(serverPublicKeyBase64))
+        );
+        KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
+        keyAgreement.init(clientEphemeralKeyPair.getPrivate());
+        keyAgreement.doPhase(serverPublicKey, true);
+        byte[] sharedSecret = keyAgreement.generateSecret();
+
+        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
+        new SecureRandom().nextBytes(iv);
+        byte[] derivedAesKey = HkdfUtils.deriveAesKey(
+                sharedSecret,
+                iv,
+                CryptoConstants.HKDF_INFO_DATA_AES_KEY.getBytes(StandardCharsets.UTF_8),
+                CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
+        );
+        SecretKey aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
+        byte[] encryptedData = encryptWithAes(data, aesKey, iv);
+
+        return new EcdhCipherPayload(
+                CryptoConstants.ALGORITHM_ECDH_HKDF_AES,
+                EncodingUtils.toBase64(clientEphemeralKeyPair.getPublic().getEncoded()),
+                serverPublicKeyBase64,
+                EncodingUtils.toBase64(iv),
+                EncodingUtils.toBase64(encryptedData)
+        );
+    }
+
+    private EcdhCipherPayload encryptWithServerPrivateKeyAndClientPublicKey(
+            String data,
+            EcdhCipherPayload requestPayload,
+            PrivateKey serverPrivateKey,
+            String clientPublicKeyBase64
+    ) throws GeneralSecurityException {
+        PublicKey clientEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
+                new X509EncodedKeySpec(EncodingUtils.fromBase64(clientPublicKeyBase64))
+        );
+        KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
+        keyAgreement.init(serverPrivateKey);
+        keyAgreement.doPhase(clientEphemeralPublicKey, true);
+        byte[] sharedSecret = keyAgreement.generateSecret();
+
+        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
+        new SecureRandom().nextBytes(iv);
+        byte[] derivedAesKey = HkdfUtils.deriveAesKey(
+                sharedSecret,
+                iv,
+                CryptoConstants.HKDF_INFO_DATA_AES_KEY.getBytes(StandardCharsets.UTF_8),
+                CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
+        );
+        SecretKey aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
+        byte[] encryptedData = encryptWithAes(data, aesKey, iv);
+
+        return new EcdhCipherPayload(
+                requestPayload.algorithm(),
+                requestPayload.clientEphemeralPublicKeyBase64(),
+                requestPayload.serverEphemeralPublicKeyBase64(),
+                EncodingUtils.toBase64(iv),
+                EncodingUtils.toBase64(encryptedData)
+        );
     }
 
     public String decryptEcdhData(EcdhCipherPayload payload) throws GeneralSecurityException {
@@ -180,5 +272,11 @@ public class EcdhCryptoServer {
         );
         byte[] plainBytes = aesCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedDataBase64()));
         return new String(plainBytes, StandardCharsets.UTF_8);
+    }
+
+    private byte[] encryptWithAes(String data, SecretKey aesKey, byte[] iv) throws GeneralSecurityException {
+        Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
+        aesCipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
+        return aesCipher.doFinal(data.getBytes(StandardCharsets.UTF_8));
     }
 }

@@ -7,6 +7,7 @@ import lombok.Getter;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.Cipher;
+import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -68,6 +69,51 @@ public class RsaCryptoServer {
         return decryptWithAes(payload, aesKey);
     }
 
+    public RsaCipherPayload encrypt(String data) throws GeneralSecurityException {
+        return encryptWithFreshAes(data, new SecureRandom());
+    }
+
+    public RsaCipherPayload encryptWithRequestPayload(String data, RsaCipherPayload requestPayload) throws GeneralSecurityException {
+        if (requestPayload == null) {
+            throw new IllegalArgumentException("Request payload cannot be null");
+        }
+        validatePayload(requestPayload);
+        Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
+        rsaCipher.init(Cipher.DECRYPT_MODE, rsaPrivateKey);
+        byte[] aesKeyBytes = rsaCipher.doFinal(EncodingUtils.fromBase64(requestPayload.encryptedAesKeyBase64()));
+        SecretKey aesKey = new SecretKeySpec(aesKeyBytes, CryptoConstants.ALGORITHM_AES);
+        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
+        new SecureRandom().nextBytes(iv);
+        byte[] encryptedData = encryptWithAes(data, aesKey, iv);
+        return new RsaCipherPayload(
+                requestPayload.algorithm(),
+                requestPayload.encryptedAesKeyBase64(),
+                EncodingUtils.toBase64(iv),
+                EncodingUtils.toBase64(encryptedData)
+        );
+    }
+
+    private RsaCipherPayload encryptWithFreshAes(String data, SecureRandom secureRandom) throws GeneralSecurityException {
+        KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
+        keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS, secureRandom);
+        SecretKey aesKey = keyGenerator.generateKey();
+
+        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
+        secureRandom.nextBytes(iv);
+        byte[] encryptedData = encryptWithAes(data, aesKey, iv);
+
+        Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
+        rsaCipher.init(Cipher.ENCRYPT_MODE, rsaPublicKey);
+        byte[] encryptedAesKey = rsaCipher.doFinal(aesKey.getEncoded());
+
+        return new RsaCipherPayload(
+                CryptoConstants.ALGORITHM_RSA_AES,
+                EncodingUtils.toBase64(encryptedAesKey),
+                EncodingUtils.toBase64(iv),
+                EncodingUtils.toBase64(encryptedData)
+        );
+    }
+
     private void validatePayload(RsaCipherPayload payload) {
         if (payload == null) {
             throw new IllegalArgumentException("Payload cannot be null");
@@ -95,5 +141,11 @@ public class RsaCryptoServer {
         );
         byte[] plainBytes = aesCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedDataBase64()));
         return new String(plainBytes, StandardCharsets.UTF_8);
+    }
+
+    private byte[] encryptWithAes(String data, SecretKey aesKey, byte[] iv) throws GeneralSecurityException {
+        Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
+        aesCipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
+        return aesCipher.doFinal(data.getBytes(StandardCharsets.UTF_8));
     }
 }

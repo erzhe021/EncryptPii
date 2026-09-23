@@ -17,7 +17,7 @@ public class ClientApplication {
     private static final URI serverBaseUri = URI.create("http://localhost:8080");
 
     public static void main(String[] args) throws Exception {
-        String data = "Hello, World!";
+        String data = "{\"data\":\"Hello, World!\"}";
         rsaTest(data);
         ecdhTest(data);
     }
