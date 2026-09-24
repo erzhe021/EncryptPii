@@ -19,18 +19,24 @@ public class EcdhHttpCryptoClient implements PublicKeyProvider {
     private final HttpClient httpClient;
     private final URI serverBaseUri;
     private final ObjectMapper objectMapper;
-
-    private static final String PUBLIC_KEY_ENDPOINT = "/crypto/server/ecdh/public-key";
+    private final String publicKeyEndpoint;
 
     public EcdhHttpCryptoClient(URI serverBaseUri) {
+        this(serverBaseUri, "/crypto/server/ecdh/public-key");
+    }
+
+    public EcdhHttpCryptoClient(URI serverBaseUri, String publicKeyEndpoint) {
         this.httpClient = HttpClient.newHttpClient();
         this.serverBaseUri = serverBaseUri;
         this.objectMapper = new ObjectMapper();
+        this.publicKeyEndpoint = publicKeyEndpoint == null || publicKeyEndpoint.isBlank()
+                ? "/crypto/server/ecdh/public-key"
+                : publicKeyEndpoint;
     }
 
     @Override
     public Object fetchServerPublicKey() throws GeneralSecurityException {
-        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(PUBLIC_KEY_ENDPOINT))
+        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
                 .build();
         try {

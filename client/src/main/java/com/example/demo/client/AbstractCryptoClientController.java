@@ -106,10 +106,14 @@ public abstract class AbstractCryptoClientController {
         return iv;
     }
 
-    protected String decryptResponseData(Map<String, Object> responsePayload, SecretKey sessionKey) throws Exception {
-        return decryptResponseData(objectMapper.convertValue(responsePayload, DefaultAesCipherPayload.class), sessionKey);
-    }
-
+    /**
+     * Decrypts the response data using the provided AES session key and the response payload.
+     *
+     * @param responsePayload the response payload containing the encrypted data and IV
+     * @param sessionKey      the AES session key used for decryption
+     * @return the decrypted response data as a String
+     * @throws Exception if an error occurs during decryption
+     */
     protected String decryptResponseData(AesCipherPayload responsePayload, SecretKey sessionKey) throws Exception {
         String encryptedDataBase64 = responsePayload.encryptedDataBase64();
         String ivBase64 = responsePayload.ivBase64();

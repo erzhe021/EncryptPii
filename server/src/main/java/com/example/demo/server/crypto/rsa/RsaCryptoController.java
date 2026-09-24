@@ -22,25 +22,25 @@ public class RsaCryptoController {
         this.rsaCryptoServer = rsaCryptoServer;
     }
 
-    @GetMapping("/crypto/server/rsa/public-key")
+    @GetMapping("${crypto.server.endpoints.rsa.public-key:/crypto/server/rsa/public-key}")
     public RsaPublicKeyResponse getRsaPublicKey() {
         return rsaCryptoServer.getPublicKey();
     }
 
-    @PostMapping("/crypto/server/rsa/bidirectional")
+    @PostMapping("${crypto.server.endpoints.rsa.bidirectional:/crypto/server/rsa/bidirectional}")
     @DecryptRequest(CryptoAlgorithm.RSA)
     @EncryptResponse(CryptoAlgorithm.RSA)
     public SensitiveData bidirectionalRsaEncrypt(@RequestBody SensitiveData request) {
         return new SensitiveData("mock rsa response for request - " + request.data());
     }
 
-    @PostMapping("/crypto/server/rsa/request-only")
+    @PostMapping("${crypto.server.endpoints.rsa.request-only:/crypto/server/rsa/request-only}")
     @DecryptRequest(CryptoAlgorithm.RSA)
     public PlainData requestOnlyRsaEncrypt(@RequestBody SensitiveData request) {
         return new PlainData("mock plain response for request - " + request.data());
     }
 
-    @PostMapping("/crypto/server/rsa/response-only")
+    @PostMapping("${crypto.server.endpoints.rsa.response-only:/crypto/server/rsa/response-only}")
     @EncryptResponse(CryptoAlgorithm.RSA)
     public SensitiveData responseOnlyRsaEncrypt(
             @RequestBody(required = false) PlainData request,

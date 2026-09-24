@@ -23,17 +23,29 @@ import java.util.Map;
 public class CryptoRsaClientController extends AbstractCryptoClientController {
 
     private final RsaCryptoClient rsaCryptoClient;
+    private final String rsaBidirectionalPath;
+    private final String rsaRequestOnlyPath;
+    private final String rsaResponseOnlyPath;
 
-    public CryptoRsaClientController(@Value("${crypto.server.base-url:http://localhost:9090}") String serverBaseUrl) {
+    public CryptoRsaClientController(
+            @Value("${crypto.server.base-url:http://localhost:9090}") String serverBaseUrl,
+            @Value("${crypto.server.endpoints.rsa.public-key:/crypto/server/rsa/public-key}") String rsaPublicKeyPath,
+            @Value("${crypto.server.endpoints.rsa.bidirectional:/crypto/server/rsa/bidirectional}") String rsaBidirectionalPath,
+            @Value("${crypto.server.endpoints.rsa.request-only:/crypto/server/rsa/request-only}") String rsaRequestOnlyPath,
+            @Value("${crypto.server.endpoints.rsa.response-only:/crypto/server/rsa/response-only}") String rsaResponseOnlyPath
+    ) {
         super(serverBaseUrl);
-        this.rsaCryptoClient = new RsaCryptoClient(new RsaHttpCryptoClient(serverBaseUri));
+        this.rsaBidirectionalPath = rsaBidirectionalPath;
+        this.rsaRequestOnlyPath = rsaRequestOnlyPath;
+        this.rsaResponseOnlyPath = rsaResponseOnlyPath;
+        this.rsaCryptoClient = new RsaCryptoClient(new RsaHttpCryptoClient(serverBaseUri, rsaPublicKeyPath));
     }
 
     @PostMapping("/bidirectional")
     public Map<String, Object> bidirectionalRsaEncrypt(@RequestBody PlainData plainData) throws Exception {
         validatePlainData(plainData);
         RsaCipherPayload requestPayload = rsaCryptoClient.encrypt(toJsonString(plainData));
-        HttpResponse<String> response = sendJsonRequest("/crypto/server/rsa/bidirectional", requestPayload);
+        HttpResponse<String> response = sendJsonRequest(rsaBidirectionalPath, requestPayload);
         ensureSuccess(response, "bidirectional RSA encrypt");
         RsaCipherPayload responsePayload = objectMapper.readValue(response.body(), RsaCipherPayload.class);
         String decryptedServerResponse = rsaCryptoClient.decrypt(responsePayload);
@@ -49,7 +61,7 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
     public Map<String, Object> requestOnlyRsaEncrypt(@RequestBody PlainData plainData) throws Exception {
         validatePlainData(plainData);
         RsaCipherPayload requestPayload = rsaCryptoClient.encrypt(toJsonString(plainData));
-        Map<String, Object> responseMap = postForMap("/crypto/server/rsa/request-only", requestPayload, "request-only RSA encrypt");
+        Map<String, Object> responseMap = postForMap(rsaRequestOnlyPath, requestPayload, "request-only RSA encrypt");
 
         return Map.of(
                 "request", Map.of("data", plainData.data(), "encrypted", requestPayload),
@@ -63,19 +75,21 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
 
         String data = plainData == null ? null : plainData.data();
 
+        // Generate a new session key and IV for AES encryption
         SecretKey sessionKey = generateSessionKey();
         byte[] iv = generateIv();
 
         PublicKey rsaPublicKey = loadServerRsaPublicKey();
         SessionKeyTransport sessionTransport = SessionKeyTransport.fromGeneratedKey(sessionKey, iv, rsaPublicKey);
         HttpResponse<String> response = httpClient.send(
-                buildSessionKeyRequest(serverBaseUri.resolve("/crypto/server/rsa/response-only"), data, sessionTransport),
+                buildSessionKeyRequest(serverBaseUri.resolve(rsaResponseOnlyPath), data, sessionTransport),
                 HttpResponse.BodyHandlers.ofString()
         );
         ensureSuccess(response, "response-only RSA encrypt");
 
         DefaultAesCipherPayload responsePayload = objectMapper.readValue(response.body(), DefaultAesCipherPayload.class);
 
+        // Decrypt the response data using the session key and IV
         String decryptedResponseData = decryptResponseData(responsePayload, sessionKey);
         PlainData responsePlainData = objectMapper.readValue(decryptedResponseData, PlainData.class);
 
@@ -85,6 +99,12 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
         );
     }
 
+    /**
+     * Loads the server's RSA public key by fetching it from the server and converting it to a PublicKey object.
+     *
+     * @return the server's RSA public key
+     * @throws Exception if an error occurs while fetching or converting the public key
+     */
     private PublicKey loadServerRsaPublicKey() throws Exception {
         RsaPublicKeyResponse serverPublicKey = (RsaPublicKeyResponse) new RsaHttpCryptoClient(serverBaseUri).fetchServerPublicKey();
         return KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(

@@ -3,3 +3,14 @@ server:
 crypto:
   server:
     base-url: http://localhost:9090
+    endpoints:
+      rsa:
+        public-key: /crypto/server/rsa/public-key
+        bidirectional: /crypto/server/rsa/bidirectional
+        request-only: /crypto/server/rsa/request-only
+        response-only: /crypto/server/rsa/response-only
+      ecdh:
+        public-key: /crypto/server/ecdh/public-key
+        bidirectional: /crypto/server/ecdh/bidirectional
+        request-only: /crypto/server/ecdh/request-only
+        response-only: /crypto/server/ecdh/response-only

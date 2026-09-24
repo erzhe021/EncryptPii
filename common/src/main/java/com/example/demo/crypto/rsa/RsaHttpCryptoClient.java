@@ -19,13 +19,19 @@ public class RsaHttpCryptoClient implements PublicKeyProvider {
     private final HttpClient httpClient;
     private final URI serverBaseUri;
     private final ObjectMapper objectMapper;
-
-    private static final String PUBLIC_KEY_ENDPOINT = "/crypto/server/rsa/public-key";
+    private final String publicKeyEndpoint;
 
     public RsaHttpCryptoClient(URI serverBaseUri) {
+        this(serverBaseUri, "/crypto/server/rsa/public-key");
+    }
+
+    public RsaHttpCryptoClient(URI serverBaseUri, String publicKeyEndpoint) {
         this.httpClient = HttpClient.newHttpClient();
         this.serverBaseUri = serverBaseUri;
         this.objectMapper = new ObjectMapper();
+        this.publicKeyEndpoint = publicKeyEndpoint == null || publicKeyEndpoint.isBlank()
+                ? "/crypto/server/rsa/public-key"
+                : publicKeyEndpoint;
     }
 
     /**
@@ -36,7 +42,7 @@ public class RsaHttpCryptoClient implements PublicKeyProvider {
      */
     @Override
     public Object fetchServerPublicKey() throws GeneralSecurityException {
-        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(PUBLIC_KEY_ENDPOINT))
+        HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
                 .build();
         try {

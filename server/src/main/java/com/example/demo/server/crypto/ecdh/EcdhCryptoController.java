@@ -32,7 +32,7 @@ public class EcdhCryptoController {
      * @return An EcdhPublicKeyResponse containing the server's ECDH public key.
      * @throws GeneralSecurityException If there is an error generating the public key.
      */
-    @GetMapping("/crypto/server/ecdh/public-key")
+    @GetMapping("${crypto.server.endpoints.ecdh.public-key:/crypto/server/ecdh/public-key}")
     public EcdhPublicKeyResponse getEcdhPublicKey() throws GeneralSecurityException {
         return cryptoServer.generateEphemeralEcdhPublicKey();
     }
@@ -43,7 +43,7 @@ public class EcdhCryptoController {
      * @param request The request body containing sensitive data to be decrypted.
      * @return A SensitiveData response that will be encrypted using ECDH.
      */
-    @PostMapping("/crypto/server/ecdh/bidirectional")
+    @PostMapping("${crypto.server.endpoints.ecdh.bidirectional:/crypto/server/ecdh/bidirectional}")
     @DecryptRequest(CryptoAlgorithm.ECDH)
     @EncryptResponse(CryptoAlgorithm.ECDH)
     public SensitiveData bidirectionalECDHEncrypt(@RequestBody SensitiveData request) {
@@ -58,7 +58,7 @@ public class EcdhCryptoController {
      * @param request The request body containing sensitive data to be decrypted.
      * @return A PlainData response that will not be encrypted.
      */
-    @PostMapping("/crypto/server/ecdh/request-only")
+    @PostMapping("${crypto.server.endpoints.ecdh.request-only:/crypto/server/ecdh/request-only}")
     @DecryptRequest(CryptoAlgorithm.ECDH)
     public PlainData requestOnlyEcdhEncrypt(@RequestBody SensitiveData request) {
         return new PlainData("mock plain response for request - " + request.data());
@@ -72,7 +72,7 @@ public class EcdhCryptoController {
      * @param request The plaintext request body plus ECDH public key material.
      * @return A PlainData response that will be encrypted using the negotiated ECDH key material.
      */
-    @PostMapping("/crypto/server/ecdh/response-only")
+    @PostMapping("${crypto.server.endpoints.ecdh.response-only:/crypto/server/ecdh/response-only}")
     @EncryptResponse(CryptoAlgorithm.ECDH)
     public PlainData responseOnlyEcdhEncrypt(@RequestBody EcdhResponseOnlyRequest request) {
         if (request == null) {

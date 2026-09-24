@@ -1,6 +1,20 @@
 server:
   port: 9090
 
+crypto:
+  server:
+    endpoints:
+      rsa:
+        public-key: /crypto/server/rsa/public-key
+        bidirectional: /crypto/server/rsa/bidirectional
+        request-only: /crypto/server/rsa/request-only
+        response-only: /crypto/server/rsa/response-only
+      ecdh:
+        public-key: /crypto/server/ecdh/public-key
+        bidirectional: /crypto/server/ecdh/bidirectional
+        request-only: /crypto/server/ecdh/request-only
+        response-only: /crypto/server/ecdh/response-only
+
 ecdh:
   crypto:
     key-directory: src/main/resources/keys
