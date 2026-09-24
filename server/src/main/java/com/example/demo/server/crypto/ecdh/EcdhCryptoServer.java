@@ -182,8 +182,8 @@ public class EcdhCryptoServer {
                 CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
         );
 
-        SecretKey aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
-        String decryptedValue = decryptWithAes(payload, aesKey);
+        SecretKey sessionKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
+        String decryptedValue = decryptWithAes(payload, sessionKey);
         if (EcdhCryptoConfiguration.oneTimeUsedKey) {
             ephemeralEcdhPrivateKeys.invalidate(serverPublicKeyBase64);
         }
@@ -288,12 +288,12 @@ public class EcdhCryptoServer {
     }
 
     /**
-     * Encrypts the given data using the provided server's ephemeral private key and the client's ephemeral public key.
+     * Encrypts the given data using the server's ephemeral private key and the client's ephemeral public key.
      *
      * @param data                     The data to be encrypted.
-     * @param requestPayload           The EcdhCipherPayload containing the server's ephemeral public key and the client's ephemeral public key.
-     * @param serverPrivateKey         The server's ephemeral private key.
+     * @param serverPublicKeyBase64    The server's ephemeral public key in Base64 encoding.
      * @param clientPublicKeyBase64    The client's ephemeral public key in Base64 encoding.
+     * @param serverPrivateKey         The server's ephemeral private key.
      * @return An EcdhCipherPayload containing the encrypted data and keys.
      * @throws GeneralSecurityException If there is a security exception during encryption.
      */
@@ -358,15 +358,15 @@ public class EcdhCryptoServer {
      * Decrypts the given EcdhCipherPayload using the provided AES key.
      *
      * @param payload The EcdhCipherPayload containing the encrypted data and keys.
-     * @param aesKey  The AES key to use for decryption.
+     * @param sessionKey  The AES key to use for decryption.
      * @return The decrypted data as a String.
      * @throws GeneralSecurityException If there is a security exception during decryption.
      */
-    private String decryptWithAes(EcdhCipherPayload payload, SecretKey aesKey) throws GeneralSecurityException {
+    private String decryptWithAes(EcdhCipherPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(
                 Cipher.DECRYPT_MODE,
-                aesKey,
+                sessionKey,
                 new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, EncodingUtils.fromBase64(payload.ivBase64()))
         );
         byte[] plainBytes = aesCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedDataBase64()));

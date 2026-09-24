@@ -2,6 +2,9 @@ package com.example.demo.crypto.rsa;
 
 import com.example.demo.crypto.AesCipherPayload;
 
+/**
+ * RSA cipher payload containing the encrypted session key, initialization vector, and encrypted data.
+ */
 public record RsaCipherPayload(
         //session key encrypted with rsa
         String encryptedSessionKeyBase64,

@@ -54,9 +54,9 @@ public class EcdhCryptoClient {
                 CryptoConstants.HKDF_INFO_REQUEST_AES_KEY.getBytes(StandardCharsets.UTF_8),
                 CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
         );
-        SecretKey requestKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
+        SecretKey sessionKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
 
-        byte[] encryptedData = encryptWithAes(data, requestKey, iv);
+        byte[] encryptedData = encryptWithAes(data, sessionKey, iv);
 
         return new EcdhCipherPayload(
                 negotiatedKeys.clientEphemeralPublicKeyBase64(),
@@ -114,26 +114,51 @@ public class EcdhCryptoClient {
         return new String(plainBytes, StandardCharsets.UTF_8);
     }
 
+    /**
+     * Performs ECDH key negotiation with the server's ephemeral public key.
+     * Generates a client ephemeral key pair, derives a shared secret, and returns the negotiated keys.
+     *
+     * @param serverEphemeralPublicKeyBase64 The server's ephemeral public key in Base64 encoding.
+     * @return A NegotiatedKeys object containing the shared secret and the client's ephemeral public key in Base64.
+     * @throws GeneralSecurityException If key negotiation fails due to cryptographic errors.
+     */
     private NegotiatedKeys negotiateKeys(String serverEphemeralPublicKeyBase64) throws GeneralSecurityException {
+        // Decode the server's ephemeral public key from Base64 and create a PublicKey object
         PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(serverEphemeralPublicKeyBase64))
         );
 
+        // Generate a new ephemeral key pair for the client using the same curve as the server
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
+        // Initialize the key pair generator with the specified curve and secure random
         keyPairGenerator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH), secureRandom);
+        // Generate the client's ephemeral key pair
         KeyPair ephemeralKeyPair = keyPairGenerator.generateKeyPair();
+
+        // Convert the client's ephemeral public key to Base64 for transmission
         String clientEphemeralPublicKeyBase64 = EncodingUtils.toBase64(ephemeralKeyPair.getPublic().getEncoded());
 
+        // Perform ECDH key agreement to derive the shared secret using the client's private key and the server's public key
         KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
+        // Initialize the key agreement with the client's ephemeral private key
         keyAgreement.init(ephemeralKeyPair.getPrivate());
+        // Complete the key agreement phase with the server's public key
         keyAgreement.doPhase(serverPublicKey, true);
+        // Generate the shared secret from the key agreement
         byte[] sharedSecret = keyAgreement.generateSecret();
 
         this.clientEphemeralPrivateKey = ephemeralKeyPair.getPrivate();
         this.serverEphemeralPublicKey = serverPublicKey;
+        // Return the negotiated keys containing the shared secret and the client's ephemeral public key in Base64
         return new NegotiatedKeys(sharedSecret, clientEphemeralPublicKeyBase64);
     }
 
+    /**
+     * A record to hold the negotiated keys, including the shared secret and the client's ephemeral public key in Base64.
+     *
+     * @param sharedSecret The shared secret derived from ECDH key agreement.
+     * @param clientEphemeralPublicKeyBase64 The client's ephemeral public key in Base64 encoding.
+     */
     private record NegotiatedKeys(byte[] sharedSecret, String clientEphemeralPublicKeyBase64) {
     }
 
@@ -171,14 +196,14 @@ public class EcdhCryptoClient {
      * Encrypts the given data using AES-GCM encryption with the provided AES key and initialization vector (IV).
      *
      * @param data   The plaintext data to encrypt.
-     * @param aesKey The AES session key for encryption.
+     * @param sessionKey The AES session key for encryption.
      * @param iv     The initialization vector (IV) for AES-GCM.
      * @return The encrypted data as a byte array.
      * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
      */
-    private byte[] encryptWithAes(String data, SecretKey aesKey, byte[] iv) throws GeneralSecurityException {
+    private byte[] encryptWithAes(String data, SecretKey sessionKey, byte[] iv) throws GeneralSecurityException {
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
-        aesCipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
+        aesCipher.init(Cipher.ENCRYPT_MODE, sessionKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
         return aesCipher.doFinal(data.getBytes(StandardCharsets.UTF_8));
     }
 
