@@ -1,7 +1,9 @@
 package com.example.demo.client;
 
-import com.example.demo.crypto.ClientSessionKeyTransport;
+import com.example.demo.crypto.AesCipherPayload;
+import com.example.demo.crypto.SessionKeyTransport;
 import com.example.demo.crypto.CryptoConstants;
+import com.example.demo.crypto.DefaultAesCipherPayload;
 import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.PlainData;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -63,7 +65,7 @@ public abstract class AbstractCryptoClientController {
         return objectMapper.readValue(response.body(), Map.class);
     }
 
-    protected HttpRequest buildSessionKeyRequest(URI endpoint, String data, ClientSessionKeyTransport sessionKeyTransport) throws Exception {
+    protected HttpRequest buildSessionKeyRequest(URI endpoint, String data, SessionKeyTransport sessionKeyTransport) throws Exception {
         return sessionKeyTransport.apply(HttpRequest.newBuilder(endpoint)
                         .header("Content-Type", "application/json"))
                 .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(Map.of("data", data))))
@@ -89,8 +91,12 @@ public abstract class AbstractCryptoClientController {
     }
 
     protected String decryptResponseData(Map<String, Object> responsePayload, SecretKey sessionKey) throws Exception {
-        String encryptedDataBase64 = (String) responsePayload.get("encryptedDataBase64");
-        String ivBase64 = (String) responsePayload.get("ivBase64");
+        return decryptResponseData(objectMapper.convertValue(responsePayload, DefaultAesCipherPayload.class), sessionKey);
+    }
+
+    protected String decryptResponseData(AesCipherPayload responsePayload, SecretKey sessionKey) throws Exception {
+        String encryptedDataBase64 = responsePayload.encryptedDataBase64();
+        String ivBase64 = responsePayload.ivBase64();
 
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(

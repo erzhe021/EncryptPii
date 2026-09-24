@@ -20,7 +20,8 @@ public final class CryptoConstants {
     public static final String CURVE_ECDH = "secp256r1";
 
     // --- Key Derivation (HKDF) Info/Context Strings ---
-    public static final String HKDF_INFO_DATA_AES_KEY = "data-aes-key";
+    public static final String HKDF_INFO_REQUEST_AES_KEY = "request-aes-key";
+    public static final String HKDF_INFO_RESPONSE_AES_KEY = "response-aes-key";
 
     // --- Key Sizes & Lengths ---
     public static final int AES_KEY_SIZE_BITS = 256;

@@ -1,32 +1,33 @@
 package com.example.demo.server.crypto.ecdh;
 
-import com.example.demo.crypto.ClientSessionKeyTransport;
 import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.EncodingUtils;
+import com.example.demo.crypto.SessionKeyTransport;
+import com.example.demo.crypto.DefaultAesCipherPayload;
 import com.example.demo.crypto.ecdh.EcdhCipherPayload;
 import com.example.demo.server.crypto.CryptoAlgorithm;
 import com.example.demo.server.crypto.CryptoPayloadHandler;
 import com.example.demo.server.crypto.CryptoSessionContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
+import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.security.NoSuchAlgorithmException;
 
 @Component
 public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
-    private final EcdhCryptoServer cryptoServer;
+    private final EcdhCryptoServer ecdhCryptoServer;
     private final ObjectMapper objectMapper;
 
-    public EcdhCryptoPayloadHandler(EcdhCryptoServer cryptoServer, ObjectMapper objectMapper) {
-        this.cryptoServer = cryptoServer;
+    public EcdhCryptoPayloadHandler(EcdhCryptoServer ecdhCryptoServer, ObjectMapper objectMapper) {
+        this.ecdhCryptoServer = ecdhCryptoServer;
         this.objectMapper = objectMapper;
     }
 
@@ -35,31 +36,53 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
         return CryptoAlgorithm.ECDH;
     }
 
+    /**
+     * Decrypts the given encrypted request body using ECDH.
+     *
+     * @param encryptedRequestBody The encrypted request body as a JSON string.
+     * @return The decrypted request body as a string.
+     * @throws GeneralSecurityException If there is an error during decryption.
+     */
     @Override
-    public String decrypt(String requestBody, Type targetType) throws GeneralSecurityException {
+    public String decrypt(String encryptedRequestBody) throws GeneralSecurityException {
         try {
-            EcdhCipherPayload payload = objectMapper.readValue(requestBody, EcdhCipherPayload.class);
-            return cryptoServer.decrypt(payload);
+            EcdhCipherPayload payload = objectMapper.readValue(encryptedRequestBody, EcdhCipherPayload.class);
+            return ecdhCryptoServer.decrypt(payload);
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Invalid ECDH encrypted request payload", e);
         }
     }
 
+    /**
+     * Creates a CryptoSessionContext based on the given encrypted request body.
+     *
+     * @param encryptedRequestBody The encrypted request body as a JSON string.
+     * @return A CryptoSessionContext containing information about the cryptographic session.
+     */
     @Override
-    public CryptoSessionContext createSessionContext(String requestBody) throws GeneralSecurityException {
+    public CryptoSessionContext createSessionContext(String encryptedRequestBody) {
         try {
-            EcdhCipherPayload payload = objectMapper.readValue(requestBody, EcdhCipherPayload.class);
-            return new CryptoSessionContext(CryptoAlgorithm.ECDH, requestBody, payload);
+            EcdhCipherPayload payload = objectMapper.readValue(encryptedRequestBody, EcdhCipherPayload.class);
+            return new CryptoSessionContext(CryptoAlgorithm.ECDH, payload);
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Invalid ECDH encrypted request payload", e);
         }
     }
 
+    /**
+     * Encrypts the response body using the session context.
+     *
+     * @param responseBody   The response body to encrypt.
+     * @param sessionContext The session context containing the encryption parameters.
+     * @return The encrypted response body.
+     * @throws GeneralSecurityException If there is an error during encryption.
+     */
     @Override
-    public Object encrypt(Object responseBody, MediaType mediaType, CryptoSessionContext sessionContext) throws GeneralSecurityException {
+    public Object encrypt(Object responseBody, CryptoSessionContext sessionContext)
+            throws GeneralSecurityException {
         try {
-            String plainJson = objectMapper.writeValueAsString(responseBody);
-            if (sessionContext.requestKeyMaterial() instanceof ClientSessionKeyTransport sessionKeyTransport) {
+            String responseBodyString = objectMapper.writeValueAsString(responseBody);
+            if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport sessionKeyTransport) {
                 SecretKey sessionKey = new SecretKeySpec(
                         EncodingUtils.fromBase64(sessionKeyTransport.sessionKeyBase64()),
                         CryptoConstants.ALGORITHM_AES
@@ -67,18 +90,23 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
                 byte[] iv = EncodingUtils.fromBase64(sessionKeyTransport.ivBase64());
                 Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
                 aesCipher.init(Cipher.ENCRYPT_MODE, sessionKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
-                byte[] encryptedData = aesCipher.doFinal(plainJson.getBytes(StandardCharsets.UTF_8));
-                return new EcdhCipherPayload(
-                        "",
-                        "",
+                byte[] encryptedData = aesCipher.doFinal(responseBodyString.getBytes(StandardCharsets.UTF_8));
+                return new DefaultAesCipherPayload(
                         sessionKeyTransport.ivBase64(),
                         EncodingUtils.toBase64(encryptedData)
                 );
             }
+            if (sessionContext.requestKeyMaterial() instanceof EcdhCryptoController.EcdhResponseContext responseContext) {
+                return ecdhCryptoServer.encryptResponseOnly(
+                        responseBodyString,
+                        responseContext.serverEphemeralPublicKeyBase64(),
+                        responseContext.clientEphemeralPublicKeyBase64()
+                );
+            }
 
             EcdhCipherPayload requestPayload = (EcdhCipherPayload) sessionContext.requestKeyMaterial();
-            return cryptoServer.encryptWithRequestPayload(plainJson, requestPayload);
-        } catch (JsonProcessingException e) {
+            return ecdhCryptoServer.encryptWithRequestPayload(responseBodyString, requestPayload);
+        } catch (JsonProcessingException | NoSuchAlgorithmException | NoSuchPaddingException e) {
             throw new IllegalArgumentException("Failed to serialize response body before ECDH encryption", e);
         }
     }

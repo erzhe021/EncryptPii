@@ -1,5 +1,7 @@
 package com.example.demo.crypto.ecdh;
 
+import com.example.demo.crypto.AesCipherPayload;
+
 public record EcdhCipherPayload(
         //client ephemeral public key
         String clientEphemeralPublicKeyBase64,
@@ -12,5 +14,5 @@ public record EcdhCipherPayload(
 
         //data encrypted with aes
         String encryptedDataBase64
-) {
+) implements AesCipherPayload {
 }

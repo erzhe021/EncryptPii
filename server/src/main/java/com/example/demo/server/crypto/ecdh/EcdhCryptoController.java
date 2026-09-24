@@ -1,15 +1,17 @@
 package com.example.demo.server.crypto.ecdh;
 
-import com.example.demo.crypto.ClientSessionKeyTransport;
-import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.PlainData;
 import com.example.demo.crypto.SensitiveData;
 import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
+import com.example.demo.crypto.ecdh.EcdhResponseOnlyRequest;
 import com.example.demo.server.crypto.CryptoAlgorithm;
 import com.example.demo.server.crypto.CryptoSessionContext;
 import com.example.demo.server.crypto.DecryptRequest;
 import com.example.demo.server.crypto.EncryptResponse;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 
@@ -64,42 +66,42 @@ public class EcdhCryptoController {
 
     /**
      * This endpoint demonstrates response-only ECDH encryption.
-     * It requires the client to provide the session key and IV in the request headers.
-     * The request body is not used for decryption, but it is required to be non-empty for demonstration purposes.
+     * The request body remains plaintext, but it carries the ECDH handshake material required for
+     * the server to derive a response key and encrypt only the response.
      *
-     * @param request The request body containing plain data (not used for decryption).
-     * @param sessionKeyBase64 The client's session key in Base64 format, provided in the request header.
-     * @param sessionIvBase64 The client's session IV in Base64 format, provided in the request header.
-     * @return A PlainData response that will be encrypted using the provided session key and IV.
+     * @param request The plaintext request body plus ECDH public key material.
+     * @return A PlainData response that will be encrypted using the negotiated ECDH key material.
      */
     @PostMapping("/crypto/server/ecdh/response-only")
     @EncryptResponse(CryptoAlgorithm.ECDH)
-    public PlainData responseOnlyEcdhEncrypt(
-            @RequestBody PlainData request,
-            @RequestHeader(value = CryptoConstants.HEADER_CLIENT_SESSION_KEY, required = false) String sessionKeyBase64,
-            @RequestHeader(value = CryptoConstants.HEADER_CLIENT_SESSION_IV, required = false) String sessionIvBase64
-    ) {
+    public PlainData responseOnlyEcdhEncrypt(@RequestBody EcdhResponseOnlyRequest request) {
         if (request == null || request.data() == null || request.data().isBlank()) {
             throw new IllegalArgumentException("request body is required for response-only ECDH encryption");
         }
-        if (sessionKeyBase64 == null || sessionKeyBase64.isBlank()) {
-            throw new IllegalArgumentException("client session key is required for response-only ECDH encryption");
+        if (request.clientEphemeralPublicKeyBase64() == null || request.clientEphemeralPublicKeyBase64().isBlank()) {
+            throw new IllegalArgumentException("client ephemeral public key is required for response-only ECDH encryption");
         }
-        if (sessionIvBase64 == null || sessionIvBase64.isBlank()) {
-            throw new IllegalArgumentException("client session IV is required for response-only ECDH encryption");
+        if (request.serverEphemeralPublicKeyBase64() == null || request.serverEphemeralPublicKeyBase64().isBlank()) {
+            throw new IllegalArgumentException("server ephemeral public key is required for response-only ECDH encryption");
         }
-
-        ClientSessionKeyTransport sessionTransport = new ClientSessionKeyTransport(sessionKeyBase64, sessionIvBase64);
         var requestAttributes = RequestContextHolder.getRequestAttributes();
         if (requestAttributes != null) {
             requestAttributes.setAttribute(
                     CryptoSessionContext.REQUEST_CONTEXT_KEY,
-                    new CryptoSessionContext(CryptoAlgorithm.ECDH, null, sessionTransport),
+                    new CryptoSessionContext(
+                            CryptoAlgorithm.ECDH,
+                            new EcdhResponseContext(
+                                    request.clientEphemeralPublicKeyBase64(),
+                                    request.serverEphemeralPublicKeyBase64()
+                            )
+                    ),
                     RequestAttributes.SCOPE_REQUEST
             );
         }
-
         return new PlainData("mock ecdh response for request - " + request.data());
+    }
+
+    record EcdhResponseContext(String clientEphemeralPublicKeyBase64, String serverEphemeralPublicKeyBase64) {
     }
 
 }

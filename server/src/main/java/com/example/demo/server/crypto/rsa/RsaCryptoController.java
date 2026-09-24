@@ -1,9 +1,9 @@
 package com.example.demo.server.crypto.rsa;
 
-import com.example.demo.crypto.ClientSessionKeyTransport;
 import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.PlainData;
 import com.example.demo.crypto.SensitiveData;
+import com.example.demo.crypto.SessionKeyTransport;
 import com.example.demo.crypto.rsa.RsaPublicKeyResponse;
 import com.example.demo.server.crypto.CryptoAlgorithm;
 import com.example.demo.server.crypto.CryptoSessionContext;
@@ -12,8 +12,6 @@ import com.example.demo.server.crypto.EncryptResponse;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
-
-import java.security.GeneralSecurityException;
 
 @RestController
 public class RsaCryptoController {
@@ -44,12 +42,14 @@ public class RsaCryptoController {
 
     @PostMapping("/crypto/server/rsa/response-only")
     @EncryptResponse(CryptoAlgorithm.RSA)
-    public PlainData responseOnlyRsaEncrypt(
+    public SensitiveData responseOnlyRsaEncrypt(
             @RequestBody PlainData request,
             @RequestHeader(value = CryptoConstants.HEADER_CLIENT_SESSION_KEY, required = false) String sessionKeyBase64,
             @RequestHeader(value = CryptoConstants.HEADER_CLIENT_SESSION_IV, required = false) String sessionIvBase64
-    ) throws GeneralSecurityException {
-        String data = request == null || request.data() == null ? "Hello, World!" : request.data();
+    ) {
+        if (request == null || request.data() == null || request.data().isBlank()) {
+            throw new IllegalArgumentException("request body is required for response-only RSA encryption");
+        }
         if (sessionKeyBase64 == null || sessionKeyBase64.isBlank()) {
             throw new IllegalArgumentException("client session key is required for response-only RSA encryption");
         }
@@ -57,17 +57,17 @@ public class RsaCryptoController {
             throw new IllegalArgumentException("client session IV is required for response-only RSA encryption");
         }
 
-        ClientSessionKeyTransport sessionTransport = new ClientSessionKeyTransport(sessionKeyBase64, sessionIvBase64);
+        SessionKeyTransport sessionTransport = new SessionKeyTransport(sessionKeyBase64, sessionIvBase64);
         var requestAttributes = RequestContextHolder.getRequestAttributes();
         if (requestAttributes != null) {
             requestAttributes.setAttribute(
                     CryptoSessionContext.REQUEST_CONTEXT_KEY,
-                    new CryptoSessionContext(CryptoAlgorithm.RSA, null, sessionTransport),
+                    new CryptoSessionContext(CryptoAlgorithm.RSA, sessionTransport),
                     RequestAttributes.SCOPE_REQUEST
             );
         }
 
-        return new PlainData("mock rsa response for request - " + data);
+        return new SensitiveData("mock rsa response for request - " + request.data());
     }
 
 }

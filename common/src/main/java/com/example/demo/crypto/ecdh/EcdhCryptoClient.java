@@ -23,7 +23,6 @@ import java.security.spec.X509EncodedKeySpec;
 public class EcdhCryptoClient {
     private final PublicKeyProvider publicKeyProvider;
     private final SecureRandom secureRandom;
-    private SecretKey aesKey;
     private PrivateKey clientEphemeralPrivateKey;
     private PublicKey serverEphemeralPublicKey;
 
@@ -35,7 +34,7 @@ public class EcdhCryptoClient {
     /**
      * Encrypts the given data using ECDH key exchange and AES-GCM encryption.
      * The method fetches the server's ephemeral public key, verifies its signature, and derives a shared secret.
-     * An AES session key is derived from the shared secret and used to encrypt the data.
+     * A request AES key is derived from the shared secret and used to encrypt the data.
      *
      * @param data The plaintext data to encrypt.
      * @return An EcdhCipherPayload containing the client's ephemeral public key, server's ephemeral public key,
@@ -45,8 +44,79 @@ public class EcdhCryptoClient {
     public EcdhCipherPayload encrypt(String data) throws GeneralSecurityException {
         EcdhPublicKeyResponse publicKeyResponse = (EcdhPublicKeyResponse) publicKeyProvider.fetchServerPublicKey();
         verifyServerEphemeralPublicKey(publicKeyResponse);
+        NegotiatedKeys negotiatedKeys = negotiateKeys(publicKeyResponse.ephemeralPublicKeyBase64());
+
+        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
+        secureRandom.nextBytes(iv);
+        byte[] derivedAesKey = HkdfUtils.deriveAesKey(
+                negotiatedKeys.sharedSecret(),
+                iv,
+                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY.getBytes(StandardCharsets.UTF_8),
+                CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
+        );
+        SecretKey requestKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
+
+        byte[] encryptedData = encryptWithAes(data, requestKey, iv);
+
+        return new EcdhCipherPayload(
+                negotiatedKeys.clientEphemeralPublicKeyBase64(),
+                publicKeyResponse.ephemeralPublicKeyBase64(),
+                EncodingUtils.toBase64(iv),
+                EncodingUtils.toBase64(encryptedData)
+        );
+    }
+
+    public EcdhResponseOnlyRequest createResponseOnlyRequest(String data) throws GeneralSecurityException {
+        EcdhPublicKeyResponse publicKeyResponse = (EcdhPublicKeyResponse) publicKeyProvider.fetchServerPublicKey();
+        verifyServerEphemeralPublicKey(publicKeyResponse);
+        NegotiatedKeys negotiatedKeys = negotiateKeys(publicKeyResponse.ephemeralPublicKeyBase64());
+        return new EcdhResponseOnlyRequest(
+                data,
+                negotiatedKeys.clientEphemeralPublicKeyBase64(),
+                publicKeyResponse.ephemeralPublicKeyBase64()
+        );
+    }
+
+    /**
+     * Decrypts the given EcdhCipherPayload using the response AES key derived from the shared secret.
+     *
+     * @param payload The EcdhCipherPayload containing the encrypted data and associated metadata.
+     * @return The decrypted plaintext data as a String.
+     * @throws GeneralSecurityException If decryption fails due to cryptographic errors or missing keys.
+     */
+    public String decrypt(EcdhCipherPayload payload) throws GeneralSecurityException {
+        if (payload == null) {
+            throw new IllegalArgumentException("payload cannot be null");
+        }
+        if (clientEphemeralPrivateKey == null || serverEphemeralPublicKey == null) {
+            throw new IllegalStateException("No ECDH key agreement state available for response decryption");
+        }
+        KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
+        keyAgreement.init(clientEphemeralPrivateKey);
+        keyAgreement.doPhase(serverEphemeralPublicKey, true);
+        byte[] sharedSecret = keyAgreement.generateSecret();
+        byte[] iv = EncodingUtils.fromBase64(payload.ivBase64());
+        byte[] derivedAesKey = HkdfUtils.deriveAesKey(
+                sharedSecret,
+                iv,
+                CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY.getBytes(StandardCharsets.UTF_8),
+                CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
+        );
+        SecretKey responseKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
+
+        Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
+        aesCipher.init(
+                Cipher.DECRYPT_MODE,
+                responseKey,
+                new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, EncodingUtils.fromBase64(payload.ivBase64()))
+        );
+        byte[] plainBytes = aesCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedDataBase64()));
+        return new String(plainBytes, StandardCharsets.UTF_8);
+    }
+
+    private NegotiatedKeys negotiateKeys(String serverEphemeralPublicKeyBase64) throws GeneralSecurityException {
         PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
-                new X509EncodedKeySpec(EncodingUtils.fromBase64(publicKeyResponse.ephemeralPublicKeyBase64()))
+                new X509EncodedKeySpec(EncodingUtils.fromBase64(serverEphemeralPublicKeyBase64))
         );
 
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
@@ -59,68 +129,12 @@ public class EcdhCryptoClient {
         keyAgreement.doPhase(serverPublicKey, true);
         byte[] sharedSecret = keyAgreement.generateSecret();
 
-        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
-        secureRandom.nextBytes(iv);
-        byte[] derivedAesKey = HkdfUtils.deriveAesKey(
-                sharedSecret,
-                iv,
-                CryptoConstants.HKDF_INFO_DATA_AES_KEY.getBytes(StandardCharsets.UTF_8),
-                CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
-        );
         this.clientEphemeralPrivateKey = ephemeralKeyPair.getPrivate();
         this.serverEphemeralPublicKey = serverPublicKey;
-        this.aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
-
-        byte[] encryptedData = encryptWithAes(data, aesKey, iv);
-
-        return new EcdhCipherPayload(
-                clientEphemeralPublicKeyBase64,
-                publicKeyResponse.ephemeralPublicKeyBase64(),
-                EncodingUtils.toBase64(iv),
-                EncodingUtils.toBase64(encryptedData)
-        );
+        return new NegotiatedKeys(sharedSecret, clientEphemeralPublicKeyBase64);
     }
 
-    /**
-     * Decrypts the given EcdhCipherPayload using the derived AES session key.
-     * If the client and server ephemeral keys are available, it derives the AES key from the shared secret.
-     * Otherwise, it uses the existing AES session key for decryption.
-     *
-     * @param payload The EcdhCipherPayload containing the encrypted data and associated metadata.
-     * @return The decrypted plaintext data as a String.
-     * @throws GeneralSecurityException If decryption fails due to cryptographic errors or missing keys.
-     */
-    public String decrypt(EcdhCipherPayload payload) throws GeneralSecurityException {
-        if (payload == null) {
-            throw new IllegalArgumentException("payload cannot be null");
-        }
-        if (clientEphemeralPrivateKey == null || serverEphemeralPublicKey == null) {
-            if (aesKey == null) {
-                throw new IllegalStateException("No AES session key available for local ECDH decryption");
-            }
-        } else {
-            KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
-            keyAgreement.init(clientEphemeralPrivateKey);
-            keyAgreement.doPhase(serverEphemeralPublicKey, true);
-            byte[] sharedSecret = keyAgreement.generateSecret();
-            byte[] iv = EncodingUtils.fromBase64(payload.ivBase64());
-            byte[] derivedAesKey = HkdfUtils.deriveAesKey(
-                    sharedSecret,
-                    iv,
-                    CryptoConstants.HKDF_INFO_DATA_AES_KEY.getBytes(StandardCharsets.UTF_8),
-                    CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
-            );
-            this.aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
-        }
-
-        Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
-        aesCipher.init(
-                Cipher.DECRYPT_MODE,
-                aesKey,
-                new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, EncodingUtils.fromBase64(payload.ivBase64()))
-        );
-        byte[] plainBytes = aesCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedDataBase64()));
-        return new String(plainBytes, StandardCharsets.UTF_8);
+    private record NegotiatedKeys(byte[] sharedSecret, String clientEphemeralPublicKeyBase64) {
     }
 
     /**

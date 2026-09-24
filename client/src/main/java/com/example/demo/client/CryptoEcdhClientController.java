@@ -1,18 +1,16 @@
 package com.example.demo.client;
 
-import com.example.demo.crypto.ClientSessionKeyTransport;
 import com.example.demo.crypto.PlainData;
 import com.example.demo.crypto.ecdh.EcdhCipherPayload;
 import com.example.demo.crypto.ecdh.EcdhCryptoClient;
 import com.example.demo.crypto.ecdh.EcdhHttpCryptoClient;
+import com.example.demo.crypto.ecdh.EcdhResponseOnlyRequest;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.crypto.SecretKey;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.util.Map;
 
@@ -58,22 +56,16 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
     @PostMapping("/response-only")
     public Map<String, Object> responseOnlyEcdhEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
         String data = resolveData(plainData);
-        SecretKey sessionKey = generateSessionKey();
-        byte[] iv = generateIv();
-        ClientSessionKeyTransport sessionTransport = ClientSessionKeyTransport.fromGeneratedKey(sessionKey, iv, null);
-
-        HttpRequest request = buildSessionKeyRequest(
-                serverBaseUri.resolve("/crypto/server/ecdh/response-only"),
-                data,
-                sessionTransport
-        );
-
-        Map<String, Object> responsePayload = postForMap(request, "response-only ECDH encrypt");
-        String decryptedResponseData = decryptResponseData(responsePayload, sessionKey);
+        EcdhResponseOnlyRequest requestPayload = ecdhCryptoClient.createResponseOnlyRequest(data);
+        HttpResponse<String> response = sendJsonRequest("/crypto/server/ecdh/response-only", requestPayload);
+        ensureSuccess(response, "response-only ECDH encrypt");
+        EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);
+        String decryptedResponseData = ecdhCryptoClient.decrypt(responsePayload);
+        PlainData decryptedServerResponseData = objectMapper.readValue(decryptedResponseData, PlainData.class);
 
         return Map.of(
-                "request", Map.of("data", data),
-                "response", Map.of("data", decryptedResponseData, "encrypted", responsePayload)
+                "request", requestPayload,
+                "response", Map.of("data", decryptedServerResponseData.data(), "encrypted", responsePayload)
         );
     }
 }

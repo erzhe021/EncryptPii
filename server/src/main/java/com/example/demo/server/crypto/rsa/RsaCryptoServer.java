@@ -85,15 +85,15 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
     /**
      * Decrypts the provided RsaCipherPayload using the RSA private key and AES session key.
      *
-     * @param payload the RsaCipherPayload containing the encrypted data, IV, and encrypted AES key
+     * @param payload the RsaCipherPayload containing the encrypted data, IV, and encrypted session key
      * @return the decrypted plaintext data as a String
      * @throws GeneralSecurityException if a security exception occurs during decryption
      */
     public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
         validatePayload(payload);
-        byte[] aesKeyBytes = decryptSessionKey(payload.encryptedAesKeyBase64());
-        SecretKey aesKey = new SecretKeySpec(aesKeyBytes, CryptoConstants.ALGORITHM_AES);
-        return decryptWithAes(payload, aesKey);
+        byte[] sessionKeyBytes = decryptSessionKey(payload.encryptedSessionKeyBase64());
+        SecretKey sessionKey = new SecretKeySpec(sessionKeyBytes, CryptoConstants.ALGORITHM_AES);
+        return decryptWithAes(payload, sessionKey);
     }
 
     /**
@@ -127,13 +127,13 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
         validatePayload(requestPayload);
         Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
         rsaCipher.init(Cipher.DECRYPT_MODE, rsaPrivateKey);
-        byte[] aesKeyBytes = rsaCipher.doFinal(EncodingUtils.fromBase64(requestPayload.encryptedAesKeyBase64()));
-        SecretKey aesKey = new SecretKeySpec(aesKeyBytes, CryptoConstants.ALGORITHM_AES);
+        byte[] sessionKeyBytes = rsaCipher.doFinal(EncodingUtils.fromBase64(requestPayload.encryptedSessionKeyBase64()));
+        SecretKey sessionKey = new SecretKeySpec(sessionKeyBytes, CryptoConstants.ALGORITHM_AES);
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         new SecureRandom().nextBytes(iv);
-        byte[] encryptedData = encryptWithAes(data, aesKey, iv);
+        byte[] encryptedData = encryptWithSessionKey(data, sessionKey, iv);
         return new RsaCipherPayload(
-                requestPayload.encryptedAesKeyBase64(),
+                requestPayload.encryptedSessionKeyBase64(),
                 EncodingUtils.toBase64(iv),
                 EncodingUtils.toBase64(encryptedData)
         );
@@ -149,7 +149,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
         if (payload == null) {
             throw new IllegalArgumentException("Payload cannot be null");
         }
-        if (!StringUtils.hasLength(payload.encryptedAesKeyBase64())) {
+        if (!StringUtils.hasLength(payload.encryptedSessionKeyBase64())) {
             throw new IllegalArgumentException("Encrypted AES key is required for RSA decryption but was not provided.");
         }
         if (!StringUtils.hasLength(payload.ivBase64())) {
@@ -164,15 +164,15 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * Decrypts the provided RsaCipherPayload using the provided AES session key.
      *
      * @param payload the RsaCipherPayload containing the encrypted data and IV
-     * @param aesKey  the AES session key to use for decryption
+     * @param sessionKey  the AES session key to use for decryption
      * @return the decrypted plaintext data as a String
      * @throws GeneralSecurityException if a security exception occurs during decryption
      */
-    private String decryptWithAes(RsaCipherPayload payload, SecretKey aesKey) throws GeneralSecurityException {
+    private String decryptWithAes(RsaCipherPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(
                 Cipher.DECRYPT_MODE,
-                aesKey,
+                sessionKey,
                 new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, EncodingUtils.fromBase64(payload.ivBase64()))
         );
         byte[] plainBytes = aesCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedDataBase64()));
@@ -182,15 +182,15 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
     /**
      * Encrypts the provided data using the provided AES session key and IV.
      *
-     * @param data   the plaintext data to encrypt
-     * @param aesKey the AES session key to use for encryption
-     * @param iv     the initialization vector (IV) to use for encryption
+     * @param data          the plaintext data to encrypt
+     * @param sessionKey the AES session key to use for encryption
+     * @param iv            the initialization vector (IV) to use for encryption
      * @return the encrypted data as a byte array
      * @throws GeneralSecurityException if a security exception occurs during encryption
      */
-    private byte[] encryptWithAes(String data, SecretKey aesKey, byte[] iv) throws GeneralSecurityException {
+    private byte[] encryptWithSessionKey(String data, SecretKey sessionKey, byte[] iv) throws GeneralSecurityException {
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
-        aesCipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
+        aesCipher.init(Cipher.ENCRYPT_MODE, sessionKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
         return aesCipher.doFinal(data.getBytes(StandardCharsets.UTF_8));
     }
 }

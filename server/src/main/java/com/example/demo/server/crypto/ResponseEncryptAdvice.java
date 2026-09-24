@@ -1,6 +1,6 @@
 package com.example.demo.server.crypto;
 
-import jakarta.servlet.http.HttpServletRequest;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.MediaType;
@@ -10,11 +10,14 @@ import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 import java.security.GeneralSecurityException;
 
+/**
+ * Advice to encrypt the response body for methods annotated with @EncryptResponse.
+ * The response body is encrypted using the same algorithm and session context as the request.
+ */
 @ControllerAdvice
 public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
 
@@ -25,12 +28,18 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
     }
 
     @Override
-    public boolean supports(MethodParameter returnType, Class<? extends HttpMessageConverter<?>> converterType) {
+    public boolean supports(@NonNull MethodParameter returnType,
+                            @NonNull Class<? extends HttpMessageConverter<?>> converterType) {
         return findEncryptResponse(returnType) != null;
     }
 
     @Override
-    public Object beforeBodyWrite(Object body, MethodParameter returnType, MediaType selectedContentType, Class<? extends HttpMessageConverter<?>> selectedConverterType, ServerHttpRequest request, ServerHttpResponse response) {
+    public Object beforeBodyWrite(Object body,
+                                  @NonNull MethodParameter returnType,
+                                  @NonNull MediaType selectedContentType,
+                                  @NonNull Class<? extends HttpMessageConverter<?>> selectedConverterType,
+                                  @NonNull ServerHttpRequest request,
+                                  @NonNull ServerHttpResponse response) {
         EncryptResponse encryptResponse = findEncryptResponse(returnType);
         if (encryptResponse == null || body == null) {
             return body;
@@ -40,7 +49,7 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
             if (sessionContext == null) {
                 throw new IllegalStateException("No request session context available for response encryption");
             }
-            return handlerRegistry.getRequiredHandler(encryptResponse.value()).encrypt(body, selectedContentType, sessionContext);
+            return handlerRegistry.getRequiredHandler(encryptResponse.value()).encrypt(body, sessionContext);
         } catch (GeneralSecurityException e) {
             throw new ResponseEncryptionException("Failed to encrypt response body", e);
         }
@@ -51,7 +60,8 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
         if (attrs == null) {
             return null;
         }
-        return (CryptoSessionContext) attrs.getAttribute(CryptoSessionContext.REQUEST_CONTEXT_KEY, RequestAttributes.SCOPE_REQUEST);
+        return (CryptoSessionContext) attrs.getAttribute(
+                CryptoSessionContext.REQUEST_CONTEXT_KEY, RequestAttributes.SCOPE_REQUEST);
     }
 
     private EncryptResponse findEncryptResponse(MethodParameter returnType) {

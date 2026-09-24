@@ -178,7 +178,7 @@ public class EcdhCryptoServer {
         byte[] derivedAesKey = HkdfUtils.deriveAesKey(
                 sharedSecret,
                 EncodingUtils.fromBase64(payload.ivBase64()),
-                CryptoConstants.HKDF_INFO_DATA_AES_KEY.getBytes(StandardCharsets.UTF_8),
+                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY.getBytes(StandardCharsets.UTF_8),
                 CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
         );
 
@@ -217,16 +217,33 @@ public class EcdhCryptoServer {
             return encrypt(data);
         }
         validatePayload(requestPayload);
-        String serverPublicKeyBase64 = requestPayload.serverEphemeralPublicKeyBase64();
+        return encryptResponseOnly(
+                data,
+                requestPayload.serverEphemeralPublicKeyBase64(),
+                requestPayload.clientEphemeralPublicKeyBase64()
+        );
+    }
+
+    public EcdhCipherPayload encryptResponseOnly(
+            String data,
+            String serverPublicKeyBase64,
+            String clientPublicKeyBase64
+    ) throws GeneralSecurityException {
+        if (!StringUtils.hasLength(clientPublicKeyBase64)) {
+            throw new IllegalArgumentException("Client ephemeral public key is required for response encryption");
+        }
+        if (!StringUtils.hasLength(serverPublicKeyBase64)) {
+            throw new IllegalArgumentException("Server ephemeral public key is required for response encryption");
+        }
         PrivateKey serverPrivateKey = ephemeralEcdhPrivateKeys.getIfPresent(serverPublicKeyBase64);
         if (serverPrivateKey == null) {
             throw new IllegalArgumentException("No matching ephemeral server private key found for response encryption");
         }
         return encryptWithServerPrivateKeyAndClientPublicKey(
                 data,
-                requestPayload,
-                serverPrivateKey,
-                requestPayload.clientEphemeralPublicKeyBase64()
+                serverPublicKeyBase64,
+                clientPublicKeyBase64,
+                serverPrivateKey
         );
     }
 
@@ -256,7 +273,7 @@ public class EcdhCryptoServer {
         byte[] derivedAesKey = HkdfUtils.deriveAesKey(
                 sharedSecret,
                 iv,
-                CryptoConstants.HKDF_INFO_DATA_AES_KEY.getBytes(StandardCharsets.UTF_8),
+                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY.getBytes(StandardCharsets.UTF_8),
                 CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
         );
         SecretKey aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
@@ -282,9 +299,9 @@ public class EcdhCryptoServer {
      */
     private EcdhCipherPayload encryptWithServerPrivateKeyAndClientPublicKey(
             String data,
-            EcdhCipherPayload requestPayload,
-            PrivateKey serverPrivateKey,
-            String clientPublicKeyBase64
+            String serverPublicKeyBase64,
+            String clientPublicKeyBase64,
+            PrivateKey serverPrivateKey
     ) throws GeneralSecurityException {
         PublicKey clientEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(clientPublicKeyBase64))
@@ -299,15 +316,15 @@ public class EcdhCryptoServer {
         byte[] derivedAesKey = HkdfUtils.deriveAesKey(
                 sharedSecret,
                 iv,
-                CryptoConstants.HKDF_INFO_DATA_AES_KEY.getBytes(StandardCharsets.UTF_8),
+                CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY.getBytes(StandardCharsets.UTF_8),
                 CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
         );
         SecretKey aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
         byte[] encryptedData = encryptWithAes(data, aesKey, iv);
 
         return new EcdhCipherPayload(
-                requestPayload.clientEphemeralPublicKeyBase64(),
-                requestPayload.serverEphemeralPublicKeyBase64(),
+                clientPublicKeyBase64,
+                serverPublicKeyBase64,
                 EncodingUtils.toBase64(iv),
                 EncodingUtils.toBase64(encryptedData)
         );

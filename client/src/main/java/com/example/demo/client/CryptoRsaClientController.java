@@ -1,9 +1,6 @@
 package com.example.demo.client;
 
-import com.example.demo.crypto.ClientSessionKeyTransport;
-import com.example.demo.crypto.CryptoConstants;
-import com.example.demo.crypto.EncodingUtils;
-import com.example.demo.crypto.PlainData;
+import com.example.demo.crypto.*;
 import com.example.demo.crypto.rsa.RsaCipherPayload;
 import com.example.demo.crypto.rsa.RsaCryptoClient;
 import com.example.demo.crypto.rsa.RsaHttpCryptoClient;
@@ -67,16 +64,21 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
         byte[] iv = generateIv();
 
         PublicKey rsaPublicKey = loadServerRsaPublicKey();
-        ClientSessionKeyTransport sessionTransport = ClientSessionKeyTransport.fromGeneratedKey(sessionKey, iv, rsaPublicKey);
-        Map<String, Object> responseMap = postForMap(
+        SessionKeyTransport sessionTransport = SessionKeyTransport.fromGeneratedKey(sessionKey, iv, rsaPublicKey);
+        HttpResponse<String> response = httpClient.send(
                 buildSessionKeyRequest(serverBaseUri.resolve("/crypto/server/rsa/response-only"), data, sessionTransport),
-                "response-only RSA encrypt"
+                HttpResponse.BodyHandlers.ofString()
         );
-        String decryptedResponseData = decryptResponseData(responseMap, sessionKey);
+        ensureSuccess(response, "response-only RSA encrypt");
+
+        DefaultAesCipherPayload responsePayload = objectMapper.readValue(response.body(), DefaultAesCipherPayload.class);
+
+        String decryptedResponseData = decryptResponseData(responsePayload, sessionKey);
+        PlainData responsePlainData = objectMapper.readValue(decryptedResponseData, PlainData.class);
 
         return Map.of(
                 "request", Map.of("data", data),
-                "response", Map.of("data", decryptedResponseData, "encrypted", responseMap)
+                "response", Map.of("data", responsePlainData.data(), "encrypted", responsePayload)
         );
     }
 

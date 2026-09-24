@@ -1,6 +1,6 @@
 package com.example.demo.server.crypto;
 
-import jakarta.servlet.http.HttpServletRequest;
+import org.checkerframework.checker.nullness.qual.NonNull;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpHeaders;
@@ -9,7 +9,6 @@ import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
-import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.servlet.mvc.method.annotation.RequestBodyAdvice;
 
 import java.io.ByteArrayInputStream;
@@ -29,51 +28,82 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
     }
 
     @Override
-    public boolean supports(MethodParameter methodParameter, Type targetType, Class<? extends HttpMessageConverter<?>> converterType) {
+    public boolean supports(@NonNull MethodParameter methodParameter,
+                            @NonNull Type targetType,
+                            @NonNull Class<? extends HttpMessageConverter<?>> converterType) {
         return findDecryptRequest(methodParameter) != null;
     }
 
+    /**
+     * Decrypt the request body before it is read and converted to an object.
+     * The decrypted JSON string is then wrapped in a new HttpInputMessage and returned.
+     */
     @Override
-    public HttpInputMessage beforeBodyRead(HttpInputMessage inputMessage, MethodParameter parameter, Type targetType, Class<? extends HttpMessageConverter<?>> converterType) throws IOException {
+    public @NonNull HttpInputMessage beforeBodyRead(@NonNull HttpInputMessage inputMessage,
+                                                    @NonNull MethodParameter parameter,
+                                                    @NonNull Type targetType,
+                                                    @NonNull Class<? extends HttpMessageConverter<?>> converterType)
+            throws IOException {
         DecryptRequest decryptRequest = findDecryptRequest(parameter);
         if (decryptRequest == null) {
             return inputMessage;
         }
         String encryptedBody = new String(inputMessage.getBody().readAllBytes(), StandardCharsets.UTF_8);
-        String plainJson;
+        String decryptedBody;
         try {
             CryptoPayloadHandler handler = handlerRegistry.getRequiredHandler(decryptRequest.value());
             CryptoSessionContext sessionContext = handler.createSessionContext(encryptedBody);
             RequestContextHolder.currentRequestAttributes()
                     .setAttribute(CryptoSessionContext.REQUEST_CONTEXT_KEY, sessionContext, RequestAttributes.SCOPE_REQUEST);
-            plainJson = handler.decrypt(encryptedBody, targetType);
+            decryptedBody = handler.decrypt(encryptedBody);
         } catch (GeneralSecurityException e) {
             throw new IllegalArgumentException("Failed to decrypt request body", e);
         }
 
         return new HttpInputMessage() {
             @Override
-            public InputStream getBody() {
-                return new ByteArrayInputStream(plainJson.getBytes(StandardCharsets.UTF_8));
+            public @NonNull InputStream getBody() {
+                return new ByteArrayInputStream(decryptedBody.getBytes(StandardCharsets.UTF_8));
             }
 
             @Override
-            public HttpHeaders getHeaders() {
+            public @NonNull HttpHeaders getHeaders() {
                 return inputMessage.getHeaders();
             }
         };
     }
 
+    /**
+     * After the body is read and converted to an object, we can perform additional processing if needed.
+     * In this case, we simply return the body as is.
+     */
     @Override
-    public Object afterBodyRead(Object body, HttpInputMessage inputMessage, MethodParameter parameter, Type targetType, Class<? extends HttpMessageConverter<?>> converterType) {
+    public @NonNull Object afterBodyRead(@NonNull Object body,
+                                         @NonNull HttpInputMessage inputMessage,
+                                         @NonNull MethodParameter parameter,
+                                         @NonNull Type targetType,
+                                         @NonNull Class<? extends HttpMessageConverter<?>> converterType) {
         return body;
     }
 
+    /**
+     * If the request body is empty, we can handle it here. In this case, we simply return the body as is.
+     */
     @Override
-    public Object handleEmptyBody(Object body, HttpInputMessage inputMessage, MethodParameter parameter, Type targetType, Class<? extends HttpMessageConverter<?>> converterType) {
+    public @NonNull Object handleEmptyBody(Object body,
+                                           @NonNull HttpInputMessage inputMessage,
+                                           @NonNull MethodParameter parameter,
+                                           @NonNull Type targetType,
+                                           @NonNull Class<? extends HttpMessageConverter<?>> converterType) {
         return body;
     }
 
+    /**
+     * Find the DecryptRequest annotation on the method or class.
+     *
+     * @param methodParameter the method parameter
+     * @return the DecryptRequest annotation, or null if not found
+     */
     private DecryptRequest findDecryptRequest(MethodParameter methodParameter) {
         DecryptRequest annotation = methodParameter.getMethodAnnotation(DecryptRequest.class);
         if (annotation != null) {

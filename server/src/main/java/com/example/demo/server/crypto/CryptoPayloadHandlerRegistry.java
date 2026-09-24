@@ -4,7 +4,11 @@ import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Registry for CryptoPayloadHandler instances, allowing retrieval based on CryptoAlgorithm.
+ */
 public class CryptoPayloadHandlerRegistry {
+
     private final Map<CryptoAlgorithm, CryptoPayloadHandler> handlers;
 
     public CryptoPayloadHandlerRegistry(List<CryptoPayloadHandler> handlers) {
