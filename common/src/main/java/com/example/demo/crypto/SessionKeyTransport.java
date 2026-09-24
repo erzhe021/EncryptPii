@@ -18,12 +18,8 @@ public record SessionKeyTransport(
         if (iv == null || iv.length == 0) {
             throw new IllegalArgumentException("iv is required");
         }
-
         if (serverPublicKey == null) {
-            return new SessionKeyTransport(
-                    EncodingUtils.toBase64(sessionKey.getEncoded()),
-                    EncodingUtils.toBase64(iv)
-            );
+            throw new IllegalArgumentException("serverPublicKey is required");
         }
 
         if (!CryptoConstants.ALGORITHM_RSA.equalsIgnoreCase(serverPublicKey.getAlgorithm())) {

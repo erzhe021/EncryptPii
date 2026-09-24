@@ -5,6 +5,7 @@ import com.example.demo.crypto.rsa.RsaCipherPayload;
 import com.example.demo.crypto.rsa.RsaCryptoClient;
 import com.example.demo.crypto.rsa.RsaHttpCryptoClient;
 import com.example.demo.crypto.rsa.RsaPublicKeyResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -20,9 +21,11 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/crypto/client/rsa")
+@Slf4j
 public class CryptoRsaClientController extends AbstractCryptoClientController {
 
     private final RsaCryptoClient rsaCryptoClient;
+    private final String rsaPublicKeyPath;
     private final String rsaBidirectionalPath;
     private final String rsaRequestOnlyPath;
     private final String rsaResponseOnlyPath;
@@ -35,6 +38,7 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
             @Value("${crypto.server.endpoints.rsa.response-only:/crypto/server/rsa/response-only}") String rsaResponseOnlyPath
     ) {
         super(serverBaseUrl);
+        this.rsaPublicKeyPath = rsaPublicKeyPath;
         this.rsaBidirectionalPath = rsaBidirectionalPath;
         this.rsaRequestOnlyPath = rsaRequestOnlyPath;
         this.rsaResponseOnlyPath = rsaResponseOnlyPath;
@@ -43,6 +47,7 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
 
     @PostMapping("/bidirectional")
     public Map<String, Object> bidirectionalRsaEncrypt(@RequestBody PlainData plainData) throws Exception {
+        log.info("Received bidirectional RSA encrypt request with data: {}", plainData.data());
         validatePlainData(plainData);
         RsaCipherPayload requestPayload = rsaCryptoClient.encrypt(toJsonString(plainData));
         HttpResponse<String> response = sendJsonRequest(rsaBidirectionalPath, requestPayload);
@@ -59,6 +64,7 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
 
     @PostMapping("/request-only")
     public Map<String, Object> requestOnlyRsaEncrypt(@RequestBody PlainData plainData) throws Exception {
+        log.info("Received request-only RSA encrypt request with data: {}", plainData.data());
         validatePlainData(plainData);
         RsaCipherPayload requestPayload = rsaCryptoClient.encrypt(toJsonString(plainData));
         Map<String, Object> responseMap = postForMap(rsaRequestOnlyPath, requestPayload, "request-only RSA encrypt");
@@ -72,7 +78,7 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
     @PostMapping("/response-only")
     public Map<String, Object> responseOnlyRsaEncrypt(@RequestBody(required = false) PlainData plainData)
             throws Exception {
-
+        log.info("Received response-only RSA encrypt request with data: {}", plainData == null ? "null" : plainData.data());
         String data = plainData == null ? null : plainData.data();
 
         // Generate a new session key and IV for AES encryption
@@ -106,7 +112,8 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
      * @throws Exception if an error occurs while fetching or converting the public key
      */
     private PublicKey loadServerRsaPublicKey() throws Exception {
-        RsaPublicKeyResponse serverPublicKey = (RsaPublicKeyResponse) new RsaHttpCryptoClient(serverBaseUri).fetchServerPublicKey();
+        RsaPublicKeyResponse serverPublicKey =
+                (RsaPublicKeyResponse) new RsaHttpCryptoClient(serverBaseUri, rsaPublicKeyPath).fetchServerPublicKey();
         return KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(serverPublicKey.publicKeyBase64()))
         );

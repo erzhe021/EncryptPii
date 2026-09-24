@@ -3,11 +3,13 @@ package com.example.demo.server.crypto.ecdh;
 import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.ecdh.EcdhCipherPayload;
+import com.example.demo.crypto.ecdh.EcdhContext;
 import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
 import com.example.demo.crypto.ecdh.HkdfUtils;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.Getter;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.Cipher;
@@ -29,6 +31,7 @@ import java.time.Duration;
  * EcdhCryptoServer is responsible for handling ECDH key generation, encryption, and decryption on the server side.
  * It manages ephemeral ECDH key pairs and uses an ECDSA key pair for signing and verifying ephemeral public keys.
  */
+@Slf4j
 public class EcdhCryptoServer {
 
     public static final Duration DEFAULT_EPHEMERAL_KEY_TTL = Duration.ofMinutes(5);
@@ -82,6 +85,7 @@ public class EcdhCryptoServer {
      * @throws IOException              If there is an I/O error while accessing the key files.
      */
     public static EcdhCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
+        log.info("Creating EcdhCryptoServer from keyDirectory={}", keyDirectory);
         Files.createDirectories(keyDirectory);
         KeyFactory ecdhKeyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC);
         KeyPair ecdsaKeyPair = loadOrCreateKeyPair(
@@ -126,6 +130,7 @@ public class EcdhCryptoServer {
      * @throws GeneralSecurityException If there is a security exception during key generation or signing.
      */
     public EcdhPublicKeyResponse generateEphemeralEcdhPublicKey() throws GeneralSecurityException {
+        log.info("Generating ephemeral public key");
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
         keyPairGenerator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
         KeyPair ephemeralKeyPair = keyPairGenerator.generateKeyPair();
@@ -157,6 +162,7 @@ public class EcdhCryptoServer {
      * @throws GeneralSecurityException If there is a security exception during decryption.
      */
     public String decrypt(EcdhCipherPayload payload) throws GeneralSecurityException {
+        log.info("EcdhCryptoServer decrypt {}", payload);
         validatePayload(payload);
         String serverPublicKeyBase64 = payload.serverEphemeralPublicKeyBase64();
         PrivateKey serverPrivateKey = ephemeralEcdhPrivateKeys.getIfPresent(serverPublicKeyBase64);
@@ -198,43 +204,28 @@ public class EcdhCryptoServer {
      * @throws GeneralSecurityException If there is a security exception during encryption.
      */
     public EcdhCipherPayload encrypt(String data) throws GeneralSecurityException {
+        log.info("EcdhCryptoServer encrypt data={}", data);
         EcdhPublicKeyResponse publicKeyResponse = generateEphemeralEcdhPublicKey();
         return encryptWithServerPublicKey(data, publicKeyResponse.ephemeralPublicKeyBase64());
     }
 
-    /**
-     * Encrypts the given data using the provided EcdhCipherPayload, which contains the server's ephemeral public key
-     * and the client's ephemeral public key. If the requestPayload is null, it generates a new ephemeral key pair
-     * and encrypts the data using that.
-     *
-     * @param data           The data to be encrypted.
-     * @param requestPayload The EcdhCipherPayload containing the server's ephemeral public key and the client's ephemeral public key.
-     * @return An EcdhCipherPayload containing the encrypted data and keys.
-     * @throws GeneralSecurityException If there is a security exception during encryption.
-     */
-    public EcdhCipherPayload encryptWithRequestPayload(String data, EcdhCipherPayload requestPayload) throws GeneralSecurityException {
-        if (requestPayload == null) {
-            return encrypt(data);
-        }
-        validatePayload(requestPayload);
-        return encryptResponseOnly(
-                data,
-                requestPayload.serverEphemeralPublicKeyBase64(),
-                requestPayload.clientEphemeralPublicKeyBase64()
-        );
+    public EcdhCipherPayload encryptWithEcdhContext(String data, EcdhContext ecdhContext) throws GeneralSecurityException {
+        return encryptWithServerPublicKeyAndClientPublicKey(data, ecdhContext.serverEphemeralPublicKeyBase64(), ecdhContext.clientEphemeralPublicKeyBase64());
     }
 
-    public EcdhCipherPayload encryptResponseOnly(
+    private EcdhCipherPayload encryptWithServerPublicKeyAndClientPublicKey(
             String data,
             String serverPublicKeyBase64,
             String clientPublicKeyBase64
     ) throws GeneralSecurityException {
+        log.info("EcdhCryptoServer encryptWithServerPublicKeyAndClientPublicKey data={}, serverPublicKeyBase64={}, clientPublicKeyBase64={}", data, serverPublicKeyBase64, clientPublicKeyBase64);
         if (!StringUtils.hasLength(clientPublicKeyBase64)) {
             throw new IllegalArgumentException("Client ephemeral public key is required for response encryption");
         }
         if (!StringUtils.hasLength(serverPublicKeyBase64)) {
             throw new IllegalArgumentException("Server ephemeral public key is required for response encryption");
         }
+        // Retrieve the server's ephemeral private key corresponding to the provided server public key
         PrivateKey serverPrivateKey = ephemeralEcdhPrivateKeys.getIfPresent(serverPublicKeyBase64);
         if (serverPrivateKey == null) {
             throw new IllegalArgumentException("No matching ephemeral server private key found for response encryption");
@@ -256,6 +247,7 @@ public class EcdhCryptoServer {
      * @throws GeneralSecurityException If there is a security exception during encryption.
      */
     private EcdhCipherPayload encryptWithServerPublicKey(String data, String serverPublicKeyBase64) throws GeneralSecurityException {
+        log.info("EcdhCryptoServer encryptWithServerPublicKey data={}, serverPublicKeyBase64={}", data, serverPublicKeyBase64);
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
         keyPairGenerator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
         KeyPair clientEphemeralKeyPair = keyPairGenerator.generateKeyPair();
@@ -303,6 +295,7 @@ public class EcdhCryptoServer {
             String clientPublicKeyBase64,
             PrivateKey serverPrivateKey
     ) throws GeneralSecurityException {
+        log.info("EcdhCryptoServer encryptWithServerPrivateKeyAndClientPublicKey data={}, serverPublicKeyBase64={}, clientPublicKeyBase64={}", data, serverPublicKeyBase64, clientPublicKeyBase64);
         PublicKey clientEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(clientPublicKeyBase64))
         );
@@ -363,6 +356,7 @@ public class EcdhCryptoServer {
      * @throws GeneralSecurityException If there is a security exception during decryption.
      */
     private String decryptWithAes(EcdhCipherPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
+        log.info("EcdhCryptoServer decryptWithAes payload={}, sessionKey={}", payload, sessionKey);
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(
                 Cipher.DECRYPT_MODE,
@@ -383,6 +377,7 @@ public class EcdhCryptoServer {
      * @throws GeneralSecurityException If there is a security exception during encryption.
      */
     private byte[] encryptWithAes(String data, SecretKey aesKey, byte[] iv) throws GeneralSecurityException {
+        log.info("EcdhCryptoServer encryptWithAes data={}, aesKey={}, iv={}", data, aesKey, iv);
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
         return aesCipher.doFinal(data.getBytes(StandardCharsets.UTF_8));

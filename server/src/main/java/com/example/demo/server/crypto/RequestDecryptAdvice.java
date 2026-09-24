@@ -1,5 +1,6 @@
 package com.example.demo.server.crypto;
 
+import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -19,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
 @ControllerAdvice
+@Slf4j
 public class RequestDecryptAdvice implements RequestBodyAdvice {
 
     private final CryptoPayloadHandlerRegistry handlerRegistry;
@@ -44,6 +46,7 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
                                                     @NonNull Type targetType,
                                                     @NonNull Class<? extends HttpMessageConverter<?>> converterType)
             throws IOException {
+        log.info("Decrypting request body for method: {} in class: {}", parameter.getMethod(), parameter.getContainingClass());
         DecryptRequest decryptRequest = findDecryptRequest(parameter);
         if (decryptRequest == null) {
             return inputMessage;

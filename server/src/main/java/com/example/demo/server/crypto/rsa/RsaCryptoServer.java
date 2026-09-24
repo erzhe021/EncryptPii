@@ -4,6 +4,7 @@ import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.rsa.RsaCipherPayload;
 import com.example.demo.crypto.rsa.RsaPublicKeyResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.Cipher;
@@ -22,6 +23,7 @@ import java.security.spec.X509EncodedKeySpec;
  * RsaCryptoServer is responsible for handling RSA encryption and decryption operations.
  * It manages the RSA key pair and provides methods to encrypt and decrypt data using RSA and AES algorithms.
  */
+@Slf4j
 public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) {
 
     /**
@@ -30,6 +32,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @return an instance of RsaPublicKeyResponse containing the Base64-encoded RSA public key
      */
     public RsaPublicKeyResponse getPublicKey() {
+        log.info("RsaCryptoServer getPublicKey");
         return new RsaPublicKeyResponse(
                 EncodingUtils.toBase64(rsaPublicKey.getEncoded())
         );
@@ -44,6 +47,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws IOException              if an I/O error occurs while accessing the key files
      */
     public static RsaCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
+        log.info("Creating RsaCryptoServer from keyDirectory={}", keyDirectory);
         Files.createDirectories(keyDirectory);
         KeyFactory rsaKeyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA);
         KeyPair rsaKeyPair = loadOrCreateKeyPair(
@@ -90,6 +94,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws GeneralSecurityException if a security exception occurs during decryption
      */
     public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
+        log.info("RsaCryptoServer decrypt {}", payload);
         validatePayload(payload);
         byte[] sessionKeyBytes = decryptSessionKey(payload.encryptedSessionKeyBase64());
         SecretKey sessionKey = new SecretKeySpec(sessionKeyBytes, CryptoConstants.ALGORITHM_AES);
@@ -104,6 +109,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws GeneralSecurityException if a security exception occurs during decryption
      */
     public byte[] decryptSessionKey(String encryptedSessionKeyBase64) throws GeneralSecurityException {
+        log.info("RsaCryptoServer decryptSessionKey {}", encryptedSessionKeyBase64);
         if (!StringUtils.hasLength(encryptedSessionKeyBase64)) {
             throw new IllegalArgumentException("Encrypted session key is required.");
         }
@@ -113,27 +119,24 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
     }
 
     /**
-     * Encrypts the provided data using the AES session key from the request payload and returns a new RsaCipherPayload.
+     * Encrypts the provided data using the AES session key decrypted from the provided Base64-encoded encrypted session key.
      *
-     * @param data           the plaintext data to encrypt
-     * @param requestPayload the RsaCipherPayload containing the encrypted AES key and IV
-     * @return a new RsaCipherPayload containing the encrypted data
+     * @param data                       the plaintext data to encrypt
+     * @param encryptedSessionKeyBase64  the Base64-encoded encrypted AES session key
+     * @return an RsaCipherPayload containing the encrypted data, IV, and encrypted session key
      * @throws GeneralSecurityException if a security exception occurs during encryption
      */
-    public RsaCipherPayload encryptWithRequestPayload(String data, RsaCipherPayload requestPayload) throws GeneralSecurityException {
-        if (requestPayload == null) {
-            throw new IllegalArgumentException("Request payload cannot be null");
-        }
-        validatePayload(requestPayload);
+    public RsaCipherPayload encryptWithRequestSessionKey(String data, String encryptedSessionKeyBase64) throws GeneralSecurityException {
+        log.info("RsaCryptoServer encryptWithRequestSessionKey data={}, encryptedSessionKeyBase64={}", data, encryptedSessionKeyBase64);
         Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
         rsaCipher.init(Cipher.DECRYPT_MODE, rsaPrivateKey);
-        byte[] sessionKeyBytes = rsaCipher.doFinal(EncodingUtils.fromBase64(requestPayload.encryptedSessionKeyBase64()));
+        byte[] sessionKeyBytes = rsaCipher.doFinal(EncodingUtils.fromBase64(encryptedSessionKeyBase64));
         SecretKey sessionKey = new SecretKeySpec(sessionKeyBytes, CryptoConstants.ALGORITHM_AES);
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         new SecureRandom().nextBytes(iv);
         byte[] encryptedData = encryptWithSessionKey(data, sessionKey, iv);
         return new RsaCipherPayload(
-                requestPayload.encryptedSessionKeyBase64(),
+                encryptedSessionKeyBase64,
                 EncodingUtils.toBase64(iv),
                 EncodingUtils.toBase64(encryptedData)
         );
@@ -145,7 +148,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @param payload the RsaCipherPayload to validate
      * @throws IllegalArgumentException if any required field is missing or invalid
      */
-    private void validatePayload(RsaCipherPayload payload) {
+    public void validatePayload(RsaCipherPayload payload) {
         if (payload == null) {
             throw new IllegalArgumentException("Payload cannot be null");
         }
@@ -169,6 +172,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws GeneralSecurityException if a security exception occurs during decryption
      */
     private String decryptWithAes(RsaCipherPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
+        log.info("RsaCryptoServer decryptWithAes payload={}, sessionKey={}", payload, sessionKey);
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(
                 Cipher.DECRYPT_MODE,
@@ -189,6 +193,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws GeneralSecurityException if a security exception occurs during encryption
      */
     private byte[] encryptWithSessionKey(String data, SecretKey sessionKey, byte[] iv) throws GeneralSecurityException {
+        log.info("RsaCryptoServer encryptWithSessionKey data={}, sessionKey={}, iv={}", data, sessionKey, iv);
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(Cipher.ENCRYPT_MODE, sessionKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
         return aesCipher.doFinal(data.getBytes(StandardCharsets.UTF_8));

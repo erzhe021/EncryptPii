@@ -2,6 +2,7 @@ package com.example.demo.server.crypto.ecdh;
 
 import com.example.demo.crypto.PlainData;
 import com.example.demo.crypto.SensitiveData;
+import com.example.demo.crypto.ecdh.EcdhContext;
 import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
 import com.example.demo.crypto.ecdh.EcdhResponseOnlyRequest;
 import com.example.demo.server.crypto.CryptoAlgorithm;
@@ -90,7 +91,7 @@ public class EcdhCryptoController {
                     CryptoSessionContext.REQUEST_CONTEXT_KEY,
                     new CryptoSessionContext(
                             CryptoAlgorithm.ECDH,
-                            new EcdhResponseContext(
+                            new EcdhContext(
                                     request.clientEphemeralPublicKeyBase64(),
                                     request.serverEphemeralPublicKeyBase64()
                             )
@@ -98,10 +99,7 @@ public class EcdhCryptoController {
                     RequestAttributes.SCOPE_REQUEST
             );
         }
-        return new PlainData("mock ecdh response for request - " + String.valueOf(request.data()));
-    }
-
-    record EcdhResponseContext(String clientEphemeralPublicKeyBase64, String serverEphemeralPublicKeyBase64) {
+        return new PlainData("mock ecdh response for request - " + request.data());
     }
 
 }

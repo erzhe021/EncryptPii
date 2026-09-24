@@ -2,6 +2,7 @@ package com.example.demo.crypto.ecdh;
 
 import com.example.demo.crypto.PublicKeyProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.net.URI;
@@ -15,6 +16,7 @@ import java.security.GeneralSecurityException;
  * It implements the PublicKeyProvider interface, allowing it to be used in cryptographic operations
  * that require the server's public key.
  */
+@Slf4j
 public class EcdhHttpCryptoClient implements PublicKeyProvider {
     private final HttpClient httpClient;
     private final URI serverBaseUri;
@@ -36,20 +38,21 @@ public class EcdhHttpCryptoClient implements PublicKeyProvider {
 
     @Override
     public Object fetchServerPublicKey() throws GeneralSecurityException {
+        log.info("Fetching ECDSA public key from server at {}", serverBaseUri.resolve(publicKeyEndpoint));
         HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
                 .build();
         try {
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
-                throw new GeneralSecurityException("Failed to fetch ECDH public key, status=" + response.statusCode());
+                throw new GeneralSecurityException("Failed to fetch ECDSA public key, status=" + response.statusCode());
             }
             return objectMapper.readValue(response.body(), EcdhPublicKeyResponse.class);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            throw new GeneralSecurityException("Failed to fetch ECDH public key", e);
+            throw new GeneralSecurityException("Failed to fetch ECDSA public key", e);
         }
     }
 

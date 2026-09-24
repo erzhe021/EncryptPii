@@ -1,15 +1,17 @@
 package com.example.demo.server.crypto.ecdh;
 
 import com.example.demo.crypto.CryptoConstants;
+import com.example.demo.crypto.DefaultAesCipherPayload;
 import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.SessionKeyTransport;
-import com.example.demo.crypto.DefaultAesCipherPayload;
 import com.example.demo.crypto.ecdh.EcdhCipherPayload;
+import com.example.demo.crypto.ecdh.EcdhContext;
 import com.example.demo.server.crypto.CryptoAlgorithm;
 import com.example.demo.server.crypto.CryptoPayloadHandler;
 import com.example.demo.server.crypto.CryptoSessionContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import javax.crypto.Cipher;
@@ -22,6 +24,7 @@ import java.security.GeneralSecurityException;
 import java.security.NoSuchAlgorithmException;
 
 @Component
+@Slf4j
 public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
     private final EcdhCryptoServer ecdhCryptoServer;
     private final ObjectMapper objectMapper;
@@ -45,6 +48,7 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
      */
     @Override
     public String decrypt(String encryptedRequestBody) throws GeneralSecurityException {
+        log.info("decrypt encryptedRequestBody={}", encryptedRequestBody);
         try {
             EcdhCipherPayload payload = objectMapper.readValue(encryptedRequestBody, EcdhCipherPayload.class);
             return ecdhCryptoServer.decrypt(payload);
@@ -61,6 +65,7 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
      */
     @Override
     public CryptoSessionContext createSessionContext(String encryptedRequestBody) {
+        log.info("createSessionContext encryptedRequestBody={}", encryptedRequestBody);
         try {
             EcdhCipherPayload payload = objectMapper.readValue(encryptedRequestBody, EcdhCipherPayload.class);
             return new CryptoSessionContext(CryptoAlgorithm.ECDH, payload);
@@ -80,6 +85,9 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
     @Override
     public Object encrypt(Object responseBody, CryptoSessionContext sessionContext)
             throws GeneralSecurityException {
+
+        log.info("encrypt responseBody={} with sessionContext={}", responseBody, sessionContext);
+
         try {
             String responseBodyString = objectMapper.writeValueAsString(responseBody);
             if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport sessionKeyTransport) {
@@ -96,16 +104,22 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
                         EncodingUtils.toBase64(encryptedData)
                 );
             }
-            if (sessionContext.requestKeyMaterial() instanceof EcdhCryptoController.EcdhResponseContext responseContext) {
-                return ecdhCryptoServer.encryptResponseOnly(
+            if (sessionContext.requestKeyMaterial() instanceof EcdhContext ecdhContext) {
+                return ecdhCryptoServer.encryptWithEcdhContext(
                         responseBodyString,
-                        responseContext.serverEphemeralPublicKeyBase64(),
-                        responseContext.clientEphemeralPublicKeyBase64()
+                        ecdhContext
                 );
             }
 
             EcdhCipherPayload requestPayload = (EcdhCipherPayload) sessionContext.requestKeyMaterial();
-            return ecdhCryptoServer.encryptWithRequestPayload(responseBodyString, requestPayload);
+            EcdhContext ecdhContext = new EcdhContext(
+                    requestPayload.clientEphemeralPublicKeyBase64(),
+                    requestPayload.serverEphemeralPublicKeyBase64()
+            );
+            return ecdhCryptoServer.encryptWithEcdhContext(
+                    responseBodyString,
+                    ecdhContext
+            );
         } catch (JsonProcessingException | NoSuchAlgorithmException | NoSuchPaddingException e) {
             throw new IllegalArgumentException("Failed to serialize response body before ECDH encryption", e);
         }

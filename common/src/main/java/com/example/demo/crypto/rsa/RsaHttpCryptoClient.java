@@ -2,6 +2,7 @@ package com.example.demo.crypto.rsa;
 
 import com.example.demo.crypto.PublicKeyProvider;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.net.URI;
@@ -15,23 +16,18 @@ import java.security.GeneralSecurityException;
  * It implements the PublicKeyProvider interface, allowing it to be used in cryptographic operations
  * that require the server's public key.
  */
+@Slf4j
 public class RsaHttpCryptoClient implements PublicKeyProvider {
     private final HttpClient httpClient;
     private final URI serverBaseUri;
     private final ObjectMapper objectMapper;
     private final String publicKeyEndpoint;
 
-    public RsaHttpCryptoClient(URI serverBaseUri) {
-        this(serverBaseUri, "/crypto/server/rsa/public-key");
-    }
-
     public RsaHttpCryptoClient(URI serverBaseUri, String publicKeyEndpoint) {
         this.httpClient = HttpClient.newHttpClient();
         this.serverBaseUri = serverBaseUri;
         this.objectMapper = new ObjectMapper();
-        this.publicKeyEndpoint = publicKeyEndpoint == null || publicKeyEndpoint.isBlank()
-                ? "/crypto/server/rsa/public-key"
-                : publicKeyEndpoint;
+        this.publicKeyEndpoint = publicKeyEndpoint;
     }
 
     /**
@@ -42,6 +38,7 @@ public class RsaHttpCryptoClient implements PublicKeyProvider {
      */
     @Override
     public Object fetchServerPublicKey() throws GeneralSecurityException {
+        log.info("Fetching RSA public key from server at {}", serverBaseUri.resolve(publicKeyEndpoint));
         HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
                 .build();

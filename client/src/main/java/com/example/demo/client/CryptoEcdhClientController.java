@@ -5,6 +5,7 @@ import com.example.demo.crypto.ecdh.EcdhCipherPayload;
 import com.example.demo.crypto.ecdh.EcdhCryptoClient;
 import com.example.demo.crypto.ecdh.EcdhHttpCryptoClient;
 import com.example.demo.crypto.ecdh.EcdhResponseOnlyRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -16,6 +17,7 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/crypto/client/ecdh")
+@Slf4j
 public class CryptoEcdhClientController extends AbstractCryptoClientController {
 
     private final EcdhCryptoClient ecdhCryptoClient;
@@ -39,6 +41,7 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
 
     @PostMapping("/bidirectional")
     public Map<String, Object> bidirectionalEcdhEncrypt(@RequestBody PlainData plainData) throws Exception {
+        log.info("Bidirectional Ecdh encrypt request received with data: {}", plainData.data());
         EcdhCipherPayload encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
         HttpResponse<String> response = sendJsonRequest(ecdhBidirectionalPath, encrypted);
         ensureSuccess(response, "bidirectional ECDH encrypt");
@@ -54,6 +57,7 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
 
     @PostMapping("/request-only")
     public Map<String, Object> requestOnlyEcdhEncrypt(@RequestBody PlainData plainData) throws Exception {
+        log.info("Request-only Ecdh encrypt request received with data: {}", plainData.data());
         EcdhCipherPayload encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
         Map<String, Object> responseMap = postForMap(ecdhRequestOnlyPath, encrypted, "request-only ECDH encrypt");
 
@@ -65,6 +69,7 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
 
     @PostMapping("/response-only")
     public Map<String, Object> responseOnlyEcdhEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
+        log.info("Response-only Ecdh encrypt request received with data: {}", plainData == null ? "null" : plainData.data());
         EcdhResponseOnlyRequest requestPayload = ecdhCryptoClient.createResponseOnlyRequest(
                 plainData == null ? null : plainData.data()
         );

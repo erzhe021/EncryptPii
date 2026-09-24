@@ -1,5 +1,6 @@
 package com.example.demo.server.crypto;
 
+import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.annotation.AnnotatedElementUtils;
@@ -19,6 +20,7 @@ import java.security.GeneralSecurityException;
  * The response body is encrypted using the same algorithm and session context as the request.
  */
 @ControllerAdvice
+@Slf4j
 public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
 
     private final CryptoPayloadHandlerRegistry handlerRegistry;
@@ -40,6 +42,7 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
                                   @NonNull Class<? extends HttpMessageConverter<?>> selectedConverterType,
                                   @NonNull ServerHttpRequest request,
                                   @NonNull ServerHttpResponse response) {
+        log.info("Encrypting response body for method: {} in class: {}", returnType.getMethod(), returnType.getContainingClass());
         EncryptResponse encryptResponse = findEncryptResponse(returnType);
         if (encryptResponse == null || body == null) {
             return body;

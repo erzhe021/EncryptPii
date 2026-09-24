@@ -3,6 +3,7 @@ package com.example.demo.crypto.ecdh;
 import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.PublicKeyProvider;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.Cipher;
 import javax.crypto.KeyAgreement;
@@ -20,6 +21,7 @@ import java.security.spec.X509EncodedKeySpec;
  * The class fetches the server's ephemeral public key, verifies its signature, derives a shared secret,
  * and uses it to derive an AES session key for secure communication.
  */
+@Slf4j
 public class EcdhCryptoClient {
     private final PublicKeyProvider publicKeyProvider;
     private final SecureRandom secureRandom;
@@ -42,6 +44,7 @@ public class EcdhCryptoClient {
      * @throws GeneralSecurityException If encryption fails due to cryptographic errors or signature verification failure.
      */
     public EcdhCipherPayload encrypt(String data) throws GeneralSecurityException {
+        log.info("EcdhCryptoServer encrypt data={}", data);
         EcdhPublicKeyResponse publicKeyResponse = (EcdhPublicKeyResponse) publicKeyProvider.fetchServerPublicKey();
         verifyServerEphemeralPublicKey(publicKeyResponse);
         NegotiatedKeys negotiatedKeys = negotiateKeys(publicKeyResponse.ephemeralPublicKeyBase64());
@@ -67,6 +70,7 @@ public class EcdhCryptoClient {
     }
 
     public EcdhResponseOnlyRequest createResponseOnlyRequest(String data) throws GeneralSecurityException {
+        log.info("EcdhCryptoServer createResponseOnlyRequest data={}", data);
         EcdhPublicKeyResponse publicKeyResponse = (EcdhPublicKeyResponse) publicKeyProvider.fetchServerPublicKey();
         verifyServerEphemeralPublicKey(publicKeyResponse);
         NegotiatedKeys negotiatedKeys = negotiateKeys(publicKeyResponse.ephemeralPublicKeyBase64());
@@ -85,6 +89,7 @@ public class EcdhCryptoClient {
      * @throws GeneralSecurityException If decryption fails due to cryptographic errors or missing keys.
      */
     public String decrypt(EcdhCipherPayload payload) throws GeneralSecurityException {
+        log.info("EcdhCryptoServer decrypt payload={}", payload);
         if (payload == null) {
             throw new IllegalArgumentException("payload cannot be null");
         }
@@ -123,6 +128,7 @@ public class EcdhCryptoClient {
      * @throws GeneralSecurityException If key negotiation fails due to cryptographic errors.
      */
     private NegotiatedKeys negotiateKeys(String serverEphemeralPublicKeyBase64) throws GeneralSecurityException {
+        log.info("Negotiating ECDH keys with server ephemeral public key: {}", serverEphemeralPublicKeyBase64);
         // Decode the server's ephemeral public key from Base64 and create a PublicKey object
         PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(serverEphemeralPublicKeyBase64))
@@ -170,6 +176,7 @@ public class EcdhCryptoClient {
      * @throws GeneralSecurityException If signature verification fails or required fields are missing.
      */
     private void verifyServerEphemeralPublicKey(EcdhPublicKeyResponse response) throws GeneralSecurityException {
+        log.info("verifyServerEphemeralPublicKey response={}", response);
         if (response == null) {
             throw new GeneralSecurityException("ECDH public key response is missing");
         }
@@ -202,6 +209,7 @@ public class EcdhCryptoClient {
      * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
      */
     private byte[] encryptWithAes(String data, SecretKey sessionKey, byte[] iv) throws GeneralSecurityException {
+        log.info("EcdhCryptoClient encryptWithAes data={}, sessionKey={}, iv={}", data, sessionKey, iv);
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(Cipher.ENCRYPT_MODE, sessionKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
         return aesCipher.doFinal(data.getBytes(StandardCharsets.UTF_8));
