@@ -30,9 +30,9 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
     }
 
     @PostMapping("/bidirectional")
-    public Map<String, Object> bidirectionalRsaEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
-        String data = resolveData(plainData);
-        RsaCipherPayload requestPayload = rsaCryptoClient.encrypt(toPlainDataJson(data));
+    public Map<String, Object> bidirectionalRsaEncrypt(@RequestBody PlainData plainData) throws Exception {
+        validatePlainData(plainData);
+        RsaCipherPayload requestPayload = rsaCryptoClient.encrypt(toJsonString(plainData));
         HttpResponse<String> response = sendJsonRequest("/crypto/server/rsa/bidirectional", requestPayload);
         ensureSuccess(response, "bidirectional RSA encrypt");
         RsaCipherPayload responsePayload = objectMapper.readValue(response.body(), RsaCipherPayload.class);
@@ -40,26 +40,29 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
         PlainData responsePlainData = objectMapper.readValue(decryptedServerResponse, PlainData.class);
 
         return Map.of(
-                "request", Map.of("data", data, "encrypted", requestPayload),
+                "request", Map.of("data", plainData.data(), "encrypted", requestPayload),
                 "response", Map.of("data", responsePlainData.data(), "encrypted", responsePayload)
         );
     }
 
     @PostMapping("/request-only")
-    public Map<String, Object> requestOnlyRsaEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
-        String data = resolveData(plainData);
-        RsaCipherPayload requestPayload = rsaCryptoClient.encrypt(toPlainDataJson(data));
+    public Map<String, Object> requestOnlyRsaEncrypt(@RequestBody PlainData plainData) throws Exception {
+        validatePlainData(plainData);
+        RsaCipherPayload requestPayload = rsaCryptoClient.encrypt(toJsonString(plainData));
         Map<String, Object> responseMap = postForMap("/crypto/server/rsa/request-only", requestPayload, "request-only RSA encrypt");
 
         return Map.of(
-                "request", Map.of("data", data, "encrypted", requestPayload),
+                "request", Map.of("data", plainData.data(), "encrypted", requestPayload),
                 "response", Map.of("data", responseMap.get("data"))
         );
     }
 
     @PostMapping("/response-only")
-    public Map<String, Object> responseOnlyRsaEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
-        String data = resolveData(plainData);
+    public Map<String, Object> responseOnlyRsaEncrypt(@RequestBody(required = false) PlainData plainData)
+            throws Exception {
+
+        String data = plainData == null ? null : plainData.data();
+
         SecretKey sessionKey = generateSessionKey();
         byte[] iv = generateIv();
 
@@ -77,7 +80,7 @@ public class CryptoRsaClientController extends AbstractCryptoClientController {
         PlainData responsePlainData = objectMapper.readValue(decryptedResponseData, PlainData.class);
 
         return Map.of(
-                "request", Map.of("data", data),
+                "request", Map.of("data", data == null ? "null" : data),
                 "response", Map.of("data", responsePlainData.data(), "encrypted", responsePayload)
         );
     }

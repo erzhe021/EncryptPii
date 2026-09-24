@@ -75,7 +75,7 @@ public class EcdhCryptoController {
     @PostMapping("/crypto/server/ecdh/response-only")
     @EncryptResponse(CryptoAlgorithm.ECDH)
     public PlainData responseOnlyEcdhEncrypt(@RequestBody EcdhResponseOnlyRequest request) {
-        if (request == null || request.data() == null || request.data().isBlank()) {
+        if (request == null) {
             throw new IllegalArgumentException("request body is required for response-only ECDH encryption");
         }
         if (request.clientEphemeralPublicKeyBase64() == null || request.clientEphemeralPublicKeyBase64().isBlank()) {
@@ -98,7 +98,7 @@ public class EcdhCryptoController {
                     RequestAttributes.SCOPE_REQUEST
             );
         }
-        return new PlainData("mock ecdh response for request - " + request.data());
+        return new PlainData("mock ecdh response for request - " + String.valueOf(request.data()));
     }
 
     record EcdhResponseContext(String clientEphemeralPublicKeyBase64, String serverEphemeralPublicKeyBase64) {

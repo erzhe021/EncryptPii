@@ -26,9 +26,8 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
     }
 
     @PostMapping("/bidirectional")
-    public Map<String, Object> bidirectionalEcdhEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
-        String data = resolveData(plainData);
-        EcdhCipherPayload encrypted = ecdhCryptoClient.encrypt(toPlainDataJson(data));
+    public Map<String, Object> bidirectionalEcdhEncrypt(@RequestBody PlainData plainData) throws Exception {
+        EcdhCipherPayload encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
         HttpResponse<String> response = sendJsonRequest("/crypto/server/ecdh/bidirectional", encrypted);
         ensureSuccess(response, "bidirectional ECDH encrypt");
         EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);
@@ -36,27 +35,27 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
         PlainData decryptedServerResponseData = objectMapper.readValue(decryptedServerResponse, PlainData.class);
 
         return Map.of(
-                "request", Map.of("data", data, "encrypted", encrypted),
+                "request", Map.of("data", plainData.data(), "encrypted", encrypted),
                 "response", Map.of("data", decryptedServerResponseData.data(), "encrypted", responsePayload)
         );
     }
 
     @PostMapping("/request-only")
-    public Map<String, Object> requestOnlyEcdhEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
-        String data = resolveData(plainData);
-        EcdhCipherPayload encrypted = ecdhCryptoClient.encrypt(toPlainDataJson(data));
+    public Map<String, Object> requestOnlyEcdhEncrypt(@RequestBody PlainData plainData) throws Exception {
+        EcdhCipherPayload encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
         Map<String, Object> responseMap = postForMap("/crypto/server/ecdh/request-only", encrypted, "request-only ECDH encrypt");
 
         return Map.of(
-                "request", Map.of("data", data, "encrypted", encrypted),
+                "request", Map.of("data", plainData.data(), "encrypted", encrypted),
                 "response", Map.of("data", responseMap.get("data"))
         );
     }
 
     @PostMapping("/response-only")
     public Map<String, Object> responseOnlyEcdhEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
-        String data = resolveData(plainData);
-        EcdhResponseOnlyRequest requestPayload = ecdhCryptoClient.createResponseOnlyRequest(data);
+        EcdhResponseOnlyRequest requestPayload = ecdhCryptoClient.createResponseOnlyRequest(
+                plainData == null ? null : plainData.data()
+        );
         HttpResponse<String> response = sendJsonRequest("/crypto/server/ecdh/response-only", requestPayload);
         ensureSuccess(response, "response-only ECDH encrypt");
         EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);
@@ -68,4 +67,5 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
                 "response", Map.of("data", decryptedServerResponseData.data(), "encrypted", responsePayload)
         );
     }
+
 }

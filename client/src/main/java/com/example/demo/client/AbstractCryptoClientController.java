@@ -1,11 +1,6 @@
 package com.example.demo.client;
 
-import com.example.demo.crypto.AesCipherPayload;
-import com.example.demo.crypto.SessionKeyTransport;
-import com.example.demo.crypto.CryptoConstants;
-import com.example.demo.crypto.DefaultAesCipherPayload;
-import com.example.demo.crypto.EncodingUtils;
-import com.example.demo.crypto.PlainData;
+import com.example.demo.crypto.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import javax.crypto.Cipher;
@@ -36,12 +31,15 @@ public abstract class AbstractCryptoClientController {
         this.objectMapper = new ObjectMapper();
     }
 
-    protected String resolveData(PlainData plainData) {
-        return plainData == null || plainData.data() == null ? "Hello, World!" : plainData.data();
+    protected void validatePlainData(PlainData data) {
+        if (data == null || data.data() == null || data.data().isEmpty()) {
+            throw new IllegalArgumentException("PlainData cannot be null or empty");
+        }
     }
 
-    protected String toPlainDataJson(String data) throws Exception {
-        return objectMapper.writeValueAsString(Map.of("data", data));
+    protected String toJsonString(PlainData data) throws Exception {
+        validatePlainData(data);
+        return objectMapper.writeValueAsString(data);
     }
 
     protected HttpResponse<String> sendJsonRequest(String path, Object requestBody) throws Exception {
@@ -49,10 +47,17 @@ public abstract class AbstractCryptoClientController {
     }
 
     protected HttpRequest buildJsonRequest(URI endpoint, Object requestBody) throws Exception {
-        return HttpRequest.newBuilder(endpoint)
-                .header("Content-Type", "application/json")
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
-                .build();
+        if (requestBody == null) {
+            return HttpRequest.newBuilder(endpoint)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+        } else {
+            return HttpRequest.newBuilder(endpoint)
+                    .header("Content-Type", "application/json")
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
+                    .build();
+        }
     }
 
     protected Map<String, Object> postForMap(String path, Object requestBody, String operation) throws Exception {
@@ -66,10 +71,21 @@ public abstract class AbstractCryptoClientController {
     }
 
     protected HttpRequest buildSessionKeyRequest(URI endpoint, String data, SessionKeyTransport sessionKeyTransport) throws Exception {
-        return sessionKeyTransport.apply(HttpRequest.newBuilder(endpoint)
-                        .header("Content-Type", "application/json"))
-                .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(Map.of("data", data))))
-                .build();
+        if (data != null) {
+            return sessionKeyTransport.apply(
+                            HttpRequest.newBuilder(endpoint).header("Content-Type", "application/json")
+                    )
+                    .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(new PlainData(data))))
+                    .build();
+        } else {
+            return sessionKeyTransport.apply(
+                            HttpRequest.newBuilder(endpoint).header("Content-Type", "application/json")
+                    )
+                    .POST(HttpRequest.BodyPublishers.noBody())
+                    .build();
+        }
+
+
     }
 
     protected void ensureSuccess(HttpResponse<String> response, String operation) {

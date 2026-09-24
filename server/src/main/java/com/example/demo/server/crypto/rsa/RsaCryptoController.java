@@ -43,13 +43,10 @@ public class RsaCryptoController {
     @PostMapping("/crypto/server/rsa/response-only")
     @EncryptResponse(CryptoAlgorithm.RSA)
     public SensitiveData responseOnlyRsaEncrypt(
-            @RequestBody PlainData request,
+            @RequestBody(required = false) PlainData request,
             @RequestHeader(value = CryptoConstants.HEADER_CLIENT_SESSION_KEY, required = false) String sessionKeyBase64,
             @RequestHeader(value = CryptoConstants.HEADER_CLIENT_SESSION_IV, required = false) String sessionIvBase64
     ) {
-        if (request == null || request.data() == null || request.data().isBlank()) {
-            throw new IllegalArgumentException("request body is required for response-only RSA encryption");
-        }
         if (sessionKeyBase64 == null || sessionKeyBase64.isBlank()) {
             throw new IllegalArgumentException("client session key is required for response-only RSA encryption");
         }
@@ -67,7 +64,8 @@ public class RsaCryptoController {
             );
         }
 
-        return new SensitiveData("mock rsa response for request - " + request.data());
+        return new SensitiveData("mock rsa response for request - " + (request == null || request.data() == null ? "null" : request.data()));
+
     }
 
 }
