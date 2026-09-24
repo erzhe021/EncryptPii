@@ -23,20 +23,18 @@ class EcdhCryptoClientTest {
     void decryptsServerResponseWithSameSharedSecretButNewIv() throws Exception {
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
         keyPairGenerator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
-        KeyPair identityKeyPair = keyPairGenerator.generateKeyPair();
+        KeyPair ecdsaKeyPair = keyPairGenerator.generateKeyPair();
         KeyPair serverEphemeralKeyPair = keyPairGenerator.generateKeyPair();
         byte[] serverPublicKeyBytes = serverEphemeralKeyPair.getPublic().getEncoded();
         String serverPublicKeyBase64 = EncodingUtils.toBase64(serverPublicKeyBytes);
 
         Signature signature = Signature.getInstance(CryptoConstants.SIGNATURE_ALGORITHM_SHA256_WITH_ECDSA);
-        signature.initSign(identityKeyPair.getPrivate());
+        signature.initSign(ecdsaKeyPair.getPrivate());
         signature.update(serverPublicKeyBytes);
 
         EcdhPublicKeyResponse publicKeyResponse = new EcdhPublicKeyResponse(
-                CryptoConstants.ALGORITHM_ECDH,
-                CryptoConstants.CURVE_ECDH,
                 serverPublicKeyBase64,
-                EncodingUtils.toBase64(identityKeyPair.getPublic().getEncoded()),
+                EncodingUtils.toBase64(ecdsaKeyPair.getPublic().getEncoded()),
                 CryptoConstants.SIGNATURE_ALGORITHM_SHA256_WITH_ECDSA,
                 EncodingUtils.toBase64(signature.sign())
         );

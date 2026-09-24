@@ -10,6 +10,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.security.GeneralSecurityException;
 
+/**
+ * RsaHttpCryptoClient is a client that fetches the server's RSA public key over HTTP.
+ * It implements the PublicKeyProvider interface, allowing it to be used in cryptographic operations
+ * that require the server's public key.
+ */
 public class RsaHttpCryptoClient implements PublicKeyProvider {
     private final HttpClient httpClient;
     private final URI serverBaseUri;
@@ -23,6 +28,12 @@ public class RsaHttpCryptoClient implements PublicKeyProvider {
         this.objectMapper = new ObjectMapper();
     }
 
+    /**
+     * Fetches the server's RSA public key from the specified endpoint.
+     *
+     * @return An RsaPublicKeyResponse containing the server's RSA public key.
+     * @throws GeneralSecurityException If there is an error fetching or parsing the public key.
+     */
     @Override
     public Object fetchServerPublicKey() throws GeneralSecurityException {
         HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(PUBLIC_KEY_ENDPOINT))

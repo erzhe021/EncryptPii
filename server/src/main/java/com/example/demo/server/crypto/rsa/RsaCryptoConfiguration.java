@@ -17,9 +17,4 @@ public class RsaCryptoConfiguration {
         return RsaCryptoServer.create(Path.of(keyDirectory));
     }
 
-    @Bean
-    public RsaCryptoService rsaCryptoService(RsaCryptoServer rsaCryptoServer) {
-        return new RsaCryptoService(rsaCryptoServer);
-    }
-
 }

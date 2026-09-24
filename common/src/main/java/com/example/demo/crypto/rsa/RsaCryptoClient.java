@@ -15,16 +15,35 @@ import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.spec.X509EncodedKeySpec;
 
+/**
+ * RsaCryptoClient is a client-side implementation of RSA encryption and decryption.
+ * It provides methods to encrypt and decrypt data using a hybrid RSA-AES encryption scheme.
+ * The class fetches the server's RSA public key, generates a random AES session key,
+ * encrypts the data with AES, and then encrypts the AES session key with the server's RSA public key.
+ */
 public class RsaCryptoClient {
     private final PublicKeyProvider publicKeyProvider;
     private final SecureRandom secureRandom;
     private SecretKey aesKey;
 
+    /**
+     * Constructs a new RsaCryptoClient with the given PublicKeyProvider.
+     *
+     * @param publicKeyProvider The PublicKeyProvider used to fetch the server's RSA public key.
+     */
     public RsaCryptoClient(PublicKeyProvider publicKeyProvider) {
         this.publicKeyProvider = publicKeyProvider;
         this.secureRandom = new SecureRandom();
     }
 
+    /**
+     * Encrypts the given data using a hybrid RSA-AES encryption scheme.
+     * The data is encrypted with a randomly generated AES session key, which is then encrypted with the server's RSA public key.
+     *
+     * @param data The plaintext data to encrypt.
+     * @return An RsaCipherPayload containing the encrypted AES session key, IV, and encrypted data.
+     * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
+     */
     public RsaCipherPayload encrypt(String data) throws GeneralSecurityException {
         RsaPublicKeyResponse publicKeyResponse = (RsaPublicKeyResponse) publicKeyProvider.fetchServerPublicKey();
         PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(
@@ -50,6 +69,15 @@ public class RsaCryptoClient {
         );
     }
 
+    /**
+     * Decrypts the given RsaCipherPayload using the locally stored AES session key.
+     *
+     * @param payload The RsaCipherPayload containing the encrypted data and IV.
+     * @return The decrypted plaintext string.
+     * @throws GeneralSecurityException If decryption fails due to cryptographic errors.
+     * @throws IllegalArgumentException If the payload is null.
+     * @throws IllegalStateException    If the AES session key is not available for decryption.
+     */
     public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
         if (payload == null) {
             throw new IllegalArgumentException("payload cannot be null");
@@ -68,6 +96,15 @@ public class RsaCryptoClient {
         return new String(plainBytes, StandardCharsets.UTF_8);
     }
 
+    /**
+     * Encrypts the given data using AES encryption with the provided session key and IV.
+     *
+     * @param data   The plaintext data to encrypt.
+     * @param aesKey The AES session key for encryption.
+     * @param iv     The initialization vector (IV) for AES encryption.
+     * @return The encrypted byte array of the data.
+     * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
+     */
     private byte[] encryptWithAes(String data, SecretKey aesKey, byte[] iv) throws GeneralSecurityException {
         Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
         aesCipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));

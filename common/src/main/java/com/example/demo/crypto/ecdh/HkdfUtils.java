@@ -6,10 +6,25 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.security.GeneralSecurityException;
 
+/**
+ * HkdfUtils is a utility class that provides methods for deriving keys
+ * using the HMAC-based Extract-and-Expand Key Derivation Function (HKDF).
+ * It includes a method to derive an AES key from a shared secret, salt, and info parameters.
+ */
 public final class HkdfUtils {
     private HkdfUtils() {
     }
 
+    /**
+     * Derives an AES key from the given shared secret, salt, and info parameters using HKDF.
+     *
+     * @param sharedSecret the shared secret
+     * @param salt the salt value
+     * @param info the info value
+     * @param outputLength the desired length of the derived key
+     * @return the derived AES key
+     * @throws GeneralSecurityException if a cryptographic error occurs
+     */
     public static byte[] deriveAesKey(byte[] sharedSecret, byte[] salt, byte[] info, int outputLength)
             throws GeneralSecurityException {
         Mac mac = Mac.getInstance(CryptoConstants.ALGORITHM_HMAC_SHA256);

@@ -6,6 +6,10 @@ import java.net.http.HttpRequest;
 import java.security.GeneralSecurityException;
 import java.security.PublicKey;
 
+/**
+ * ClientSessionKeyTransport is a record that encapsulates the session key and initialization vector (IV) for secure communication.
+ * It provides methods to create an instance from a generated session key and to apply the session key and IV to an HTTP request.
+ */
 public record ClientSessionKeyTransport(
         String sessionKeyBase64,
         String ivBase64) {

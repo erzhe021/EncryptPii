@@ -10,6 +10,11 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.security.GeneralSecurityException;
 
+/**
+ * EcdhHttpCryptoClient is a client that fetches the server's ECDH public key over HTTP.
+ * It implements the PublicKeyProvider interface, allowing it to be used in cryptographic operations
+ * that require the server's public key.
+ */
 public class EcdhHttpCryptoClient implements PublicKeyProvider {
     private final HttpClient httpClient;
     private final URI serverBaseUri;

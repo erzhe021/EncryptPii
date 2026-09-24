@@ -2,6 +2,9 @@ package com.example.demo.crypto;
 
 import java.util.Base64;
 
+/**
+ * EncodingUtils is a utility class that provides methods for encoding and decoding data.
+ */
 public final class EncodingUtils {
     private EncodingUtils() {
     }

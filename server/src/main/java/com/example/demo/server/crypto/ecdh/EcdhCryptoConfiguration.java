@@ -19,11 +19,6 @@ public class EcdhCryptoConfiguration {
         return EcdhCryptoServer.create(Path.of(keyDirectory));
     }
 
-    @Bean
-    public EcdhCryptoService ecdhCryptoService(EcdhCryptoServer ecdhCryptoServer) {
-        return new EcdhCryptoService(ecdhCryptoServer);
-    }
-
     public static boolean oneTimeUsedKey;
 
     @Value("${ecdh.crypto.one-time-used-key}")
