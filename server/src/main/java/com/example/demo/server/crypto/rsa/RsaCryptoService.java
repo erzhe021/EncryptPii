@@ -24,4 +24,8 @@ public class RsaCryptoService {
     public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
         return cryptoServer.decrypt(payload);
     }
+
+    public byte[] decryptSessionKey(String encryptedSessionKeyBase64) throws GeneralSecurityException {
+        return cryptoServer.decryptSessionKey(encryptedSessionKeyBase64);
+    }
 }

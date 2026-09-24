@@ -115,3 +115,9 @@ curl -X POST http://localhost:8080/crypto/client/ecdh/request-only -H "Content-T
 curl -X POST http://localhost:8080/crypto/client/rsa/response-only -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'
 
 curl -X POST http://localhost:8080/crypto/client/ecdh/response-only -H "Content-Type: application/json" -d '{"data":"Hello, World!"}'
+
+# response-only 约定：客户端生成临时 AES 会话密钥，并在 HTTPS/TLS 安全通道下通过 Header 传递给服务端
+# X-Client-Session-Key: <base64 AES key>
+# X-Client-Session-IV: <base64 GCM IV>
+# X-Client-Session-Key-Algorithm: AES
+# X-Client-Session-Key-Format: AES

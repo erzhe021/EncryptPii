@@ -64,8 +64,8 @@ public class EcdhCryptoServer {
         Files.createDirectories(keyDirectory);
         KeyFactory ecdhKeyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC);
         KeyPair identityKeyPair = loadOrCreateKeyPair(
-                keyDirectory.resolve("ecdh-identity-private-key.pkcs8"),
-                keyDirectory.resolve("ecdh-identity-public-key.x509"),
+                keyDirectory.resolve("ecdsa-private-key.pkcs8"),
+                keyDirectory.resolve("ecdsa-public-key.x509"),
                 ecdhKeyFactory,
                 CryptoConstants.CURVE_ECDH
         );

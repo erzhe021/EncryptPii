@@ -62,11 +62,18 @@ public class RsaCryptoServer {
 
     public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
         validatePayload(payload);
-        Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
-        rsaCipher.init(Cipher.DECRYPT_MODE, rsaPrivateKey);
-        byte[] aesKeyBytes = rsaCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedAesKeyBase64()));
+        byte[] aesKeyBytes = decryptSessionKey(payload.encryptedAesKeyBase64());
         SecretKey aesKey = new SecretKeySpec(aesKeyBytes, CryptoConstants.ALGORITHM_AES);
         return decryptWithAes(payload, aesKey);
+    }
+
+    public byte[] decryptSessionKey(String encryptedSessionKeyBase64) throws GeneralSecurityException {
+        if (!StringUtils.hasLength(encryptedSessionKeyBase64)) {
+            throw new IllegalArgumentException("Encrypted session key is required.");
+        }
+        Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
+        rsaCipher.init(Cipher.DECRYPT_MODE, rsaPrivateKey);
+        return rsaCipher.doFinal(EncodingUtils.fromBase64(encryptedSessionKeyBase64));
     }
 
     public RsaCipherPayload encrypt(String data) throws GeneralSecurityException {
