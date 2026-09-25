@@ -83,6 +83,7 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
         HttpResponse<String> response = sendJsonRequest(ecdhResponseOnlyPath, requestPayload);
         ensureSuccess(response, "response-only ECDH encrypt");
         EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);
+        // Decrypt the response using the session context
         String decryptedResponseData = ecdhCryptoClient.decrypt(responsePayload, responseOnlySession.context());
         PlainData decryptedServerResponseData = objectMapper.readValue(decryptedResponseData, PlainData.class);
 

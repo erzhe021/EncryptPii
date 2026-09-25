@@ -81,8 +81,8 @@ public class RsaCryptoClient {
                         UUID.randomUUID().toString(),
                         sessionKey,
                         iv,
-                        null,
-                        null
+                        null, // No client ephemeral private key for RSA
+                        null // No server ephemeral public key for RSA
                 )
         );
     }

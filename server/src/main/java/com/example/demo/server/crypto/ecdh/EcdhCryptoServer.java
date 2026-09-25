@@ -15,7 +15,6 @@ import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.*;
@@ -254,13 +253,13 @@ public class EcdhCryptoServer {
                 iv,
                 CryptoConstants.HKDF_INFO_REQUEST_AES_KEY
         );
-        byte[] encryptedData = AesGcmCryptoService.encrypt(data.getBytes(StandardCharsets.UTF_8), aesKey, iv);
+        String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, aesKey, iv);
 
         return new EcdhCipherPayload(
                 EncodingUtils.toBase64(clientEphemeralKeyPair.getPublic().getEncoded()),
                 serverPublicKeyBase64,
                 EncodingUtils.toBase64(iv),
-                EncodingUtils.toBase64(encryptedData)
+                encryptedDataBase64
         );
     }
 
@@ -293,13 +292,13 @@ public class EcdhCryptoServer {
                 iv,
                 CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY
         );
-        byte[] encryptedData = AesGcmCryptoService.encrypt(data.getBytes(StandardCharsets.UTF_8), aesKey, iv);
+        String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, aesKey, iv);
 
         return new EcdhCipherPayload(
                 clientPublicKeyBase64,
                 serverPublicKeyBase64,
                 EncodingUtils.toBase64(iv),
-                EncodingUtils.toBase64(encryptedData)
+                encryptedDataBase64
         );
     }
 

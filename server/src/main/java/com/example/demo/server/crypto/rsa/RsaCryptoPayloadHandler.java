@@ -14,11 +14,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
 /**
@@ -70,7 +67,7 @@ public class RsaCryptoPayloadHandler implements CryptoPayloadHandler {
             String responseBodyString = objectMapper.writeValueAsString(responseBody);
             if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport sessionKeyTransport) {
                 SecretKey sessionKey = new SecretKeySpec(
-                        rsaCryptoServer.decryptSessionKey(sessionKeyTransport.sessionKeyBase64()),
+                        rsaCryptoServer.decryptSessionKey(sessionKeyTransport.encryptedSessionKeyBase64()),
                         CryptoConstants.ALGORITHM_AES
                 );
                 byte[] iv = EncodingUtils.fromBase64(sessionKeyTransport.ivBase64());

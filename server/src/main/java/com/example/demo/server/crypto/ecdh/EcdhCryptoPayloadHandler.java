@@ -1,10 +1,6 @@
 package com.example.demo.server.crypto.ecdh;
 
-import com.example.demo.crypto.CryptoConstants;
-import com.example.demo.crypto.DefaultAesCipherPayload;
-import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.SessionKeyTransport;
-import com.example.demo.crypto.core.AesGcmCryptoService;
 import com.example.demo.crypto.ecdh.EcdhCipherPayload;
 import com.example.demo.crypto.ecdh.EcdhContext;
 import com.example.demo.server.crypto.CryptoAlgorithm;
@@ -15,11 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.NoSuchPaddingException;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.security.GeneralSecurityException;
-import java.security.NoSuchAlgorithmException;
 
 @Component
 @Slf4j
@@ -88,17 +80,9 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
 
         try {
             String responseBodyString = objectMapper.writeValueAsString(responseBody);
-            if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport sessionKeyTransport) {
-                SecretKey sessionKey = new SecretKeySpec(
-                        EncodingUtils.fromBase64(sessionKeyTransport.sessionKeyBase64()),
-                        CryptoConstants.ALGORITHM_AES
-                );
-                byte[] iv = EncodingUtils.fromBase64(sessionKeyTransport.ivBase64());
-
-                String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(responseBodyString, sessionKey, iv);
-                return new DefaultAesCipherPayload(
-                        sessionKeyTransport.ivBase64(),
-                        encryptedDataBase64
+            if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport) {
+                throw new IllegalArgumentException(
+                        "SessionKeyTransport is not supported for ECDH response encryption; use EcdhContext or EcdhCipherPayload instead."
                 );
             }
             if (sessionContext.requestKeyMaterial() instanceof EcdhContext ecdhContext) {
@@ -117,7 +101,7 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
                     responseBodyString,
                     ecdhContext
             );
-        } catch (JsonProcessingException | NoSuchAlgorithmException | NoSuchPaddingException e) {
+        } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Failed to serialize response body before ECDH encryption", e);
         }
     }

@@ -13,7 +13,7 @@ import java.security.PublicKey;
  * and to apply the session key and IV to an HTTP request.
  */
 public record SessionKeyTransport(
-        String sessionKeyBase64,
+        String encryptedSessionKeyBase64,
         String ivBase64) {
 
     public static SessionKeyTransport fromGeneratedKey(SecretKey sessionKey, byte[] iv, PublicKey serverPublicKey) throws GeneralSecurityException {
@@ -40,7 +40,7 @@ public record SessionKeyTransport(
 
     public HttpRequest.Builder apply(HttpRequest.Builder requestBuilder) {
         return requestBuilder
-                .header(CryptoConstants.HEADER_CLIENT_SESSION_KEY, sessionKeyBase64)
+                .header(CryptoConstants.HEADER_CLIENT_SESSION_KEY, encryptedSessionKeyBase64)
                 .header(CryptoConstants.HEADER_CLIENT_SESSION_IV, ivBase64);
     }
 }

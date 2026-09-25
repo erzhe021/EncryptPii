@@ -12,7 +12,6 @@ import org.springframework.util.StringUtils;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.*;
@@ -129,11 +128,11 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
         SecretKey sessionKey = RsaSessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, rsaPrivateKey);
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         new SecureRandom().nextBytes(iv);
-        byte[] encryptedData = AesGcmCryptoService.encrypt(data.getBytes(StandardCharsets.UTF_8), sessionKey, iv);
+        String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, sessionKey, iv);
         return new RsaCipherPayload(
                 encryptedSessionKeyBase64,
                 EncodingUtils.toBase64(iv),
-                EncodingUtils.toBase64(encryptedData)
+                encryptedDataBase64
         );
     }
 

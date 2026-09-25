@@ -62,14 +62,14 @@ public class EcdhCryptoClient {
                 CryptoConstants.HKDF_INFO_REQUEST_AES_KEY
         );
 
-        byte[] encryptedData = AesGcmCryptoService.encrypt(data.getBytes(StandardCharsets.UTF_8), sessionKey, iv);
+        String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, sessionKey, iv);
 
         return new EncryptionResult(
                 new EcdhCipherPayload(
                         negotiatedKeys.clientEphemeralPublicKeyBase64(),
                         publicKeyResponse.ephemeralPublicKeyBase64(),
                         EncodingUtils.toBase64(iv),
-                        EncodingUtils.toBase64(encryptedData)
+                        encryptedDataBase64
                 ),
                 new CryptoRequestContext(
                         CryptoConstants.ALGORITHM_ECDH,
@@ -101,16 +101,12 @@ public class EcdhCryptoClient {
                 new CryptoRequestContext(
                         CryptoConstants.ALGORITHM_ECDH,
                         UUID.randomUUID().toString(),
-                        null,
-                        null,
+                        null, // No session key is derived for response-only requests, as the server will derive its own session key for the response
+                        null, // No IV is generated for response-only requests, as the server will generate its own IV for the response
                         negotiatedKeys.clientEphemeralPrivateKey(),
                         negotiatedKeys.serverEphemeralPublicKey()
                 )
         );
-    }
-
-    public EcdhResponseOnlyRequest createResponseOnlyRequest(String data) throws GeneralSecurityException {
-        return createResponseOnlySession(data).request();
     }
 
     /**
@@ -128,7 +124,10 @@ public class EcdhCryptoClient {
         if (context == null || context.clientEphemeralPrivateKey() == null || context.serverEphemeralPublicKey() == null) {
             throw new IllegalStateException("No ECDH key agreement state available for response decryption");
         }
-        byte[] sharedSecret = EcdhKeyAgreementService.deriveSharedSecret(context.clientEphemeralPrivateKey(), context.serverEphemeralPublicKey());
+        // Derive the shared secret using the client's ephemeral private key and the server's ephemeral public key
+        byte[] sharedSecret = EcdhKeyAgreementService.deriveSharedSecret(
+                context.clientEphemeralPrivateKey(),
+                context.serverEphemeralPublicKey());
         byte[] iv = EncodingUtils.fromBase64(payload.ivBase64());
         SecretKey responseKey = EcdhKeyAgreementService.deriveAesKey(
                 sharedSecret,
@@ -229,20 +228,6 @@ public class EcdhCryptoClient {
         if (!verified) {
             throw new GeneralSecurityException("Server ECDH ephemeral public key signature verification failed");
         }
-    }
-
-    /**
-     * Encrypts the given data using AES-GCM encryption with the provided AES key and initialization vector (IV).
-     *
-     * @param data   The plaintext data to encrypt.
-     * @param sessionKey The AES session key for encryption.
-     * @param iv     The initialization vector (IV) for AES-GCM.
-     * @return The encrypted data as a byte array.
-     * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
-     */
-    private byte[] encryptWithAes(String data, SecretKey sessionKey, byte[] iv) throws GeneralSecurityException {
-        log.info("EcdhCryptoClient encryptWithAes data={}, sessionKey={}, iv={}", data, sessionKey, iv);
-        return AesGcmCryptoService.encrypt(data.getBytes(StandardCharsets.UTF_8), sessionKey, iv);
     }
 
 }
