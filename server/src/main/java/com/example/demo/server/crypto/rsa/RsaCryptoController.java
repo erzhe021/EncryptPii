@@ -7,11 +7,10 @@ import com.example.demo.crypto.SessionKeyTransport;
 import com.example.demo.crypto.rsa.RsaPublicKeyResponse;
 import com.example.demo.server.crypto.CryptoAlgorithm;
 import com.example.demo.server.crypto.CryptoSessionContext;
+import com.example.demo.server.crypto.CryptoSessionContextAccessor;
 import com.example.demo.server.crypto.DecryptRequest;
 import com.example.demo.server.crypto.EncryptResponse;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.context.request.RequestAttributes;
-import org.springframework.web.context.request.RequestContextHolder;
 
 @RestController
 public class RsaCryptoController {
@@ -55,14 +54,7 @@ public class RsaCryptoController {
         }
 
         SessionKeyTransport sessionTransport = new SessionKeyTransport(sessionKeyBase64, sessionIvBase64);
-        var requestAttributes = RequestContextHolder.getRequestAttributes();
-        if (requestAttributes != null) {
-            requestAttributes.setAttribute(
-                    CryptoSessionContext.REQUEST_CONTEXT_KEY,
-                    CryptoSessionContext.rsaResponseOnly(sessionTransport),
-                    RequestAttributes.SCOPE_REQUEST
-            );
-        }
+        CryptoSessionContextAccessor.setCryptoSessionContext(CryptoSessionContext.rsaResponseOnly(sessionTransport));
 
         return new SensitiveData("mock rsa response for request - " + (request == null || request.data() == null ? "null" : request.data()));
 

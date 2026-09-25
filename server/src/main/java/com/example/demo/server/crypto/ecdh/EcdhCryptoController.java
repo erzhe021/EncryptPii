@@ -7,14 +7,13 @@ import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
 import com.example.demo.crypto.ecdh.EcdhResponseOnlyRequest;
 import com.example.demo.server.crypto.CryptoAlgorithm;
 import com.example.demo.server.crypto.CryptoSessionContext;
+import com.example.demo.server.crypto.CryptoSessionContextAccessor;
 import com.example.demo.server.crypto.DecryptRequest;
 import com.example.demo.server.crypto.EncryptResponse;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.context.request.RequestAttributes;
-import org.springframework.web.context.request.RequestContextHolder;
 
 import java.security.GeneralSecurityException;
 
@@ -85,19 +84,14 @@ public class EcdhCryptoController {
         if (request.serverEphemeralPublicKeyBase64() == null || request.serverEphemeralPublicKeyBase64().isBlank()) {
             throw new IllegalArgumentException("server ephemeral public key is required for response-only ECDH encryption");
         }
-        var requestAttributes = RequestContextHolder.getRequestAttributes();
-        if (requestAttributes != null) {
-            requestAttributes.setAttribute(
-                    CryptoSessionContext.REQUEST_CONTEXT_KEY,
-                    CryptoSessionContext.ecdhResponseOnly(
-                            new EcdhContext(
-                                    request.clientEphemeralPublicKeyBase64(),
-                                    request.serverEphemeralPublicKeyBase64()
-                            )
-                    ),
-                    RequestAttributes.SCOPE_REQUEST
-            );
-        }
+        CryptoSessionContextAccessor.setCryptoSessionContext(
+                CryptoSessionContext.ecdhResponseOnly(
+                        new EcdhContext(
+                                request.clientEphemeralPublicKeyBase64(),
+                                request.serverEphemeralPublicKeyBase64()
+                        )
+                )
+        );
         return new PlainData("mock ecdh response for request - " + request.data());
     }
 

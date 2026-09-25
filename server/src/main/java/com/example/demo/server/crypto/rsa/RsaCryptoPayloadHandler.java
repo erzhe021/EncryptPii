@@ -9,6 +9,8 @@ import com.example.demo.crypto.rsa.RsaCipherPayload;
 import com.example.demo.server.crypto.CryptoAlgorithm;
 import com.example.demo.server.crypto.CryptoPayloadHandler;
 import com.example.demo.server.crypto.CryptoSessionContext;
+import com.example.demo.server.crypto.InvalidCryptoPayloadException;
+import com.example.demo.server.crypto.ResponseEncryptionException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -45,7 +47,7 @@ public class RsaCryptoPayloadHandler implements CryptoPayloadHandler {
             RsaCipherPayload payload = objectMapper.readValue(encryptedRequestBody, RsaCipherPayload.class);
             return rsaCryptoServer.decrypt(payload);
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Invalid RSA encrypted request payload", e);
+            throw new InvalidCryptoPayloadException("Invalid RSA encrypted request payload", e);
         }
     }
 
@@ -56,7 +58,7 @@ public class RsaCryptoPayloadHandler implements CryptoPayloadHandler {
             RsaCipherPayload payload = objectMapper.readValue(encryptedRequestBody, RsaCipherPayload.class);
             return CryptoSessionContext.rsa(payload);
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Invalid RSA encrypted request payload", e);
+            throw new InvalidCryptoPayloadException("Invalid RSA encrypted request payload", e);
         }
     }
 
@@ -72,9 +74,9 @@ public class RsaCryptoPayloadHandler implements CryptoPayloadHandler {
                 rsaCryptoServer.validatePayload(requestPayload);
                 return rsaCryptoServer.encryptWithRequestSessionKey(responseBodyString, requestPayload.encryptedSessionKeyBase64());
             }
-            throw new IllegalArgumentException("Unsupported RSA session key material: " + sessionContext.requestKeyMaterial());
+            throw new InvalidCryptoPayloadException("Unsupported RSA session key material: " + sessionContext.requestKeyMaterial());
         } catch (JsonProcessingException | GeneralSecurityException e) {
-            throw new IllegalArgumentException("Failed to serialize response body before RSA encryption", e);
+            throw new ResponseEncryptionException("Failed to serialize response body before RSA encryption", e);
         }
     }
 

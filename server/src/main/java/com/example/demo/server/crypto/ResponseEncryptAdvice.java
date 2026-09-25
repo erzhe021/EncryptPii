@@ -9,8 +9,6 @@ import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
 import org.springframework.web.bind.annotation.ControllerAdvice;
-import org.springframework.web.context.request.RequestAttributes;
-import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 import java.security.GeneralSecurityException;
@@ -48,23 +46,14 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
             return body;
         }
         try {
-            CryptoSessionContext sessionContext = getSessionContext();
+            CryptoSessionContext<?> sessionContext = CryptoSessionContextAccessor.getCryptoSessionContext();
             if (sessionContext == null) {
-                throw new IllegalStateException("No request session context available for response encryption");
+                throw new CryptoException("No request session context available for response encryption");
             }
             return handlerRegistry.getRequiredHandler(encryptResponse.value()).encrypt(body, sessionContext);
         } catch (GeneralSecurityException e) {
             throw new ResponseEncryptionException("Failed to encrypt response body", e);
         }
-    }
-
-    private CryptoSessionContext getSessionContext() {
-        RequestAttributes attrs = RequestContextHolder.getRequestAttributes();
-        if (attrs == null) {
-            return null;
-        }
-        return (CryptoSessionContext) attrs.getAttribute(
-                CryptoSessionContext.REQUEST_CONTEXT_KEY, RequestAttributes.SCOPE_REQUEST);
     }
 
     private EncryptResponse findEncryptResponse(MethodParameter returnType) {

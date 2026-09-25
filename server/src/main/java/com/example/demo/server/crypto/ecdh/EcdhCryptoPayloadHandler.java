@@ -6,6 +6,8 @@ import com.example.demo.crypto.ecdh.EcdhContext;
 import com.example.demo.server.crypto.CryptoAlgorithm;
 import com.example.demo.server.crypto.CryptoPayloadHandler;
 import com.example.demo.server.crypto.CryptoSessionContext;
+import com.example.demo.server.crypto.InvalidCryptoPayloadException;
+import com.example.demo.server.crypto.ResponseEncryptionException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
@@ -43,7 +45,7 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
             EcdhCipherPayload payload = objectMapper.readValue(encryptedRequestBody, EcdhCipherPayload.class);
             return ecdhCryptoServer.decrypt(payload);
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Invalid ECDH encrypted request payload", e);
+            throw new InvalidCryptoPayloadException("Invalid ECDH encrypted request payload", e);
         }
     }
 
@@ -60,7 +62,7 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
             EcdhCipherPayload payload = objectMapper.readValue(encryptedRequestBody, EcdhCipherPayload.class);
             return CryptoSessionContext.ecdh(payload);
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Invalid ECDH encrypted request payload", e);
+            throw new InvalidCryptoPayloadException("Invalid ECDH encrypted request payload", e);
         }
     }
 
@@ -81,7 +83,7 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
         try {
             String responseBodyString = objectMapper.writeValueAsString(responseBody);
             if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport) {
-                throw new IllegalArgumentException(
+                throw new InvalidCryptoPayloadException(
                         "SessionKeyTransport is not supported for ECDH response encryption; use EcdhContext or EcdhCipherPayload instead."
                 );
             }
@@ -95,9 +97,9 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
                 );
                 return ecdhCryptoServer.encryptWithEcdhContext(responseBodyString, ecdhContext);
             }
-            throw new IllegalArgumentException("Unsupported ECDH session key material: " + sessionContext.requestKeyMaterial());
+            throw new InvalidCryptoPayloadException("Unsupported ECDH session key material: " + sessionContext.requestKeyMaterial());
         } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("Failed to serialize response body before ECDH encryption", e);
+            throw new ResponseEncryptionException("Failed to serialize response body before ECDH encryption", e);
         }
     }
 }

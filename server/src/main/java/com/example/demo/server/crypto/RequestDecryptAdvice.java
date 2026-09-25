@@ -8,8 +8,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.web.bind.annotation.ControllerAdvice;
-import org.springframework.web.context.request.RequestAttributes;
-import org.springframework.web.context.request.RequestContextHolder;
 import org.springframework.web.servlet.mvc.method.annotation.RequestBodyAdvice;
 
 import java.io.ByteArrayInputStream;
@@ -55,12 +53,11 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
         String decryptedBody;
         try {
             CryptoPayloadHandler handler = handlerRegistry.getRequiredHandler(decryptRequest.value());
-            CryptoSessionContext sessionContext = handler.createSessionContext(encryptedBody);
-            RequestContextHolder.currentRequestAttributes()
-                    .setAttribute(CryptoSessionContext.REQUEST_CONTEXT_KEY, sessionContext, RequestAttributes.SCOPE_REQUEST);
+            CryptoSessionContext<?> sessionContext = handler.createSessionContext(encryptedBody);
+            CryptoSessionContextAccessor.setCryptoSessionContext(sessionContext);
             decryptedBody = handler.decrypt(encryptedBody);
         } catch (GeneralSecurityException e) {
-            throw new IllegalArgumentException("Failed to decrypt request body", e);
+            throw new InvalidCryptoPayloadException("Failed to decrypt request body", e);
         }
 
         return new HttpInputMessage() {
