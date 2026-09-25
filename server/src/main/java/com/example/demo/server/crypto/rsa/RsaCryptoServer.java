@@ -6,17 +6,15 @@ import com.example.demo.crypto.core.AesGcmCryptoService;
 import com.example.demo.crypto.core.RsaSessionKeyService;
 import com.example.demo.crypto.rsa.RsaCipherPayload;
 import com.example.demo.crypto.rsa.RsaPublicKeyResponse;
+import com.example.demo.server.crypto.AbstractCryptoKeyService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.*;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
 
 /**
  * RsaCryptoServer is responsible for handling RSA encryption and decryption operations.
@@ -47,42 +45,15 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      */
     public static RsaCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
         log.info("Creating RsaCryptoServer from keyDirectory={}", keyDirectory);
-        Files.createDirectories(keyDirectory);
+        AbstractCryptoKeyService.ensureKeyDirectory(keyDirectory);
         KeyFactory rsaKeyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA);
-        KeyPair rsaKeyPair = loadOrCreateKeyPair(
+        KeyPair rsaKeyPair = AbstractCryptoKeyService.loadOrCreateKeyPair(
                 keyDirectory.resolve("rsa-private-key.pkcs8"),
                 keyDirectory.resolve("rsa-public-key.x509"),
                 rsaKeyFactory,
-                2048
+                generator -> generator.initialize(2048)
         );
         return new RsaCryptoServer(rsaKeyPair.getPrivate(), rsaKeyPair.getPublic());
-    }
-
-    /**
-     * Loads an existing RSA key pair from the specified file paths or generates a new one if the files do not exist.
-     *
-     * @param privateKeyPath the path to the private key file
-     * @param publicKeyPath  the path to the public key file
-     * @param keyFactory     the KeyFactory instance for RSA
-     * @param keySize        the size of the RSA key to generate if files do not exist
-     * @return a KeyPair containing the loaded or generated RSA keys
-     * @throws GeneralSecurityException if a security exception occurs during key generation or loading
-     * @throws IOException              if an I/O error occurs while accessing the key files
-     */
-    private static KeyPair loadOrCreateKeyPair(Path privateKeyPath, Path publicKeyPath, KeyFactory keyFactory, int keySize)
-            throws GeneralSecurityException, IOException {
-        if (Files.exists(privateKeyPath) && Files.exists(publicKeyPath)) {
-            PrivateKey privateKey = keyFactory.generatePrivate(new PKCS8EncodedKeySpec(Files.readAllBytes(privateKeyPath)));
-            PublicKey publicKey = keyFactory.generatePublic(new X509EncodedKeySpec(Files.readAllBytes(publicKeyPath)));
-            return new KeyPair(publicKey, privateKey);
-        }
-
-        KeyPairGenerator generator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
-        generator.initialize(keySize);
-        KeyPair keyPair = generator.generateKeyPair();
-        Files.write(privateKeyPath, keyPair.getPrivate().getEncoded());
-        Files.write(publicKeyPath, keyPair.getPublic().getEncoded());
-        return keyPair;
     }
 
     /**

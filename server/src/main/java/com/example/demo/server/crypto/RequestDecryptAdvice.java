@@ -3,7 +3,6 @@ package com.example.demo.server.crypto;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.springframework.core.MethodParameter;
-import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpInputMessage;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -105,10 +104,6 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
      * @return the DecryptRequest annotation, or null if not found
      */
     private DecryptRequest findDecryptRequest(MethodParameter methodParameter) {
-        DecryptRequest annotation = methodParameter.getMethodAnnotation(DecryptRequest.class);
-        if (annotation != null) {
-            return annotation;
-        }
-        return AnnotatedElementUtils.findMergedAnnotation(methodParameter.getContainingClass(), DecryptRequest.class);
+        return CryptoAdviceSupport.findAnnotation(methodParameter, DecryptRequest.class);
     }
 }

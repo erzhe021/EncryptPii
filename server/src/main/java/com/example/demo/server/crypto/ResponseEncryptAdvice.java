@@ -3,7 +3,6 @@ package com.example.demo.server.crypto;
 import lombok.extern.slf4j.Slf4j;
 import org.checkerframework.checker.nullness.qual.NonNull;
 import org.springframework.core.MethodParameter;
-import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.server.ServerHttpRequest;
@@ -57,10 +56,6 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
     }
 
     private EncryptResponse findEncryptResponse(MethodParameter returnType) {
-        EncryptResponse annotation = returnType.getMethodAnnotation(EncryptResponse.class);
-        if (annotation != null) {
-            return annotation;
-        }
-        return AnnotatedElementUtils.findMergedAnnotation(returnType.getContainingClass(), EncryptResponse.class);
+        return CryptoAdviceSupport.findAnnotation(returnType, EncryptResponse.class);
     }
 }

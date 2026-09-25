@@ -7,6 +7,7 @@ import com.example.demo.crypto.ecdh.EcdhCipherPayload;
 import com.example.demo.crypto.ecdh.EcdhContext;
 import com.example.demo.crypto.ecdh.EcdhKeyAgreementService;
 import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
+import com.example.demo.server.crypto.AbstractCryptoKeyService;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.Getter;
@@ -15,11 +16,9 @@ import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.*;
 import java.security.spec.ECGenParameterSpec;
-import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.time.Duration;
 
@@ -82,40 +81,15 @@ public class EcdhCryptoServer {
      */
     public static EcdhCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
         log.info("Creating EcdhCryptoServer from keyDirectory={}", keyDirectory);
-        Files.createDirectories(keyDirectory);
+        AbstractCryptoKeyService.ensureKeyDirectory(keyDirectory);
         KeyFactory ecdhKeyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC);
-        KeyPair ecdsaKeyPair = loadOrCreateKeyPair(
+        KeyPair ecdsaKeyPair = AbstractCryptoKeyService.loadOrCreateKeyPair(
                 keyDirectory.resolve("ecdsa-private-key.pkcs8"),
                 keyDirectory.resolve("ecdsa-public-key.x509"),
-                ecdhKeyFactory
+                ecdhKeyFactory,
+                generator -> generator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH))
         );
         return new EcdhCryptoServer(ecdsaKeyPair.getPrivate(), ecdsaKeyPair.getPublic());
-    }
-
-    /**
-     * Loads an existing ECDSA key pair from the specified files or generates a new one if the files do not exist.
-     *
-     * @param privateKeyPath The path to the private key file.
-     * @param publicKeyPath  The path to the public key file.
-     * @param keyFactory     The KeyFactory instance for generating keys.
-     * @return A KeyPair containing the loaded or generated keys.
-     * @throws GeneralSecurityException If there is a security exception during key generation or loading.
-     * @throws IOException              If there is an I/O error while accessing the key files.
-     */
-    private static KeyPair loadOrCreateKeyPair(Path privateKeyPath, Path publicKeyPath, KeyFactory keyFactory)
-            throws GeneralSecurityException, IOException {
-        if (Files.exists(privateKeyPath) && Files.exists(publicKeyPath)) {
-            PrivateKey privateKey = keyFactory.generatePrivate(new PKCS8EncodedKeySpec(Files.readAllBytes(privateKeyPath)));
-            PublicKey publicKey = keyFactory.generatePublic(new X509EncodedKeySpec(Files.readAllBytes(publicKeyPath)));
-            return new KeyPair(publicKey, privateKey);
-        }
-
-        KeyPairGenerator generator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
-        generator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
-        KeyPair keyPair = generator.generateKeyPair();
-        Files.write(privateKeyPath, keyPair.getPrivate().getEncoded());
-        Files.write(publicKeyPath, keyPair.getPublic().getEncoded());
-        return keyPair;
     }
 
     /**
