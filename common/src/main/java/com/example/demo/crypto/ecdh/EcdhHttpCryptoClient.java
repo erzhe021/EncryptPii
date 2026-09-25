@@ -23,36 +23,33 @@ public class EcdhHttpCryptoClient implements PublicKeyProvider {
     private final ObjectMapper objectMapper;
     private final String publicKeyEndpoint;
 
-    public EcdhHttpCryptoClient(URI serverBaseUri) {
-        this(serverBaseUri, "/crypto/server/ecdh/public-key");
-    }
-
     public EcdhHttpCryptoClient(URI serverBaseUri, String publicKeyEndpoint) {
         this.httpClient = HttpClient.newHttpClient();
         this.serverBaseUri = serverBaseUri;
         this.objectMapper = new ObjectMapper();
-        this.publicKeyEndpoint = publicKeyEndpoint == null || publicKeyEndpoint.isBlank()
-                ? "/crypto/server/ecdh/public-key"
-                : publicKeyEndpoint;
+        this.publicKeyEndpoint = publicKeyEndpoint;
     }
 
     @Override
     public Object fetchServerPublicKey() throws GeneralSecurityException {
-        log.info("Fetching ECDSA public key from server at {}", serverBaseUri.resolve(publicKeyEndpoint));
+        log.info("start to fetching ECDH ephemeral public key and ECDSA public key from server");
         HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
                 .build();
         try {
+            log.info("start to call server endpoint to fetch ECDH ephemeral public key and ECDSA public key");
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
-                throw new GeneralSecurityException("Failed to fetch ECDSA public key, status=" + response.statusCode());
+                throw new GeneralSecurityException(
+                        "Failed to fetch ECDH ephemeral public key and ECDSA public key, status="
+                                + response.statusCode());
             }
             return objectMapper.readValue(response.body(), EcdhPublicKeyResponse.class);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
-            throw new GeneralSecurityException("Failed to fetch ECDSA public key", e);
+            throw new GeneralSecurityException("Failed to fetch ECDH ephemeral public key and ECDSA public key", e);
         }
     }
 

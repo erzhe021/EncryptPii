@@ -2,7 +2,7 @@ package com.example.demo.server.crypto;
 
 import com.example.demo.crypto.SessionKeyTransport;
 import com.example.demo.crypto.ecdh.EcdhCipherPayload;
-import com.example.demo.crypto.ecdh.EcdhContext;
+import com.example.demo.crypto.ecdh.EcdhHandshakeContext;
 import com.example.demo.crypto.rsa.RsaCipherPayload;
 
 /**
@@ -13,8 +13,8 @@ import com.example.demo.crypto.rsa.RsaCipherPayload;
  * @param requestKeyMaterial The key material associated with the request, typed per algorithm.
  * @param <T>                The concrete key material type for the current algorithm.
  */
-public record CryptoSessionContext<T>(CryptoAlgorithm algorithm,
-                                    T requestKeyMaterial) {
+public record CryptoSessionContext<T>(CryptoAlgorithm algorithm, T requestKeyMaterial) {
+
     public static final String REQUEST_CONTEXT_KEY = "crypto.session.context";
 
     public static CryptoSessionContext<RsaCipherPayload> rsa(RsaCipherPayload payload) {
@@ -29,7 +29,7 @@ public record CryptoSessionContext<T>(CryptoAlgorithm algorithm,
         return new CryptoSessionContext<>(CryptoAlgorithm.ECDH, payload);
     }
 
-    public static CryptoSessionContext<EcdhContext> ecdhResponseOnly(EcdhContext context) {
+    public static CryptoSessionContext<EcdhHandshakeContext> ecdhResponseOnly(EcdhHandshakeContext context) {
         return new CryptoSessionContext<>(CryptoAlgorithm.ECDH, context);
     }
 

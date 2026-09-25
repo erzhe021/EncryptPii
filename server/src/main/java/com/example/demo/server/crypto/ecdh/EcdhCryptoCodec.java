@@ -2,7 +2,7 @@ package com.example.demo.server.crypto.ecdh;
 
 import com.example.demo.crypto.SessionKeyTransport;
 import com.example.demo.crypto.ecdh.EcdhCipherPayload;
-import com.example.demo.crypto.ecdh.EcdhContext;
+import com.example.demo.crypto.ecdh.EcdhHandshakeContext;
 import com.example.demo.server.crypto.AbstractCryptoCodec;
 import com.example.demo.server.crypto.CryptoAlgorithm;
 import com.example.demo.server.crypto.CryptoSessionContext;
@@ -36,18 +36,18 @@ public class EcdhCryptoCodec extends AbstractCryptoCodec {
     protected Object doEncrypt(String responseBodyString, CryptoSessionContext<?> sessionContext) throws GeneralSecurityException {
         if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport) {
             throw new InvalidCryptoPayloadException(
-                    "SessionKeyTransport is not supported for ECDH response encryption; use EcdhContext or EcdhCipherPayload instead."
+                    "SessionKeyTransport is not supported for ECDH response encryption; use EcdhHandshakeContext or EcdhCipherPayload instead."
             );
         }
-        if (sessionContext.requestKeyMaterial() instanceof EcdhContext ecdhContext) {
-            return ecdhCryptoServer.encryptWithEcdhContext(responseBodyString, ecdhContext);
+        if (sessionContext.requestKeyMaterial() instanceof EcdhHandshakeContext ecdhHandshakeContext) {
+            return ecdhCryptoServer.encryptWithEcdhHandshakeContext(responseBodyString, ecdhHandshakeContext);
         }
         if (sessionContext.requestKeyMaterial() instanceof EcdhCipherPayload requestPayload) {
-            EcdhContext ecdhContext = new EcdhContext(
+            EcdhHandshakeContext ecdhHandshakeContext = new EcdhHandshakeContext(
                     requestPayload.clientEphemeralPublicKeyBase64(),
                     requestPayload.serverEphemeralPublicKeyBase64()
             );
-            return ecdhCryptoServer.encryptWithEcdhContext(responseBodyString, ecdhContext);
+            return ecdhCryptoServer.encryptWithEcdhHandshakeContext(responseBodyString, ecdhHandshakeContext);
         }
         throw new InvalidCryptoPayloadException("Unsupported ECDH session key material: " + sessionContext.requestKeyMaterial());
     }

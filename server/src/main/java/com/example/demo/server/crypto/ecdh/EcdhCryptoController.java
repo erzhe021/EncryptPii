@@ -2,7 +2,6 @@ package com.example.demo.server.crypto.ecdh;
 
 import com.example.demo.crypto.PlainData;
 import com.example.demo.crypto.SensitiveData;
-import com.example.demo.crypto.ecdh.EcdhContext;
 import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
 import com.example.demo.crypto.ecdh.EcdhResponseOnlyRequest;
 import com.example.demo.server.crypto.CryptoAlgorithm;
@@ -85,12 +84,7 @@ public class EcdhCryptoController {
             throw new IllegalArgumentException("server ephemeral public key is required for response-only ECDH encryption");
         }
         CryptoSessionContextAccessor.setCryptoSessionContext(
-                CryptoSessionContext.ecdhResponseOnly(
-                        new EcdhContext(
-                                request.clientEphemeralPublicKeyBase64(),
-                                request.serverEphemeralPublicKeyBase64()
-                        )
-                )
+                CryptoSessionContext.ecdhResponseOnly(request.toHandshakeContext())
         );
         return new PlainData("mock ecdh response for request - " + request.data());
     }

@@ -5,7 +5,6 @@ import com.example.demo.crypto.ecdh.EcdhCipherPayload;
 import com.example.demo.crypto.ecdh.EcdhCryptoClient;
 import com.example.demo.crypto.ecdh.EcdhHttpCryptoClient;
 import com.example.demo.crypto.ecdh.EcdhResponseOnlyRequest;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -17,15 +16,14 @@ import java.util.Map;
 
 @RestController
 @RequestMapping("/crypto/client/ecdh")
-@Slf4j
-public class CryptoEcdhClientController extends AbstractCryptoClientController {
+public class CryptoClientEcdhController extends AbstractCryptoClientController {
 
     private final EcdhCryptoClient ecdhCryptoClient;
     private final String ecdhBidirectionalPath;
     private final String ecdhRequestOnlyPath;
     private final String ecdhResponseOnlyPath;
 
-    public CryptoEcdhClientController(
+    public CryptoClientEcdhController(
             @Value("${crypto.server.base-url:http://localhost:9090}") String serverBaseUrl,
             @Value("${crypto.server.endpoints.ecdh.public-key:/crypto/server/ecdh/public-key}") String ecdhPublicKeyPath,
             @Value("${crypto.server.endpoints.ecdh.bidirectional:/crypto/server/ecdh/bidirectional}") String ecdhBidirectionalPath,
@@ -41,7 +39,6 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
 
     @PostMapping("/bidirectional")
     public Map<String, Object> bidirectionalEcdhEncrypt(@RequestBody PlainData plainData) throws Exception {
-        log.info("Bidirectional Ecdh encrypt request received with data: {}", plainData.data());
         EcdhCryptoClient.EncryptionResult encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
         EcdhCipherPayload requestPayload = encrypted.payload();
         HttpResponse<String> response = sendJsonRequest(ecdhBidirectionalPath, requestPayload);
@@ -58,7 +55,6 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
 
     @PostMapping("/request-only")
     public Map<String, Object> requestOnlyEcdhEncrypt(@RequestBody PlainData plainData) throws Exception {
-        log.info("Request-only Ecdh encrypt request received with data: {}", plainData.data());
         EcdhCryptoClient.EncryptionResult encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
         EcdhCipherPayload requestPayload = encrypted.payload();
 
@@ -75,7 +71,6 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
 
     @PostMapping("/response-only")
     public Map<String, Object> responseOnlyEcdhEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
-        log.info("Response-only Ecdh encrypt request received with data: {}", plainData == null ? "null" : plainData.data());
         EcdhCryptoClient.ResponseOnlySession responseOnlySession = ecdhCryptoClient.createResponseOnlySession(
                 plainData == null ? null : plainData.data()
         );

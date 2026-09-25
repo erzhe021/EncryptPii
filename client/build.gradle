@@ -13,5 +13,5 @@ dependencies {
 }
 
 application {
-    mainClass = 'com.example.demo.client.ClientApplication'
+    mainClass = 'com.example.demo.client.CryptoClientApplication'
 }

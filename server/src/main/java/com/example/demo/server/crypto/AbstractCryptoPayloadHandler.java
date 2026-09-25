@@ -16,20 +16,17 @@ public abstract class AbstractCryptoPayloadHandler implements CryptoPayloadHandl
 
     @Override
     public final String decrypt(String encryptedRequestBody) throws GeneralSecurityException {
-        log.info("decrypt encryptedRequestBody={}", encryptedRequestBody);
         CryptoSessionContext<?> sessionContext = envelopeParser.parse(encryptedRequestBody);
         return codec.decrypt(encryptedRequestBody, sessionContext);
     }
 
     @Override
     public final CryptoSessionContext<?> createSessionContext(String encryptedRequestBody) {
-        log.info("createSessionContext encryptedRequestBody={}", encryptedRequestBody);
         return envelopeParser.parse(encryptedRequestBody);
     }
 
     @Override
     public final Object encrypt(Object responseBody, CryptoSessionContext<?> sessionContext) throws GeneralSecurityException {
-        log.info("encrypt responseBody={} with sessionContext={}", responseBody, sessionContext);
         return codec.encrypt(responseBody, sessionContext);
     }
 }

@@ -6,6 +6,7 @@ import com.example.demo.crypto.PlainData;
 import com.example.demo.crypto.SessionKeyTransport;
 import com.example.demo.crypto.core.AesGcmCryptoService;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -19,6 +20,7 @@ import java.security.SecureRandom;
  * AbstractCryptoClientController provides common functionality for crypto client controllers.
  * It handles HTTP requests, JSON serialization/deserialization, and cryptographic operations.
  */
+@Slf4j
 public abstract class AbstractCryptoClientController {
 
     protected final URI serverBaseUri;
@@ -43,10 +45,12 @@ public abstract class AbstractCryptoClientController {
     }
 
     protected HttpResponse<String> sendJsonRequest(String path, Object requestBody) throws Exception {
+        log.info("start to call server endpoint to send json request");
         return httpClient.send(buildJsonRequest(serverBaseUri.resolve(path), requestBody), HttpResponse.BodyHandlers.ofString());
     }
 
     protected HttpResponse<String> sendJsonRequestWithSessionKeyTransport(String data, String path, SessionKeyTransport sessionTransport) throws Exception {
+        log.info("start to call server endpoint to send json request with SessionKeyTransport");
         return httpClient.send(
                 buildSessionKeyRequest(serverBaseUri.resolve(path), data, sessionTransport),
                 HttpResponse.BodyHandlers.ofString()
@@ -90,12 +94,14 @@ public abstract class AbstractCryptoClientController {
     }
 
     protected SecretKey generateSessionKey() throws Exception {
+        log.info("start to generate AES session key");
         KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
         return keyGenerator.generateKey();
     }
 
     protected byte[] generateIv() {
+        log.info("start to generate IV");
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         new SecureRandom().nextBytes(iv);
         return iv;

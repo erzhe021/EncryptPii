@@ -38,11 +38,12 @@ public class RsaHttpCryptoClient implements PublicKeyProvider {
      */
     @Override
     public Object fetchServerPublicKey() throws GeneralSecurityException {
-        log.info("Fetching RSA public key from server at {}", serverBaseUri.resolve(publicKeyEndpoint));
+        log.info("start to fetching RSA public key from server");
         HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
                 .build();
         try {
+            log.info("start to call server endpoint to fetch RSA public key");
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
                 throw new GeneralSecurityException("Failed to fetch RSA public key, status=" + response.statusCode());

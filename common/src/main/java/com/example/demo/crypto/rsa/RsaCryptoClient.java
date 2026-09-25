@@ -6,6 +6,7 @@ import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.PublicKeyProvider;
 import com.example.demo.crypto.core.AesGcmCryptoService;
 import com.example.demo.crypto.core.RsaSessionKeyService;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -22,6 +23,7 @@ import java.util.UUID;
  * The class fetches the server's RSA public key, generates a random AES session key,
  * encrypts the data with AES, and then encrypts the AES session key with the server's RSA public key.
  */
+@Slf4j
 public class RsaCryptoClient {
     private final PublicKeyProvider publicKeyProvider;
     private final SecureRandom secureRandom;
@@ -41,7 +43,8 @@ public class RsaCryptoClient {
 
     /**
      * Encrypts the given data using a hybrid RSA-AES encryption scheme.
-     * The data is encrypted with a randomly generated AES session key, which is then encrypted with the server's RSA public key.
+     * The data is encrypted with a randomly generated AES session key,
+     * which is then encrypted with the server's RSA public key.
      *
      * @param data The plaintext data to encrypt.
      * @return An RsaCipherPayload containing the encrypted AES session key, IV, and encrypted data.
@@ -55,6 +58,7 @@ public class RsaCryptoClient {
         );
 
         // Generate a random AES session key
+        log.info("start to generate client AES session key");
         KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS, secureRandom);
         SecretKey sessionKey = keyGenerator.generateKey();
@@ -70,6 +74,7 @@ public class RsaCryptoClient {
         String encryptedSessionKeyBase64 = RsaSessionKeyService.encryptSessionKeyBase64(sessionKey, serverPublicKey);
 
         // Return the encrypted payload containing the encrypted session key, IV, and encrypted data
+        log.info("put session key in context for future decryption");
         return new EncryptionResult(
                 new RsaCipherPayload(
                         encryptedSessionKeyBase64,
@@ -97,6 +102,7 @@ public class RsaCryptoClient {
      * @throws IllegalStateException    If the AES session key is not available for decryption.
      */
     public String decrypt(RsaCipherPayload payload, CryptoRequestContext context) throws GeneralSecurityException {
+        log.info("start to decrypt data using AES session key in context");
         if (payload == null) {
             throw new IllegalArgumentException("payload cannot be null");
         }

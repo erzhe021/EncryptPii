@@ -39,7 +39,6 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
                                   @NonNull Class<? extends HttpMessageConverter<?>> selectedConverterType,
                                   @NonNull ServerHttpRequest request,
                                   @NonNull ServerHttpResponse response) {
-        log.info("Encrypting response body for method: {} in class: {}", returnType.getMethod(), returnType.getContainingClass());
         EncryptResponse encryptResponse = findEncryptResponse(returnType);
         if (encryptResponse == null || body == null) {
             return body;

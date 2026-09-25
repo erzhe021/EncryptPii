@@ -3,10 +3,7 @@ package com.example.demo.server.crypto.ecdh;
 import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.core.AesGcmCryptoService;
-import com.example.demo.crypto.ecdh.EcdhCipherPayload;
-import com.example.demo.crypto.ecdh.EcdhContext;
-import com.example.demo.crypto.ecdh.EcdhKeyAgreementService;
-import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
+import com.example.demo.crypto.ecdh.*;
 import com.example.demo.server.crypto.AbstractCryptoKeyService;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -84,7 +81,7 @@ public class EcdhCryptoServer {
      */
     public static EcdhCryptoServer create(Path keyDirectory, StringRedisTemplate redisTemplate)
             throws GeneralSecurityException, IOException {
-        log.info("Creating EcdhCryptoServer from keyDirectory={}, redisTemplate={}", keyDirectory, redisTemplate != null);
+        log.info("Creating EcdhCryptoServer from keyDirectory={}", keyDirectory);
         AbstractCryptoKeyService.ensureKeyDirectory(keyDirectory);
         KeyFactory ecdhKeyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC);
         KeyPair ecdsaKeyPair = AbstractCryptoKeyService.loadOrCreateKeyPair(
@@ -96,10 +93,6 @@ public class EcdhCryptoServer {
         return new EcdhCryptoServer(ecdsaKeyPair.getPrivate(), ecdsaKeyPair.getPublic(), redisTemplate);
     }
 
-    public static EcdhCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
-        throw new IllegalStateException("Redis-backed ECDH key storage requires a StringRedisTemplate. Use create(Path, StringRedisTemplate). ");
-    }
-
     /**
      * Generates a new ephemeral ECDH key pair, signs the public key with the server's ECDSA private key,
      * and returns an EcdhPublicKeyResponse containing the ephemeral public key, ECDSA public key, and signature.
@@ -108,10 +101,7 @@ public class EcdhCryptoServer {
      * @throws GeneralSecurityException If there is a security exception during key generation or signing.
      */
     public EcdhPublicKeyResponse generateEphemeralEcdhPublicKey() throws GeneralSecurityException {
-        log.info("Generating ephemeral public key");
-        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
-        keyPairGenerator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
-        KeyPair ephemeralKeyPair = keyPairGenerator.generateKeyPair();
+        KeyPair ephemeralKeyPair = EcdhKeyPairFactory.generateEphemeralKeyPair();
         byte[] ephemeralPublicKeyBytes = ephemeralKeyPair.getPublic().getEncoded();
         String ephemeralPublicKeyBase64 = EncodingUtils.toBase64(ephemeralPublicKeyBytes);
         saveEphemeralPrivateKey(ephemeralPublicKeyBase64, ephemeralKeyPair.getPrivate());
@@ -140,7 +130,7 @@ public class EcdhCryptoServer {
      * @throws GeneralSecurityException If there is a security exception during decryption.
      */
     public String decrypt(EcdhCipherPayload payload) throws GeneralSecurityException {
-        log.info("EcdhCryptoServer decrypt {}", payload);
+        log.info("start to decrypt EcdhCipherPayload");
         validatePayload(payload);
         String serverPublicKeyBase64 = payload.serverEphemeralPublicKeyBase64();
         PrivateKey serverPrivateKey = loadEphemeralPrivateKey(serverPublicKeyBase64);
@@ -154,12 +144,15 @@ public class EcdhCryptoServer {
         PublicKey clientEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(payload.clientEphemeralPublicKeyBase64()))
         );
-        byte[] sharedSecret = EcdhKeyAgreementService.deriveSharedSecret(serverPrivateKey, clientEphemeralPublicKey);
+
+        log.info("Deriving AES key from serverPrivateKey, clientEphemeralPublicKey, iv and hkdfInfo");
         SecretKey sessionKey = EcdhKeyAgreementService.deriveAesKey(
-                sharedSecret,
+                serverPrivateKey,
+                clientEphemeralPublicKey,
                 EncodingUtils.fromBase64(payload.ivBase64()),
                 CryptoConstants.HKDF_INFO_REQUEST_AES_KEY
         );
+
         String decryptedValue = decryptWithAes(payload, sessionKey);
         if (EcdhCryptoConfiguration.oneTimeUsedKey) {
             invalidateEphemeralPrivateKey(serverPublicKeyBase64);
@@ -167,21 +160,13 @@ public class EcdhCryptoServer {
         return decryptedValue;
     }
 
-    /**
-     * Encrypts the given data using a newly generated ephemeral ECDH key pair and the server's ephemeral public key.
-     *
-     * @param data The data to be encrypted.
-     * @return An EcdhCipherPayload containing the encrypted data and keys.
-     * @throws GeneralSecurityException If there is a security exception during encryption.
-     */
-    public EcdhCipherPayload encrypt(String data) throws GeneralSecurityException {
-        log.info("EcdhCryptoServer encrypt data={}", data);
-        EcdhPublicKeyResponse publicKeyResponse = generateEphemeralEcdhPublicKey();
-        return encryptWithServerPublicKey(data, publicKeyResponse.ephemeralPublicKeyBase64());
-    }
-
-    public EcdhCipherPayload encryptWithEcdhContext(String data, EcdhContext ecdhContext) throws GeneralSecurityException {
-        return encryptWithServerPublicKeyAndClientPublicKey(data, ecdhContext.serverEphemeralPublicKeyBase64(), ecdhContext.clientEphemeralPublicKeyBase64());
+    public EcdhCipherPayload encryptWithEcdhHandshakeContext(String data, EcdhHandshakeContext ecdhHandshakeContext) throws GeneralSecurityException {
+        log.info("start to encrypt using EcdhHandshakeContext");
+        return encryptWithServerPublicKeyAndClientPublicKey(
+                data,
+                ecdhHandshakeContext.serverEphemeralPublicKeyBase64(),
+                ecdhHandshakeContext.clientEphemeralPublicKeyBase64()
+        );
     }
 
     private EcdhCipherPayload encryptWithServerPublicKeyAndClientPublicKey(
@@ -189,7 +174,6 @@ public class EcdhCryptoServer {
             String serverPublicKeyBase64,
             String clientPublicKeyBase64
     ) throws GeneralSecurityException {
-        log.info("EcdhCryptoServer encryptWithServerPublicKeyAndClientPublicKey data={}, serverPublicKeyBase64={}, clientPublicKeyBase64={}", data, serverPublicKeyBase64, clientPublicKeyBase64);
         if (!StringUtils.hasLength(clientPublicKeyBase64)) {
             throw new IllegalArgumentException("Client ephemeral public key is required for response encryption");
         }
@@ -209,42 +193,6 @@ public class EcdhCryptoServer {
     }
 
     /**
-     * Encrypts the given data using the provided server's ephemeral public key and a newly generated client's ephemeral key pair.
-     *
-     * @param data                     The data to be encrypted.
-     * @param serverPublicKeyBase64    The server's ephemeral public key in Base64 encoding.
-     * @return An EcdhCipherPayload containing the encrypted data and keys.
-     * @throws GeneralSecurityException If there is a security exception during encryption.
-     */
-    private EcdhCipherPayload encryptWithServerPublicKey(String data, String serverPublicKeyBase64) throws GeneralSecurityException {
-        log.info("EcdhCryptoServer encryptWithServerPublicKey data={}, serverPublicKeyBase64={}", data, serverPublicKeyBase64);
-        KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
-        keyPairGenerator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
-        KeyPair clientEphemeralKeyPair = keyPairGenerator.generateKeyPair();
-
-        PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
-                new X509EncodedKeySpec(EncodingUtils.fromBase64(serverPublicKeyBase64))
-        );
-        byte[] sharedSecret = EcdhKeyAgreementService.deriveSharedSecret(clientEphemeralKeyPair.getPrivate(), serverPublicKey);
-
-        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
-        new SecureRandom().nextBytes(iv);
-        SecretKey aesKey = EcdhKeyAgreementService.deriveAesKey(
-                sharedSecret,
-                iv,
-                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY
-        );
-        String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, aesKey, iv);
-
-        return new EcdhCipherPayload(
-                EncodingUtils.toBase64(clientEphemeralKeyPair.getPublic().getEncoded()),
-                serverPublicKeyBase64,
-                EncodingUtils.toBase64(iv),
-                encryptedDataBase64
-        );
-    }
-
-    /**
      * Encrypts the given data using the server's ephemeral private key and the client's ephemeral public key.
      *
      * @param data                     The data to be encrypted.
@@ -260,19 +208,21 @@ public class EcdhCryptoServer {
             String clientPublicKeyBase64,
             PrivateKey serverPrivateKey
     ) throws GeneralSecurityException {
-        log.info("EcdhCryptoServer encryptWithServerPrivateKeyAndClientPublicKey data={}, serverPublicKeyBase64={}, clientPublicKeyBase64={}", data, serverPublicKeyBase64, clientPublicKeyBase64);
         PublicKey clientEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(clientPublicKeyBase64))
         );
-        byte[] sharedSecret = EcdhKeyAgreementService.deriveSharedSecret(serverPrivateKey, clientEphemeralPublicKey);
 
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         new SecureRandom().nextBytes(iv);
+
+        log.info("Deriving AES key from serverPrivateKey, clientEphemeralPublicKey, iv and hkdfInfo");
         SecretKey aesKey = EcdhKeyAgreementService.deriveAesKey(
-                sharedSecret,
+                serverPrivateKey,
+                clientEphemeralPublicKey,
                 iv,
                 CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY
         );
+
         String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, aesKey, iv);
 
         return new EcdhCipherPayload(
@@ -316,7 +266,6 @@ public class EcdhCryptoServer {
      * @throws GeneralSecurityException If there is a security exception during decryption.
      */
     private String decryptWithAes(EcdhCipherPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
-        log.info("EcdhCryptoServer decryptWithAes payload={}, sessionKey={}", payload, sessionKey);
         return AesGcmCryptoService.decryptFromBase64(
                 payload.encryptedDataBase64(),
                 sessionKey,
@@ -333,6 +282,13 @@ public class EcdhCryptoServer {
         redisTemplate.opsForValue().set(redisKeyForEphemeralPrivateKey(publicKeyBase64), serializedKey, DEFAULT_EPHEMERAL_KEY_TTL);
     }
 
+    /**
+     * Loads the ephemeral private key corresponding to the given public key from Redis.
+     *
+     * @param publicKeyBase64 The Base64-encoded ephemeral public key.
+     * @return The corresponding ephemeral private key, or null if not found.
+     * @throws GeneralSecurityException If there is a security exception during key loading.
+     */
     private PrivateKey loadEphemeralPrivateKey(String publicKeyBase64) throws GeneralSecurityException {
         String serializedKey = redisTemplate.opsForValue().get(redisKeyForEphemeralPrivateKey(publicKeyBase64));
         if (serializedKey == null || serializedKey.isBlank()) {

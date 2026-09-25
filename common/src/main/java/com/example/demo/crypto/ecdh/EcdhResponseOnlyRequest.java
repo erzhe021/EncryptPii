@@ -1,7 +1,8 @@
 package com.example.demo.crypto.ecdh;
 
 /**
- * Request object for ECDH response-only operation.
+ * HTTP request object for ECDH response-only operations.
+ * It is intentionally an API-level DTO; conversion to protocol/session context happens in the controller/service layer.
  */
 public record EcdhResponseOnlyRequest(
 
@@ -14,4 +15,8 @@ public record EcdhResponseOnlyRequest(
         //The server's ephemeral public key in Base64 encoding.
         String serverEphemeralPublicKeyBase64
 ) {
+
+    public EcdhHandshakeContext toHandshakeContext() {
+        return new EcdhHandshakeContext(clientEphemeralPublicKeyBase64, serverEphemeralPublicKeyBase64);
+    }
 }

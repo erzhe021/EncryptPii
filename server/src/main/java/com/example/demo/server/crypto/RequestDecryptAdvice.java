@@ -43,7 +43,6 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
                                          Type targetType,
                                          Class<? extends HttpMessageConverter<?>> converterType)
             throws IOException {
-        log.info("Decrypting request body for method: {} in class: {}", parameter.getMethod(), parameter.getContainingClass());
         DecryptRequest decryptRequest = findDecryptRequest(parameter);
         if (decryptRequest == null) {
             return inputMessage;

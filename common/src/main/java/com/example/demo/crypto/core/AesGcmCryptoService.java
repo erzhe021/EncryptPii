@@ -2,6 +2,7 @@ package com.example.demo.crypto.core;
 
 import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.EncodingUtils;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.Cipher;
 import javax.crypto.SecretKey;
@@ -13,6 +14,7 @@ import java.security.GeneralSecurityException;
  * AesGcmCryptoService provides utility methods for AES-GCM encryption and decryption.
  * It supports encrypting and decrypting byte arrays and strings, as well as encoding/decoding to/from Base64.
  */
+@Slf4j
 public final class AesGcmCryptoService {
     private AesGcmCryptoService() {
     }
@@ -57,6 +59,7 @@ public final class AesGcmCryptoService {
      * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
      */
     public static String encryptAsBase64(String plainText, SecretKey sessionKey, byte[] iv) throws GeneralSecurityException {
+        log.info("start to encrypt data using AES session key");
         byte[] encrypted = encrypt(plainText.getBytes(StandardCharsets.UTF_8), sessionKey, iv);
         return EncodingUtils.toBase64(encrypted);
     }
@@ -71,6 +74,7 @@ public final class AesGcmCryptoService {
      * @throws GeneralSecurityException If decryption fails due to cryptographic errors.
      */
     public static String decryptFromBase64(String encryptedBase64, SecretKey sessionKey, String ivBase64) throws GeneralSecurityException {
+        log.info("start to decrypt data using AES session key");
         byte[] decrypted = decrypt(EncodingUtils.fromBase64(encryptedBase64), sessionKey, EncodingUtils.fromBase64(ivBase64));
         return new String(decrypted, StandardCharsets.UTF_8);
     }

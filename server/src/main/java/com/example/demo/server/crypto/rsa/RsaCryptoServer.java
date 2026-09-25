@@ -7,6 +7,7 @@ import com.example.demo.crypto.core.RsaSessionKeyService;
 import com.example.demo.crypto.rsa.RsaCipherPayload;
 import com.example.demo.crypto.rsa.RsaPublicKeyResponse;
 import com.example.demo.server.crypto.AbstractCryptoKeyService;
+import com.example.demo.server.crypto.CryptoSessionContextAccessor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
@@ -29,10 +30,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @return an instance of RsaPublicKeyResponse containing the Base64-encoded RSA public key
      */
     public RsaPublicKeyResponse getPublicKey() {
-        log.info("RsaCryptoServer getPublicKey");
-        return new RsaPublicKeyResponse(
-                EncodingUtils.toBase64(rsaPublicKey.getEncoded())
-        );
+        return new RsaPublicKeyResponse(EncodingUtils.toBase64(rsaPublicKey.getEncoded()));
     }
 
     /**
@@ -64,10 +62,9 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws GeneralSecurityException if a security exception occurs during decryption
      */
     public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
-        log.info("RsaCryptoServer decrypt {}", payload);
         validatePayload(payload);
-        byte[] sessionKeyBytes = decryptSessionKey(payload.encryptedSessionKeyBase64());
-        SecretKey sessionKey = new SecretKeySpec(sessionKeyBytes, CryptoConstants.ALGORITHM_AES);
+        SecretKey sessionKey = decryptSessionKeyToSecretKey(payload.encryptedSessionKeyBase64());
+        CryptoSessionContextAccessor.setResolvedSessionKey(sessionKey);
         return decryptWithAes(payload, sessionKey);
     }
 
@@ -79,11 +76,15 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws GeneralSecurityException if a security exception occurs during decryption
      */
     public byte[] decryptSessionKey(String encryptedSessionKeyBase64) throws GeneralSecurityException {
-        log.info("RsaCryptoServer decryptSessionKey {}", encryptedSessionKeyBase64);
+        return decryptSessionKeyToSecretKey(encryptedSessionKeyBase64).getEncoded();
+    }
+
+    public SecretKey decryptSessionKeyToSecretKey(String encryptedSessionKeyBase64) throws GeneralSecurityException {
+        log.info("start to decrypt session key from encryptedSessionKeyBase64");
         if (!StringUtils.hasLength(encryptedSessionKeyBase64)) {
             throw new IllegalArgumentException("Encrypted session key is required.");
         }
-        return RsaSessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, rsaPrivateKey).getEncoded();
+        return RsaSessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, rsaPrivateKey);
     }
 
     /**
@@ -95,8 +96,11 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws GeneralSecurityException if a security exception occurs during encryption
      */
     public RsaCipherPayload encryptWithRequestSessionKey(String data, String encryptedSessionKeyBase64) throws GeneralSecurityException {
-        log.info("RsaCryptoServer encryptWithRequestSessionKey data={}, encryptedSessionKeyBase64={}", data, encryptedSessionKeyBase64);
-        SecretKey sessionKey = RsaSessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, rsaPrivateKey);
+        log.info("start to encrypt data using AES session key decrypted from encryptedSessionKeyBase64");
+        SecretKey sessionKey = CryptoSessionContextAccessor.getResolvedSessionKey();
+        if (sessionKey == null) {
+            sessionKey = decryptSessionKeyToSecretKey(encryptedSessionKeyBase64);
+        }
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         new SecureRandom().nextBytes(iv);
         String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, sessionKey, iv);
@@ -137,7 +141,6 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws GeneralSecurityException if a security exception occurs during decryption
      */
     private String decryptWithAes(RsaCipherPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
-        log.info("RsaCryptoServer decryptWithAes payload={}, sessionKey={}", payload, sessionKey);
         return AesGcmCryptoService.decryptFromBase64(
                 payload.encryptedDataBase64(),
                 sessionKey,

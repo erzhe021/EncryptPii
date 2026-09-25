@@ -1,7 +1,7 @@
 package com.example.demo.crypto.ecdh;
 
 import com.example.demo.crypto.CryptoConstants;
-import com.example.demo.crypto.EncodingUtils;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.KeyAgreement;
 import javax.crypto.SecretKey;
@@ -11,11 +11,17 @@ import java.security.GeneralSecurityException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 
+@Slf4j
 public final class EcdhKeyAgreementService {
     private EcdhKeyAgreementService() {
     }
 
-    public static byte[] deriveSharedSecret(PrivateKey privateKey, PublicKey publicKey) throws GeneralSecurityException {
+    public static SecretKey deriveAesKey(PrivateKey privateKey, PublicKey publicKey, byte[] iv, String hkdfInfo) throws GeneralSecurityException {
+        byte[] sharedSecret = deriveSharedSecret(privateKey, publicKey);
+        return deriveAesKey(sharedSecret, iv, hkdfInfo);
+    }
+
+    private static byte[] deriveSharedSecret(PrivateKey privateKey, PublicKey publicKey) throws GeneralSecurityException {
         KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
         keyAgreement.init(privateKey);
         keyAgreement.doPhase(publicKey, true);
@@ -30,9 +36,5 @@ public final class EcdhKeyAgreementService {
                 CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
         );
         return new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
-    }
-
-    public static String deriveAesKeyBase64(byte[] sharedSecret, byte[] iv, String hkdfInfo) throws GeneralSecurityException {
-        return EncodingUtils.toBase64(deriveAesKey(sharedSecret, iv, hkdfInfo).getEncoded());
     }
 }
