@@ -89,8 +89,7 @@ public class EcdhCryptoController {
         if (requestAttributes != null) {
             requestAttributes.setAttribute(
                     CryptoSessionContext.REQUEST_CONTEXT_KEY,
-                    new CryptoSessionContext(
-                            CryptoAlgorithm.ECDH,
+                    CryptoSessionContext.ecdhResponseOnly(
                             new EcdhContext(
                                     request.clientEphemeralPublicKeyBase64(),
                                     request.serverEphemeralPublicKeyBase64()

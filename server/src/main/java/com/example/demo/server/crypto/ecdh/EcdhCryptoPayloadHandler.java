@@ -54,11 +54,11 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
      * @return A CryptoSessionContext containing information about the cryptographic session.
      */
     @Override
-    public CryptoSessionContext createSessionContext(String encryptedRequestBody) {
+    public CryptoSessionContext<?> createSessionContext(String encryptedRequestBody) {
         log.info("createSessionContext encryptedRequestBody={}", encryptedRequestBody);
         try {
             EcdhCipherPayload payload = objectMapper.readValue(encryptedRequestBody, EcdhCipherPayload.class);
-            return new CryptoSessionContext(CryptoAlgorithm.ECDH, payload);
+            return CryptoSessionContext.ecdh(payload);
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Invalid ECDH encrypted request payload", e);
         }
@@ -73,7 +73,7 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
      * @throws GeneralSecurityException If there is an error during encryption.
      */
     @Override
-    public Object encrypt(Object responseBody, CryptoSessionContext sessionContext)
+    public Object encrypt(Object responseBody, CryptoSessionContext<?> sessionContext)
             throws GeneralSecurityException {
 
         log.info("encrypt responseBody={} with sessionContext={}", responseBody, sessionContext);
@@ -86,21 +86,16 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
                 );
             }
             if (sessionContext.requestKeyMaterial() instanceof EcdhContext ecdhContext) {
-                return ecdhCryptoServer.encryptWithEcdhContext(
-                        responseBodyString,
-                        ecdhContext
-                );
+                return ecdhCryptoServer.encryptWithEcdhContext(responseBodyString, ecdhContext);
             }
-
-            EcdhCipherPayload requestPayload = (EcdhCipherPayload) sessionContext.requestKeyMaterial();
-            EcdhContext ecdhContext = new EcdhContext(
-                    requestPayload.clientEphemeralPublicKeyBase64(),
-                    requestPayload.serverEphemeralPublicKeyBase64()
-            );
-            return ecdhCryptoServer.encryptWithEcdhContext(
-                    responseBodyString,
-                    ecdhContext
-            );
+            if (sessionContext.requestKeyMaterial() instanceof EcdhCipherPayload requestPayload) {
+                EcdhContext ecdhContext = new EcdhContext(
+                        requestPayload.clientEphemeralPublicKeyBase64(),
+                        requestPayload.serverEphemeralPublicKeyBase64()
+                );
+                return ecdhCryptoServer.encryptWithEcdhContext(responseBodyString, ecdhContext);
+            }
+            throw new IllegalArgumentException("Unsupported ECDH session key material: " + sessionContext.requestKeyMaterial());
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Failed to serialize response body before ECDH encryption", e);
         }

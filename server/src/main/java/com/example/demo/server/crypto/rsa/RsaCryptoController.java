@@ -59,7 +59,7 @@ public class RsaCryptoController {
         if (requestAttributes != null) {
             requestAttributes.setAttribute(
                     CryptoSessionContext.REQUEST_CONTEXT_KEY,
-                    new CryptoSessionContext(CryptoAlgorithm.RSA, sessionTransport),
+                    CryptoSessionContext.rsaResponseOnly(sessionTransport),
                     RequestAttributes.SCOPE_REQUEST
             );
         }

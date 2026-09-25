@@ -31,7 +31,7 @@ public interface CryptoPayloadHandler {
      * @return a CryptoSessionContext containing information about the cryptographic session
      * @throws GeneralSecurityException if a security exception occurs during session context creation
      */
-    CryptoSessionContext createSessionContext(String encryptedRequestBody) throws GeneralSecurityException;
+    CryptoSessionContext<?> createSessionContext(String encryptedRequestBody) throws GeneralSecurityException;
 
     /**
      * Encrypts the given response body and returns the encrypted data as an object.
@@ -41,5 +41,5 @@ public interface CryptoPayloadHandler {
      * @return the encrypted response body as an object
      * @throws GeneralSecurityException if a security exception occurs during encryption
      */
-    Object encrypt(Object responseBody, CryptoSessionContext sessionContext) throws GeneralSecurityException;
+    Object encrypt(Object responseBody, CryptoSessionContext<?> sessionContext) throws GeneralSecurityException;
 }

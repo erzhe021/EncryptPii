@@ -50,39 +50,45 @@ public class RsaCryptoPayloadHandler implements CryptoPayloadHandler {
     }
 
     @Override
-    public CryptoSessionContext createSessionContext(String encryptedRequestBody) {
+    public CryptoSessionContext<?> createSessionContext(String encryptedRequestBody) {
         log.info("createSessionContext encryptedRequestBody={}", encryptedRequestBody);
         try {
             RsaCipherPayload payload = objectMapper.readValue(encryptedRequestBody, RsaCipherPayload.class);
-            return new CryptoSessionContext(CryptoAlgorithm.RSA, payload);
+            return CryptoSessionContext.rsa(payload);
         } catch (JsonProcessingException e) {
             throw new IllegalArgumentException("Invalid RSA encrypted request payload", e);
         }
     }
 
     @Override
-    public Object encrypt(Object responseBody, CryptoSessionContext sessionContext) {
+    public Object encrypt(Object responseBody, CryptoSessionContext<?> sessionContext) {
         log.info("encrypt responseBody={} with sessionContext={}", responseBody, sessionContext);
         try {
             String responseBodyString = objectMapper.writeValueAsString(responseBody);
             if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport sessionKeyTransport) {
-                SecretKey sessionKey = new SecretKeySpec(
-                        rsaCryptoServer.decryptSessionKey(sessionKeyTransport.encryptedSessionKeyBase64()),
-                        CryptoConstants.ALGORITHM_AES
-                );
-                byte[] iv = EncodingUtils.fromBase64(sessionKeyTransport.ivBase64());
-                String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(responseBodyString, sessionKey, iv);
-                return new DefaultAesCipherPayload(
-                        sessionKeyTransport.ivBase64(),
-                        encryptedDataBase64
-                );
+                return encryptWithSessionKeyTransport(responseBodyString, sessionKeyTransport);
             }
-
-            RsaCipherPayload requestPayload = (RsaCipherPayload) sessionContext.requestKeyMaterial();
-            rsaCryptoServer.validatePayload(requestPayload);
-            return rsaCryptoServer.encryptWithRequestSessionKey(responseBodyString, requestPayload.encryptedSessionKeyBase64());
+            if (sessionContext.requestKeyMaterial() instanceof RsaCipherPayload requestPayload) {
+                rsaCryptoServer.validatePayload(requestPayload);
+                return rsaCryptoServer.encryptWithRequestSessionKey(responseBodyString, requestPayload.encryptedSessionKeyBase64());
+            }
+            throw new IllegalArgumentException("Unsupported RSA session key material: " + sessionContext.requestKeyMaterial());
         } catch (JsonProcessingException | GeneralSecurityException e) {
             throw new IllegalArgumentException("Failed to serialize response body before RSA encryption", e);
         }
+    }
+
+    private DefaultAesCipherPayload encryptWithSessionKeyTransport(String responseBodyString, SessionKeyTransport sessionKeyTransport)
+            throws GeneralSecurityException {
+        SecretKey sessionKey = new SecretKeySpec(
+                rsaCryptoServer.decryptSessionKey(sessionKeyTransport.encryptedSessionKeyBase64()),
+                CryptoConstants.ALGORITHM_AES
+        );
+        byte[] iv = EncodingUtils.fromBase64(sessionKeyTransport.ivBase64());
+        String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(responseBodyString, sessionKey, iv);
+        return new DefaultAesCipherPayload(
+                sessionKeyTransport.ivBase64(),
+                encryptedDataBase64
+        );
     }
 }
