@@ -1,7 +1,7 @@
 package com.example.demo.server.crypto;
 
+import lombok.NonNull;
 import lombok.extern.slf4j.Slf4j;
-import org.checkerframework.checker.nullness.qual.NonNull;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpInputMessage;
@@ -27,9 +27,9 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
     }
 
     @Override
-    public boolean supports(@NonNull MethodParameter methodParameter,
-                            @NonNull Type targetType,
-                            @NonNull Class<? extends HttpMessageConverter<?>> converterType) {
+    public boolean supports(MethodParameter methodParameter,
+                            Type targetType,
+                            Class<? extends HttpMessageConverter<?>> converterType) {
         return findDecryptRequest(methodParameter) != null;
     }
 
@@ -38,10 +38,10 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
      * The decrypted JSON string is then wrapped in a new HttpInputMessage and returned.
      */
     @Override
-    public @NonNull HttpInputMessage beforeBodyRead(@NonNull HttpInputMessage inputMessage,
-                                                    @NonNull MethodParameter parameter,
-                                                    @NonNull Type targetType,
-                                                    @NonNull Class<? extends HttpMessageConverter<?>> converterType)
+    public HttpInputMessage beforeBodyRead(HttpInputMessage inputMessage,
+                                         MethodParameter parameter,
+                                         Type targetType,
+                                         Class<? extends HttpMessageConverter<?>> converterType)
             throws IOException {
         log.info("Decrypting request body for method: {} in class: {}", parameter.getMethod(), parameter.getContainingClass());
         DecryptRequest decryptRequest = findDecryptRequest(parameter);
@@ -61,12 +61,12 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
 
         return new HttpInputMessage() {
             @Override
-            public @NonNull InputStream getBody() {
+            public InputStream getBody() {
                 return new ByteArrayInputStream(decryptedBody.getBytes(StandardCharsets.UTF_8));
             }
 
             @Override
-            public @NonNull HttpHeaders getHeaders() {
+            public HttpHeaders getHeaders() {
                 return inputMessage.getHeaders();
             }
         };

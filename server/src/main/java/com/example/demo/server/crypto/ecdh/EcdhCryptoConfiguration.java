@@ -4,6 +4,7 @@ import jakarta.annotation.PostConstruct;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.io.IOException;
 import java.nio.file.Path;
@@ -14,9 +15,10 @@ public class EcdhCryptoConfiguration {
 
     @Bean
     public EcdhCryptoServer ecdhCryptoServer(
-            @Value("${ecdh.crypto.key-directory:src/main/resources/keys}") String keyDirectory
+            @Value("${ecdh.crypto.key-directory:src/main/resources/keys}") String keyDirectory,
+            StringRedisTemplate redisTemplate
     ) throws GeneralSecurityException, IOException {
-        return EcdhCryptoServer.create(Path.of(keyDirectory));
+        return EcdhCryptoServer.create(Path.of(keyDirectory), redisTemplate);
     }
 
     public static boolean oneTimeUsedKey;
