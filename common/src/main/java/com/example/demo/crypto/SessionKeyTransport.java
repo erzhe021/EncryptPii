@@ -1,17 +1,23 @@
 package com.example.demo.crypto;
 
-import javax.crypto.Cipher;
+import com.example.demo.crypto.core.RsaSessionKeyService;
+
 import javax.crypto.SecretKey;
 import java.net.http.HttpRequest;
 import java.security.GeneralSecurityException;
 import java.security.PublicKey;
 
+/**
+ * SessionKeyTransport is a record that encapsulates the encrypted session key and initialization vector (IV)
+ * for secure transport in HTTP headers. It provides methods to create an instance from a generated session key
+ * and to apply the session key and IV to an HTTP request.
+ */
 public record SessionKeyTransport(
         String sessionKeyBase64,
         String ivBase64) {
 
-    public static SessionKeyTransport fromGeneratedKey(SecretKey sessionKey, byte[] iv, PublicKey serverPublicKey)
-            throws GeneralSecurityException {
+    public static SessionKeyTransport fromGeneratedKey(SecretKey sessionKey, byte[] iv, PublicKey serverPublicKey) throws GeneralSecurityException {
+
         if (sessionKey == null) {
             throw new IllegalArgumentException("sessionKey is required");
         }
@@ -26,12 +32,8 @@ public record SessionKeyTransport(
             throw new IllegalArgumentException("Only RSA server public keys are supported for encrypting a session key before header transport.");
         }
 
-        Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
-        rsaCipher.init(Cipher.ENCRYPT_MODE, serverPublicKey);
-        byte[] encryptedSessionKey = rsaCipher.doFinal(sessionKey.getEncoded());
-
         return new SessionKeyTransport(
-                EncodingUtils.toBase64(encryptedSessionKey),
+                RsaSessionKeyService.encryptSessionKeyBase64(sessionKey, serverPublicKey),
                 EncodingUtils.toBase64(iv)
         );
     }

@@ -4,6 +4,7 @@ import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.DefaultAesCipherPayload;
 import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.SessionKeyTransport;
+import com.example.demo.crypto.core.AesGcmCryptoService;
 import com.example.demo.crypto.rsa.RsaCipherPayload;
 import com.example.demo.server.crypto.CryptoAlgorithm;
 import com.example.demo.server.crypto.CryptoPayloadHandler;
@@ -73,12 +74,10 @@ public class RsaCryptoPayloadHandler implements CryptoPayloadHandler {
                         CryptoConstants.ALGORITHM_AES
                 );
                 byte[] iv = EncodingUtils.fromBase64(sessionKeyTransport.ivBase64());
-                Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
-                aesCipher.init(Cipher.ENCRYPT_MODE, sessionKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
-                byte[] encryptedData = aesCipher.doFinal(responseBodyString.getBytes(StandardCharsets.UTF_8));
+                String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(responseBodyString, sessionKey, iv);
                 return new DefaultAesCipherPayload(
                         sessionKeyTransport.ivBase64(),
-                        EncodingUtils.toBase64(encryptedData)
+                        encryptedDataBase64
                 );
             }
 

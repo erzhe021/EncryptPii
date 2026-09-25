@@ -4,6 +4,7 @@ import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.DefaultAesCipherPayload;
 import com.example.demo.crypto.EncodingUtils;
 import com.example.demo.crypto.SessionKeyTransport;
+import com.example.demo.crypto.core.AesGcmCryptoService;
 import com.example.demo.crypto.ecdh.EcdhCipherPayload;
 import com.example.demo.crypto.ecdh.EcdhContext;
 import com.example.demo.server.crypto.CryptoAlgorithm;
@@ -14,12 +15,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.crypto.Cipher;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.security.NoSuchAlgorithmException;
 
@@ -96,12 +94,11 @@ public class EcdhCryptoPayloadHandler implements CryptoPayloadHandler {
                         CryptoConstants.ALGORITHM_AES
                 );
                 byte[] iv = EncodingUtils.fromBase64(sessionKeyTransport.ivBase64());
-                Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
-                aesCipher.init(Cipher.ENCRYPT_MODE, sessionKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
-                byte[] encryptedData = aesCipher.doFinal(responseBodyString.getBytes(StandardCharsets.UTF_8));
+
+                String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(responseBodyString, sessionKey, iv);
                 return new DefaultAesCipherPayload(
                         sessionKeyTransport.ivBase64(),
-                        EncodingUtils.toBase64(encryptedData)
+                        encryptedDataBase64
                 );
             }
             if (sessionContext.requestKeyMaterial() instanceof EcdhContext ecdhContext) {

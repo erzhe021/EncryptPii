@@ -2,21 +2,18 @@ package com.example.demo.server.crypto.ecdh;
 
 import com.example.demo.crypto.CryptoConstants;
 import com.example.demo.crypto.EncodingUtils;
+import com.example.demo.crypto.core.AesGcmCryptoService;
 import com.example.demo.crypto.ecdh.EcdhCipherPayload;
 import com.example.demo.crypto.ecdh.EcdhContext;
+import com.example.demo.crypto.ecdh.EcdhKeyAgreementService;
 import com.example.demo.crypto.ecdh.EcdhPublicKeyResponse;
-import com.example.demo.crypto.ecdh.HkdfUtils;
 import com.github.benmanes.caffeine.cache.Cache;
 import com.github.benmanes.caffeine.cache.Caffeine;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
-import javax.crypto.Cipher;
-import javax.crypto.KeyAgreement;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -176,19 +173,12 @@ public class EcdhCryptoServer {
         PublicKey clientEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(payload.clientEphemeralPublicKeyBase64()))
         );
-        KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
-        keyAgreement.init(serverPrivateKey);
-        keyAgreement.doPhase(clientEphemeralPublicKey, true);
-        byte[] sharedSecret = keyAgreement.generateSecret();
-
-        byte[] derivedAesKey = HkdfUtils.deriveAesKey(
+        byte[] sharedSecret = EcdhKeyAgreementService.deriveSharedSecret(serverPrivateKey, clientEphemeralPublicKey);
+        SecretKey sessionKey = EcdhKeyAgreementService.deriveAesKey(
                 sharedSecret,
                 EncodingUtils.fromBase64(payload.ivBase64()),
-                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY.getBytes(StandardCharsets.UTF_8),
-                CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
+                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY
         );
-
-        SecretKey sessionKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
         String decryptedValue = decryptWithAes(payload, sessionKey);
         if (EcdhCryptoConfiguration.oneTimeUsedKey) {
             ephemeralEcdhPrivateKeys.invalidate(serverPublicKeyBase64);
@@ -255,21 +245,16 @@ public class EcdhCryptoServer {
         PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(serverPublicKeyBase64))
         );
-        KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
-        keyAgreement.init(clientEphemeralKeyPair.getPrivate());
-        keyAgreement.doPhase(serverPublicKey, true);
-        byte[] sharedSecret = keyAgreement.generateSecret();
+        byte[] sharedSecret = EcdhKeyAgreementService.deriveSharedSecret(clientEphemeralKeyPair.getPrivate(), serverPublicKey);
 
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         new SecureRandom().nextBytes(iv);
-        byte[] derivedAesKey = HkdfUtils.deriveAesKey(
+        SecretKey aesKey = EcdhKeyAgreementService.deriveAesKey(
                 sharedSecret,
                 iv,
-                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY.getBytes(StandardCharsets.UTF_8),
-                CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
+                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY
         );
-        SecretKey aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
-        byte[] encryptedData = encryptWithAes(data, aesKey, iv);
+        byte[] encryptedData = AesGcmCryptoService.encrypt(data.getBytes(StandardCharsets.UTF_8), aesKey, iv);
 
         return new EcdhCipherPayload(
                 EncodingUtils.toBase64(clientEphemeralKeyPair.getPublic().getEncoded()),
@@ -299,21 +284,16 @@ public class EcdhCryptoServer {
         PublicKey clientEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(clientPublicKeyBase64))
         );
-        KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
-        keyAgreement.init(serverPrivateKey);
-        keyAgreement.doPhase(clientEphemeralPublicKey, true);
-        byte[] sharedSecret = keyAgreement.generateSecret();
+        byte[] sharedSecret = EcdhKeyAgreementService.deriveSharedSecret(serverPrivateKey, clientEphemeralPublicKey);
 
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         new SecureRandom().nextBytes(iv);
-        byte[] derivedAesKey = HkdfUtils.deriveAesKey(
+        SecretKey aesKey = EcdhKeyAgreementService.deriveAesKey(
                 sharedSecret,
                 iv,
-                CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY.getBytes(StandardCharsets.UTF_8),
-                CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
+                CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY
         );
-        SecretKey aesKey = new SecretKeySpec(derivedAesKey, CryptoConstants.ALGORITHM_AES);
-        byte[] encryptedData = encryptWithAes(data, aesKey, iv);
+        byte[] encryptedData = AesGcmCryptoService.encrypt(data.getBytes(StandardCharsets.UTF_8), aesKey, iv);
 
         return new EcdhCipherPayload(
                 clientPublicKeyBase64,
@@ -357,29 +337,10 @@ public class EcdhCryptoServer {
      */
     private String decryptWithAes(EcdhCipherPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
         log.info("EcdhCryptoServer decryptWithAes payload={}, sessionKey={}", payload, sessionKey);
-        Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
-        aesCipher.init(
-                Cipher.DECRYPT_MODE,
+        return AesGcmCryptoService.decryptFromBase64(
+                payload.encryptedDataBase64(),
                 sessionKey,
-                new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, EncodingUtils.fromBase64(payload.ivBase64()))
+                payload.ivBase64()
         );
-        byte[] plainBytes = aesCipher.doFinal(EncodingUtils.fromBase64(payload.encryptedDataBase64()));
-        return new String(plainBytes, StandardCharsets.UTF_8);
-    }
-
-    /**
-     * Encrypts the given data using AES encryption with the provided AES key and IV.
-     *
-     * @param data   The data to be encrypted.
-     * @param aesKey The AES key to use for encryption.
-     * @param iv     The initialization vector (IV) to use for encryption.
-     * @return The encrypted data as a byte array.
-     * @throws GeneralSecurityException If there is a security exception during encryption.
-     */
-    private byte[] encryptWithAes(String data, SecretKey aesKey, byte[] iv) throws GeneralSecurityException {
-        log.info("EcdhCryptoServer encryptWithAes data={}, aesKey={}, iv={}", data, aesKey, iv);
-        Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
-        aesCipher.init(Cipher.ENCRYPT_MODE, aesKey, new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
-        return aesCipher.doFinal(data.getBytes(StandardCharsets.UTF_8));
     }
 }

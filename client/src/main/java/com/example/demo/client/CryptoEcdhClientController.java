@@ -42,15 +42,16 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
     @PostMapping("/bidirectional")
     public Map<String, Object> bidirectionalEcdhEncrypt(@RequestBody PlainData plainData) throws Exception {
         log.info("Bidirectional Ecdh encrypt request received with data: {}", plainData.data());
-        EcdhCipherPayload encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
-        HttpResponse<String> response = sendJsonRequest(ecdhBidirectionalPath, encrypted);
+        EcdhCryptoClient.EncryptionResult encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
+        EcdhCipherPayload requestPayload = encrypted.payload();
+        HttpResponse<String> response = sendJsonRequest(ecdhBidirectionalPath, requestPayload);
         ensureSuccess(response, "bidirectional ECDH encrypt");
         EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);
-        String decryptedServerResponse = ecdhCryptoClient.decrypt(responsePayload);
+        String decryptedServerResponse = ecdhCryptoClient.decrypt(responsePayload, encrypted.context());
         PlainData decryptedServerResponseData = objectMapper.readValue(decryptedServerResponse, PlainData.class);
 
         return Map.of(
-                "request", Map.of("data", plainData.data(), "encrypted", encrypted),
+                "request", Map.of("data", plainData.data(), "encrypted", requestPayload),
                 "response", Map.of("data", decryptedServerResponseData.data(), "encrypted", responsePayload)
         );
     }
@@ -58,25 +59,31 @@ public class CryptoEcdhClientController extends AbstractCryptoClientController {
     @PostMapping("/request-only")
     public Map<String, Object> requestOnlyEcdhEncrypt(@RequestBody PlainData plainData) throws Exception {
         log.info("Request-only Ecdh encrypt request received with data: {}", plainData.data());
-        EcdhCipherPayload encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
-        Map<String, Object> responseMap = postForMap(ecdhRequestOnlyPath, encrypted, "request-only ECDH encrypt");
+        EcdhCryptoClient.EncryptionResult encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
+        EcdhCipherPayload requestPayload = encrypted.payload();
+
+
+        HttpResponse<String> response = sendJsonRequest(ecdhRequestOnlyPath, requestPayload);
+        ensureSuccess(response, "request-only ECDH encrypt");
+        PlainData responsePlainData = objectMapper.readValue(response.body(), PlainData.class);
 
         return Map.of(
-                "request", Map.of("data", plainData.data(), "encrypted", encrypted),
-                "response", Map.of("data", responseMap.get("data"))
+                "request", Map.of("data", plainData.data(), "encrypted", requestPayload),
+                "response", Map.of("data", responsePlainData.data())
         );
     }
 
     @PostMapping("/response-only")
     public Map<String, Object> responseOnlyEcdhEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
         log.info("Response-only Ecdh encrypt request received with data: {}", plainData == null ? "null" : plainData.data());
-        EcdhResponseOnlyRequest requestPayload = ecdhCryptoClient.createResponseOnlyRequest(
+        EcdhCryptoClient.ResponseOnlySession responseOnlySession = ecdhCryptoClient.createResponseOnlySession(
                 plainData == null ? null : plainData.data()
         );
+        EcdhResponseOnlyRequest requestPayload = responseOnlySession.request();
         HttpResponse<String> response = sendJsonRequest(ecdhResponseOnlyPath, requestPayload);
         ensureSuccess(response, "response-only ECDH encrypt");
         EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);
-        String decryptedResponseData = ecdhCryptoClient.decrypt(responsePayload);
+        String decryptedResponseData = ecdhCryptoClient.decrypt(responsePayload, responseOnlySession.context());
         PlainData decryptedServerResponseData = objectMapper.readValue(decryptedResponseData, PlainData.class);
 
         return Map.of(

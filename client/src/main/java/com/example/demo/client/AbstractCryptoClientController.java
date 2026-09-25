@@ -1,19 +1,19 @@
 package com.example.demo.client;
 
-import com.example.demo.crypto.*;
+import com.example.demo.crypto.AesCipherPayload;
+import com.example.demo.crypto.CryptoConstants;
+import com.example.demo.crypto.PlainData;
+import com.example.demo.crypto.SessionKeyTransport;
+import com.example.demo.crypto.core.AesGcmCryptoService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
-import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
-import java.util.Map;
 
 /**
  * AbstractCryptoClientController provides common functionality for crypto client controllers.
@@ -31,7 +31,7 @@ public abstract class AbstractCryptoClientController {
         this.objectMapper = new ObjectMapper();
     }
 
-    protected void validatePlainData(PlainData data) {
+    private void validatePlainData(PlainData data) {
         if (data == null || data.data() == null || data.data().isEmpty()) {
             throw new IllegalArgumentException("PlainData cannot be null or empty");
         }
@@ -46,7 +46,14 @@ public abstract class AbstractCryptoClientController {
         return httpClient.send(buildJsonRequest(serverBaseUri.resolve(path), requestBody), HttpResponse.BodyHandlers.ofString());
     }
 
-    protected HttpRequest buildJsonRequest(URI endpoint, Object requestBody) throws Exception {
+    protected HttpResponse<String> sendJsonRequestWithSessionKeyTransport(String data, String path, SessionKeyTransport sessionTransport) throws Exception {
+        return httpClient.send(
+                buildSessionKeyRequest(serverBaseUri.resolve(path), data, sessionTransport),
+                HttpResponse.BodyHandlers.ofString()
+        );
+    }
+
+    private HttpRequest buildJsonRequest(URI endpoint, Object requestBody) throws Exception {
         if (requestBody == null) {
             return HttpRequest.newBuilder(endpoint)
                     .header("Content-Type", "application/json")
@@ -60,17 +67,7 @@ public abstract class AbstractCryptoClientController {
         }
     }
 
-    protected Map<String, Object> postForMap(String path, Object requestBody, String operation) throws Exception {
-        return postForMap(buildJsonRequest(serverBaseUri.resolve(path), requestBody), operation);
-    }
-
-    protected Map<String, Object> postForMap(HttpRequest request, String operation) throws Exception {
-        HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
-        ensureSuccess(response, operation);
-        return objectMapper.readValue(response.body(), Map.class);
-    }
-
-    protected HttpRequest buildSessionKeyRequest(URI endpoint, String data, SessionKeyTransport sessionKeyTransport) throws Exception {
+    private HttpRequest buildSessionKeyRequest(URI endpoint, String data, SessionKeyTransport sessionKeyTransport) throws Exception {
         if (data != null) {
             return sessionKeyTransport.apply(
                             HttpRequest.newBuilder(endpoint).header("Content-Type", "application/json")
@@ -84,8 +81,6 @@ public abstract class AbstractCryptoClientController {
                     .POST(HttpRequest.BodyPublishers.noBody())
                     .build();
         }
-
-
     }
 
     protected void ensureSuccess(HttpResponse<String> response, String operation) {
@@ -115,18 +110,10 @@ public abstract class AbstractCryptoClientController {
      * @throws Exception if an error occurs during decryption
      */
     protected String decryptResponseData(AesCipherPayload responsePayload, SecretKey sessionKey) throws Exception {
-        String encryptedDataBase64 = responsePayload.encryptedDataBase64();
-        String ivBase64 = responsePayload.ivBase64();
-
-        Cipher aesCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
-        aesCipher.init(
-                Cipher.DECRYPT_MODE,
+        return AesGcmCryptoService.decryptFromBase64(
+                responsePayload.encryptedDataBase64(),
                 sessionKey,
-                new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, EncodingUtils.fromBase64(ivBase64))
-        );
-        return new String(
-                aesCipher.doFinal(EncodingUtils.fromBase64(encryptedDataBase64)),
-                StandardCharsets.UTF_8
+                responsePayload.ivBase64()
         );
     }
 }
