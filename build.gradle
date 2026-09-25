@@ -1,5 +1,5 @@
 allprojects {
-    group = 'com.example.demo'
+    group = 'com.ikea.crypto'
     version = '1.0-SNAPSHOT'
 
     repositories {

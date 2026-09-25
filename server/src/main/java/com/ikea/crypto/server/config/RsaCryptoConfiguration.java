@@ -1,0 +1,21 @@
+package com.ikea.crypto.server.config;
+
+import com.ikea.crypto.server.service.RsaCryptoServer;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.io.IOException;
+import java.nio.file.Path;
+import java.security.GeneralSecurityException;
+
+@Configuration
+public class RsaCryptoConfiguration {
+    @Bean
+    public RsaCryptoServer rsaCryptoServer(
+            @Value("${rsa.crypto.key-directory:src/main/resources/keys}") String keyDirectory
+    ) throws GeneralSecurityException, IOException {
+        return RsaCryptoServer.create(Path.of(keyDirectory));
+    }
+
+}
