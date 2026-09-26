@@ -43,11 +43,10 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
     public static RsaCryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
         log.info("Creating RsaCryptoServer from keyDirectory={}", keyDirectory);
         AbstractCryptoKeyService.ensureKeyDirectory(keyDirectory);
-        KeyFactory rsaKeyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA);
-        KeyPair rsaKeyPair = AbstractCryptoKeyService.loadOrCreateKeyPair(
+        KeyPair rsaKeyPair = AbstractCryptoKeyService.loadOrCreateLongLivedKeyPair(
                 keyDirectory.resolve("rsa-private-key.pkcs8"),
                 keyDirectory.resolve("rsa-public-key.x509"),
-                rsaKeyFactory,
+                KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA),
                 generator -> generator.initialize(2048)
         );
         return new RsaCryptoServer(rsaKeyPair.getPrivate(), rsaKeyPair.getPublic());
@@ -80,7 +79,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
     }
 
     public SecretKey decryptSessionKeyToSecretKey(String encryptedSessionKeyBase64) throws GeneralSecurityException {
-        log.info("start to decrypt session key from encryptedSessionKeyBase64");
+        log.debug("start to decrypt session key from encryptedSessionKeyBase64");
         if (!StringUtils.hasLength(encryptedSessionKeyBase64)) {
             throw new IllegalArgumentException("Encrypted session key is required.");
         }
@@ -96,7 +95,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws GeneralSecurityException if a security exception occurs during encryption
      */
     public RsaCipherPayload encryptWithRequestSessionKey(String data, String encryptedSessionKeyBase64) throws GeneralSecurityException {
-        log.info("start to encrypt data using AES session key decrypted from encryptedSessionKeyBase64");
+        log.debug("start to encrypt data using AES session key decrypted from encryptedSessionKeyBase64");
         SecretKey sessionKey = CryptoSessionContextAccessor.getResolvedSessionKey();
         if (sessionKey == null) {
             sessionKey = decryptSessionKeyToSecretKey(encryptedSessionKeyBase64);

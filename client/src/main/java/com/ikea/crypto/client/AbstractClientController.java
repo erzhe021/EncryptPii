@@ -1,8 +1,8 @@
 package com.ikea.crypto.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.AesCipherPayload;
+import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.PlainData;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
 import com.ikea.crypto.common.rsa.SessionKeyTransport;
@@ -47,16 +47,20 @@ public abstract class AbstractClientController {
     }
 
     protected HttpResponse<String> sendJsonRequest(String path, Object requestBody) throws Exception {
-        log.info("start to call server endpoint to send json request");
-        return httpClient.send(buildJsonRequest(serverBaseUri.resolve(path), requestBody), HttpResponse.BodyHandlers.ofString());
+        log.debug("start to call server endpoint to send json request");
+        HttpResponse<String> response = httpClient.send(buildJsonRequest(serverBaseUri.resolve(path), requestBody), HttpResponse.BodyHandlers.ofString());
+        ensureSuccess(response, path);
+        return response;
     }
 
     protected HttpResponse<String> sendJsonRequestWithSessionKeyTransport(String data, String path, SessionKeyTransport sessionTransport) throws Exception {
-        log.info("start to call server endpoint to send json request with SessionKeyTransport");
-        return httpClient.send(
+        log.debug("start to call server endpoint to send json request with SessionKeyTransport");
+        HttpResponse<String> response = httpClient.send(
                 buildSessionKeyRequest(serverBaseUri.resolve(path), data, sessionTransport),
                 HttpResponse.BodyHandlers.ofString()
         );
+        ensureSuccess(response, path);
+        return response;
     }
 
     private HttpRequest buildJsonRequest(URI endpoint, Object requestBody) throws Exception {
@@ -89,21 +93,21 @@ public abstract class AbstractClientController {
         }
     }
 
-    protected void ensureSuccess(HttpResponse<String> response, String operation) {
+    private void ensureSuccess(HttpResponse<String> response, String path) {
         if (response.statusCode() != 200) {
-            throw new IllegalStateException(operation + " request failed: status=" + response.statusCode() + ", body=" + response.body());
+            throw new IllegalStateException("request path: " + path + " failed: status=" + response.statusCode() + ", body=" + response.body());
         }
     }
 
     protected SecretKey generateSessionKey() throws Exception {
-        log.info("start to generate AES session key");
+        log.debug("start to generate AES session key");
         KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
         return keyGenerator.generateKey();
     }
 
     protected byte[] generateIv() {
-        log.info("start to generate IV");
+        log.debug("start to generate IV");
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         new SecureRandom().nextBytes(iv);
         return iv;

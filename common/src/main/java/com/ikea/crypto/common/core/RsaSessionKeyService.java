@@ -29,7 +29,7 @@ public final class RsaSessionKeyService {
      * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
      */
     public static String encryptSessionKeyAsBase64(SecretKey sessionKey, PublicKey publicKey) throws GeneralSecurityException {
-        log.info("start to encrypt session key using RSA public key");
+        log.debug("start to encrypt session key using RSA public key");
         return EncodingUtils.toBase64(encryptSessionKey(sessionKey, publicKey));
     }
 
@@ -42,7 +42,7 @@ public final class RsaSessionKeyService {
      * @throws GeneralSecurityException If decryption fails due to cryptographic errors.
      */
     public static SecretKey decryptSessionKeyBase64(String encryptedSessionKeyBase64, PrivateKey privateKey) throws GeneralSecurityException {
-        log.info("start to decrypt session key using RSA private key");
+        log.debug("start to decrypt session key using RSA private key");
         return decryptSessionKey(EncodingUtils.fromBase64(encryptedSessionKeyBase64), privateKey);
     }
 

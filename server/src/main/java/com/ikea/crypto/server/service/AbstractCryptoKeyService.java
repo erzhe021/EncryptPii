@@ -3,14 +3,10 @@ package com.ikea.crypto.server.service;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.GeneralSecurityException;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.PrivateKey;
-import java.security.PublicKey;
+import java.security.*;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+
 public abstract class AbstractCryptoKeyService {
 
     @FunctionalInterface
@@ -22,7 +18,7 @@ public abstract class AbstractCryptoKeyService {
         Files.createDirectories(keyDirectory);
     }
 
-    public static KeyPair loadOrCreateKeyPair(
+    public static KeyPair loadOrCreateLongLivedKeyPair(
             Path privateKeyPath,
             Path publicKeyPath,
             KeyFactory keyFactory,

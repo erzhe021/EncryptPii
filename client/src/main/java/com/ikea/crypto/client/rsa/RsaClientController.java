@@ -1,8 +1,8 @@
 package com.ikea.crypto.client.rsa;
 
 import com.ikea.crypto.client.AbstractClientController;
-import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.AesCipherPayload;
+import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.PlainData;
 import com.ikea.crypto.common.rsa.RsaCipherPayload;
@@ -51,7 +51,6 @@ public class RsaClientController extends AbstractClientController {
         RsaCryptoClient.EncryptionResult encrypted = rsaCryptoClient.encrypt(toJsonString(plainData));
         RsaCipherPayload requestPayload = encrypted.payload();
         HttpResponse<String> response = sendJsonRequest(rsaBidirectionalPath, requestPayload);
-        ensureSuccess(response, "bidirectional RSA encrypt");
         // Decrypt the server's response using the same session key and IV
         RsaCipherPayload responsePayload = objectMapper.readValue(response.body(), RsaCipherPayload.class);
         String decryptedServerResponse = rsaCryptoClient.decrypt(responsePayload, encrypted.context());
@@ -69,7 +68,6 @@ public class RsaClientController extends AbstractClientController {
         RsaCipherPayload requestPayload = encrypted.payload();
 
         HttpResponse<String> response = sendJsonRequest(rsaRequestOnlyPath, requestPayload);
-        ensureSuccess(response, "request-only RSA encrypt");
 
         PlainData responseData = objectMapper.readValue(response.body(), PlainData.class);
 
@@ -93,7 +91,6 @@ public class RsaClientController extends AbstractClientController {
         SessionKeyTransport sessionTransport = SessionKeyTransport.fromGeneratedKey(sessionKey, iv, rsaPublicKey);
 
         HttpResponse<String> response = sendJsonRequestWithSessionKeyTransport(data, rsaResponseOnlyPath, sessionTransport);
-        ensureSuccess(response, "response-only RSA encrypt");
 
         AesCipherPayload responsePayload = objectMapper.readValue(response.body(), AesCipherPayload.class);
 

@@ -1,8 +1,8 @@
 package com.ikea.crypto.client.ecdh;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.client.PublicKeyProvider;
 import com.ikea.crypto.common.ecdh.EcdhPublicKeyResponse;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -33,12 +33,12 @@ public class EcdhHttpClient implements PublicKeyProvider {
 
     @Override
     public Object fetchServerPublicKey() throws GeneralSecurityException {
-        log.info("start to fetching ECDH ephemeral public key and ECDSA public key from server");
+        log.debug("start to fetching ECDH ephemeral public key and ECDSA public key from server");
         HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
                 .build();
         try {
-            log.info("start to call server endpoint to fetch ECDH ephemeral public key and ECDSA public key");
+            log.debug("start to call server endpoint to fetch ECDH ephemeral public key and ECDSA public key");
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
                 throw new GeneralSecurityException(

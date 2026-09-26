@@ -16,3 +16,7 @@ ecdh:
 rsa:
   crypto:
     key-directory: ${user.dir}/server/src/main/resources/keys
+
+logging:
+  level:
+    com.ikea.crypto: DEBUG

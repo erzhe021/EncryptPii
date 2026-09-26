@@ -60,7 +60,7 @@ public class RsaCryptoClient {
         );
 
         // Generate a random AES session key
-        log.info("start to generate client AES session key");
+        log.debug("start to generate client AES session key");
         SecretKey sessionKey = CryptoSessionMaterialFactory.generateAesSessionKey(secureRandom);
 
         // Generate a random IV for AES encryption
@@ -73,7 +73,7 @@ public class RsaCryptoClient {
         String encryptedSessionKeyBase64 = RsaSessionKeyService.encryptSessionKeyAsBase64(sessionKey, serverPublicKey);
 
         // Return the encrypted payload containing the encrypted session key, IV, and encrypted data
-        log.info("put session key in context for future decryption");
+        log.debug("put session key in context for future decryption");
         return new EncryptionResult(
                 new RsaCipherPayload(
                         encryptedSessionKeyBase64,
@@ -101,7 +101,7 @@ public class RsaCryptoClient {
      * @throws IllegalStateException    If the AES session key is not available for decryption.
      */
     public String decrypt(RsaCipherPayload payload, CryptoRequestContext context) throws GeneralSecurityException {
-        log.info("start to decrypt data using AES session key in context");
+        log.debug("start to decrypt data using AES session key in context");
         if (payload == null) {
             throw new IllegalArgumentException("payload cannot be null");
         }

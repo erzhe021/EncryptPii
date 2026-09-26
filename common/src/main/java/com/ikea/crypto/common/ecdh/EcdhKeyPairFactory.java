@@ -20,7 +20,7 @@ public final class EcdhKeyPairFactory {
     }
 
     public static KeyPair generateEphemeralKeyPair(SecureRandom secureRandom) throws GeneralSecurityException {
-        log.info("Generating ephemeral ECDH key pair using curve: {}", CryptoConstants.CURVE_ECDH);
+        log.debug("Generating ephemeral ECDH key pair using curve: {}", CryptoConstants.CURVE_ECDH);
         KeyPairGenerator keyPairGenerator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
         if (secureRandom != null) {
             keyPairGenerator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH), secureRandom);

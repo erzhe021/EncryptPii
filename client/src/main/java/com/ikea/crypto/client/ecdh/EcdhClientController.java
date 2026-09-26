@@ -41,7 +41,6 @@ public class EcdhClientController extends AbstractClientController {
         EcdhCryptoClient.EncryptionResult encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
         EcdhCipherPayload requestPayload = encrypted.payload();
         HttpResponse<String> response = sendJsonRequest(ecdhBidirectionalPath, requestPayload);
-        ensureSuccess(response, "bidirectional ECDH encrypt");
         EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);
         String decryptedServerResponse = ecdhCryptoClient.decrypt(responsePayload, encrypted.context());
         PlainData decryptedServerResponseData = objectMapper.readValue(decryptedServerResponse, PlainData.class);
@@ -59,7 +58,6 @@ public class EcdhClientController extends AbstractClientController {
 
 
         HttpResponse<String> response = sendJsonRequest(ecdhRequestOnlyPath, requestPayload);
-        ensureSuccess(response, "request-only ECDH encrypt");
         PlainData responsePlainData = objectMapper.readValue(response.body(), PlainData.class);
 
         return Map.of(
@@ -75,7 +73,6 @@ public class EcdhClientController extends AbstractClientController {
         );
         EcdhPlainPayload requestPayload = responseOnlySession.request();
         HttpResponse<String> response = sendJsonRequest(ecdhResponseOnlyPath, requestPayload);
-        ensureSuccess(response, "response-only ECDH encrypt");
         EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);
         // Decrypt the response using the session context
         String decryptedResponseData = ecdhCryptoClient.decrypt(responsePayload, responseOnlySession.context());
