@@ -3,7 +3,7 @@ package com.ikea.crypto.server.api;
 import com.ikea.crypto.common.PlainData;
 import com.ikea.crypto.common.SensitiveData;
 import com.ikea.crypto.common.ecdh.EcdhPublicKeyResponse;
-import com.ikea.crypto.common.ecdh.EcdhResponseOnlyRequest;
+import com.ikea.crypto.common.ecdh.EcdhPlainPayload;
 import com.ikea.crypto.server.advice.DecryptRequest;
 import com.ikea.crypto.server.advice.EncryptResponse;
 import com.ikea.crypto.server.context.CryptoSessionContext;
@@ -45,9 +45,9 @@ public class EcdhServerController {
 
     @PostMapping("/response-only")
     @EncryptResponse(CryptoAlgorithm.ECDH)
-    public PlainData responseOnlyEcdhEncrypt(@Valid @RequestBody EcdhResponseOnlyRequest request) {
+    public PlainData responseOnlyEcdhEncrypt(@Valid @RequestBody EcdhPlainPayload request) {
         CryptoSessionContextAccessor.setCryptoSessionContext(
-                CryptoSessionContext.ecdhResponseOnly(request.toHandshakeContext())
+                CryptoSessionContext.ecdhResponseOnly(request.handshakeContext())
         );
         return new PlainData("mock ecdh response for request - " + request.data());
     }

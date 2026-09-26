@@ -3,7 +3,7 @@ package com.ikea.crypto.client.ecdh;
 import com.ikea.crypto.client.AbstractClientController;
 import com.ikea.crypto.common.PlainData;
 import com.ikea.crypto.common.ecdh.EcdhCipherPayload;
-import com.ikea.crypto.common.ecdh.EcdhResponseOnlyRequest;
+import com.ikea.crypto.common.ecdh.EcdhPlainPayload;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -73,7 +73,7 @@ public class EcdhClientController extends AbstractClientController {
         EcdhCryptoClient.ResponseOnlySession responseOnlySession = ecdhCryptoClient.createResponseOnlySession(
                 plainData == null ? null : plainData.data()
         );
-        EcdhResponseOnlyRequest requestPayload = responseOnlySession.request();
+        EcdhPlainPayload requestPayload = responseOnlySession.request();
         HttpResponse<String> response = sendJsonRequest(ecdhResponseOnlyPath, requestPayload);
         ensureSuccess(response, "response-only ECDH encrypt");
         EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);

@@ -45,8 +45,8 @@ public class EcdhCryptoCodec extends AbstractCryptoCodec {
         }
         if (sessionContext.requestKeyMaterial() instanceof EcdhCipherPayload requestPayload) {
             EcdhHandshakeContext ecdhHandshakeContext = new EcdhHandshakeContext(
-                    requestPayload.clientEphemeralPublicKeyBase64(),
-                    requestPayload.serverEphemeralPublicKeyBase64()
+                    requestPayload.handshakeContext().clientEphemeralPublicKeyBase64(),
+                    requestPayload.handshakeContext().serverEphemeralPublicKeyBase64()
             );
             return ecdhCryptoServer.encryptWithEcdhHandshakeContext(responseBodyString, ecdhHandshakeContext);
         }

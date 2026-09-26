@@ -16,7 +16,7 @@
 | Server -> Client | RSA 仅响应加密 | 响应体 `AesCipherPayload` | `ivBase64`、`encryptedDataBase64` |
 | Client -> Server | ECDH 双向/请求加密 | 请求体 `EcdhCipherPayload` | `clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64`、`ivBase64`、`encryptedDataBase64` |
 | Server -> Client | ECDH 双向响应 | 响应体 `EcdhCipherPayload` | `clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64`、`ivBase64`、`encryptedDataBase64` |
-| Client -> Server | ECDH 仅响应加密 | 请求体 `EcdhResponseOnlyRequest` | `data`、`clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64` |
+| Client -> Server | ECDH 仅响应加密 | 请求体 `EcdhPlainPayload` | `data`、`clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64` |
 | Server -> Client | ECDH 仅响应加密 | 响应体 `EcdhCipherPayload` | `clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64`、`ivBase64`、`encryptedDataBase64` |
 
 **字段含义：**

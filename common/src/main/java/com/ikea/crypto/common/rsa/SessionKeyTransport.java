@@ -14,6 +14,9 @@ import java.security.PublicKey;
  * SessionKeyTransport is a record that encapsulates the encrypted session key and initialization vector (IV)
  * for secure transport in HTTP headers. It provides methods to create an instance from a generated session key
  * and to apply the session key and IV to an HTTP request.
+ *
+ * This record is only used in RSA response-only encryption, where the client sends a request without encryption, and the server responds with encrypted data.
+ * The client must provide the session key and IV in the request headers for the server to encrypt the response.
  */
 @Slf4j
 public record SessionKeyTransport(

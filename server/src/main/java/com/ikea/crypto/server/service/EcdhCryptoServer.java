@@ -1,5 +1,6 @@
 package com.ikea.crypto.server.service;
 
+import com.ikea.crypto.common.AesCipherPayload;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
@@ -133,7 +134,7 @@ public class EcdhCryptoServer {
     public String decrypt(EcdhCipherPayload payload) throws GeneralSecurityException {
         log.info("start to decrypt EcdhCipherPayload");
         validatePayload(payload);
-        String serverPublicKeyBase64 = payload.serverEphemeralPublicKeyBase64();
+        String serverPublicKeyBase64 = payload.handshakeContext().serverEphemeralPublicKeyBase64();
         // Load the server's ephemeral private key corresponding to the provided server ephemeral public key
         PrivateKey serverPrivateKey = loadEphemeralPrivateKey(serverPublicKeyBase64);
         if (serverPrivateKey == null) {
@@ -144,14 +145,14 @@ public class EcdhCryptoServer {
         }
 
         PublicKey clientEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
-                new X509EncodedKeySpec(EncodingUtils.fromBase64(payload.clientEphemeralPublicKeyBase64()))
+                new X509EncodedKeySpec(EncodingUtils.fromBase64(payload.handshakeContext().clientEphemeralPublicKeyBase64()))
         );
 
         log.info("Deriving AES key from serverPrivateKey(load from redis), clientEphemeralPublicKey, iv and hkdfInfo");
         SecretKey sessionKey = EcdhKeyAgreementService.deriveAesKey(
                 serverPrivateKey,
                 clientEphemeralPublicKey,
-                EncodingUtils.fromBase64(payload.ivBase64()),
+                EncodingUtils.fromBase64(payload.aesCipherPayload().ivBase64()),
                 CryptoConstants.HKDF_INFO_REQUEST_AES_KEY
         );
 
@@ -227,10 +228,14 @@ public class EcdhCryptoServer {
         String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, aesKey, iv);
 
         return new EcdhCipherPayload(
-                clientPublicKeyBase64,
-                serverPublicKeyBase64,
-                EncodingUtils.toBase64(iv),
-                encryptedDataBase64
+                new EcdhHandshakeContext(
+                        clientPublicKeyBase64,
+                        serverPublicKeyBase64
+                ),
+                new AesCipherPayload(
+                        EncodingUtils.toBase64(iv),
+                        encryptedDataBase64
+                )
         );
     }
 
@@ -244,16 +249,16 @@ public class EcdhCryptoServer {
         if (payload == null) {
             throw new IllegalArgumentException("Payload cannot be null");
         }
-        if (!StringUtils.hasLength(payload.clientEphemeralPublicKeyBase64())) {
+        if (!StringUtils.hasLength(payload.handshakeContext().clientEphemeralPublicKeyBase64())) {
             throw new IllegalArgumentException("Client ephemeral public key is required for ECDH decryption but was not provided.");
         }
-        if (!StringUtils.hasLength(payload.serverEphemeralPublicKeyBase64())) {
+        if (!StringUtils.hasLength(payload.handshakeContext().serverEphemeralPublicKeyBase64())) {
             throw new IllegalArgumentException("Server ephemeral public key is required for ECDH Ephemeral decryption but was not provided.");
         }
-        if (!StringUtils.hasLength(payload.ivBase64())) {
+        if (!StringUtils.hasLength(payload.aesCipherPayload().ivBase64())) {
             throw new IllegalArgumentException("IV is required but was not provided.");
         }
-        if (!StringUtils.hasLength(payload.encryptedDataBase64())) {
+        if (!StringUtils.hasLength(payload.aesCipherPayload().encryptedDataBase64())) {
             throw new IllegalArgumentException("Encrypted data is required but was not provided.");
         }
     }
@@ -268,9 +273,9 @@ public class EcdhCryptoServer {
      */
     private String decryptWithAes(EcdhCipherPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
         return AesGcmCryptoService.decryptFromBase64(
-                payload.encryptedDataBase64(),
+                payload.aesCipherPayload().encryptedDataBase64(),
                 sessionKey,
-                payload.ivBase64()
+                payload.aesCipherPayload().ivBase64()
         );
     }
 

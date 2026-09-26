@@ -2,6 +2,7 @@ package com.ikea.crypto.client.ecdh;
 
 import com.ikea.crypto.client.CryptoRequestContext;
 import com.ikea.crypto.client.PublicKeyProvider;
+import com.ikea.crypto.common.AesCipherPayload;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
@@ -30,7 +31,7 @@ public class EcdhCryptoClient {
     public record EncryptionResult(EcdhCipherPayload payload, CryptoRequestContext context) {
     }
 
-    public record ResponseOnlySession(EcdhResponseOnlyRequest request, CryptoRequestContext context) {
+    public record ResponseOnlySession(EcdhPlainPayload request, CryptoRequestContext context) {
     }
 
     public EcdhCryptoClient(PublicKeyProvider publicKeyProvider) {
@@ -66,10 +67,14 @@ public class EcdhCryptoClient {
 
         return new EncryptionResult(
                 new EcdhCipherPayload(
-                        negotiatedKeys.clientEphemeralPublicKeyBase64(),
-                        publicKeyResponse.ephemeralPublicKeyBase64(),
-                        EncodingUtils.toBase64(iv),
-                        encryptedDataBase64
+                        new EcdhHandshakeContext(
+                                negotiatedKeys.clientEphemeralPublicKeyBase64(),
+                                publicKeyResponse.ephemeralPublicKeyBase64()
+                        ),
+                        new AesCipherPayload(
+                                EncodingUtils.toBase64(iv),
+                                encryptedDataBase64
+                        )
                 ),
                 new CryptoRequestContext(
                         CryptoConstants.ALGORITHM_ECDH,
@@ -101,10 +106,12 @@ public class EcdhCryptoClient {
         verifyServerEphemeralPublicKey(publicKeyResponse);
         NegotiatedKeys negotiatedKeys = negotiateKeys(publicKeyResponse.ephemeralPublicKeyBase64());
         return new ResponseOnlySession(
-                new EcdhResponseOnlyRequest(
-                        data,
-                        negotiatedKeys.clientEphemeralPublicKeyBase64(),
-                        publicKeyResponse.ephemeralPublicKeyBase64()
+                new EcdhPlainPayload(
+                        new EcdhHandshakeContext(
+                                negotiatedKeys.clientEphemeralPublicKeyBase64(),
+                                publicKeyResponse.ephemeralPublicKeyBase64()
+                        ),
+                        data
                 ),
                 new CryptoRequestContext(
                         CryptoConstants.ALGORITHM_ECDH,
@@ -137,13 +144,13 @@ public class EcdhCryptoClient {
         SecretKey responseKey = EcdhKeyAgreementService.deriveAesKey(
                 context.clientEphemeralPrivateKey(),
                 context.serverEphemeralPublicKey(),
-                EncodingUtils.fromBase64(payload.ivBase64()),
+                EncodingUtils.fromBase64(payload.aesCipherPayload().ivBase64()),
                 CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY);
 
         return AesGcmCryptoService.decryptFromBase64(
-                payload.encryptedDataBase64(),
+                payload.aesCipherPayload().encryptedDataBase64(),
                 responseKey,
-                payload.ivBase64()
+                payload.aesCipherPayload().ivBase64()
         );
     }
 
