@@ -35,7 +35,7 @@ public final class CryptoSessionContextAccessor {
         if (threadLocalContext != null) {
             return threadLocalContext;
         }
-
+        // If not found in thread-local, check the request attributes
         RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();
         if (requestAttributes != null) {
             Object value = requestAttributes.getAttribute(
@@ -43,6 +43,7 @@ public final class CryptoSessionContextAccessor {
                     RequestAttributes.SCOPE_REQUEST
             );
             if (value instanceof CryptoSessionContext<?> sessionContext) {
+                // Cache the context in the thread-local for faster access in subsequent calls within the same request
                 THREAD_LOCAL.set(sessionContext);
                 return sessionContext;
             }

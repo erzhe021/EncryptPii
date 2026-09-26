@@ -5,7 +5,7 @@ import com.ikea.crypto.client.PublicKeyProvider;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
-import com.ikea.crypto.common.core.HybridCryptoSessionService;
+import com.ikea.crypto.common.core.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.ecdh.*;
 import lombok.extern.slf4j.Slf4j;
 
@@ -54,7 +54,7 @@ public class EcdhCryptoClient {
         verifyServerEphemeralPublicKey(publicKeyResponse);
         NegotiatedKeys negotiatedKeys = negotiateKeys(publicKeyResponse.ephemeralPublicKeyBase64());
 
-        byte[] iv = HybridCryptoSessionService.generateIv(secureRandom);
+        byte[] iv = CryptoSessionMaterialFactory.generateIv(secureRandom);
         log.info("Deriving AES key from sharedSecret and iv with hkdfInfo");
         SecretKey sessionKey = EcdhKeyAgreementService.deriveAesKey(
                 negotiatedKeys.sharedSecret(),

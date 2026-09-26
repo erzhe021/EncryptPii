@@ -3,7 +3,7 @@ package com.ikea.crypto.server.service;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
-import com.ikea.crypto.common.core.HybridCryptoSessionService;
+import com.ikea.crypto.common.core.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.ecdh.*;
 import com.ikea.crypto.server.config.EcdhCryptoConfiguration;
 import lombok.Getter;
@@ -214,7 +214,7 @@ public class EcdhCryptoServer {
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(clientPublicKeyBase64))
         );
 
-        byte[] iv = HybridCryptoSessionService.generateIv(new SecureRandom());
+        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
 
         log.info("Deriving AES key from serverPrivateKey, clientEphemeralPublicKey, iv and hkdfInfo");
         SecretKey aesKey = EcdhKeyAgreementService.deriveAesKey(

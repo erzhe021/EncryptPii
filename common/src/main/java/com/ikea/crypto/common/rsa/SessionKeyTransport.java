@@ -39,7 +39,7 @@ public record SessionKeyTransport(
         }
 
         return new SessionKeyTransport(
-                RsaSessionKeyService.encryptSessionKeyBase64(sessionKey, serverPublicKey),
+                RsaSessionKeyService.encryptSessionKeyAsBase64(sessionKey, serverPublicKey),
                 EncodingUtils.toBase64(iv)
         );
     }

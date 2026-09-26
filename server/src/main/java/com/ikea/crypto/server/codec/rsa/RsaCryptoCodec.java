@@ -1,7 +1,7 @@
 package com.ikea.crypto.server.codec.rsa;
 
 import com.ikea.crypto.common.CryptoConstants;
-import com.ikea.crypto.common.DefaultAesCipherPayload;
+import com.ikea.crypto.common.AesCipherPayload;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.rsa.SessionKeyTransport;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
@@ -50,7 +50,7 @@ public class RsaCryptoCodec extends AbstractCryptoCodec {
         throw new InvalidCryptoPayloadException("Unsupported RSA session key material: " + sessionContext.requestKeyMaterial());
     }
 
-    private DefaultAesCipherPayload encryptWithSessionKeyTransport(String responseBodyString, SessionKeyTransport sessionKeyTransport)
+    private AesCipherPayload encryptWithSessionKeyTransport(String responseBodyString, SessionKeyTransport sessionKeyTransport)
             throws GeneralSecurityException {
         SecretKey sessionKey = new SecretKeySpec(
                 rsaCryptoServer.decryptSessionKey(sessionKeyTransport.encryptedSessionKeyBase64()),
@@ -58,7 +58,7 @@ public class RsaCryptoCodec extends AbstractCryptoCodec {
         );
         byte[] iv = EncodingUtils.fromBase64(sessionKeyTransport.ivBase64());
         String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(responseBodyString, sessionKey, iv);
-        return new DefaultAesCipherPayload(
+        return new AesCipherPayload(
                 sessionKeyTransport.ivBase64(),
                 encryptedDataBase64
         );

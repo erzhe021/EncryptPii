@@ -2,7 +2,7 @@ package com.ikea.crypto.client.rsa;
 
 import com.ikea.crypto.client.AbstractClientController;
 import com.ikea.crypto.common.CryptoConstants;
-import com.ikea.crypto.common.DefaultAesCipherPayload;
+import com.ikea.crypto.common.AesCipherPayload;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.PlainData;
 import com.ikea.crypto.common.rsa.RsaCipherPayload;
@@ -95,7 +95,7 @@ public class RsaClientController extends AbstractClientController {
         HttpResponse<String> response = sendJsonRequestWithSessionKeyTransport(data, rsaResponseOnlyPath, sessionTransport);
         ensureSuccess(response, "response-only RSA encrypt");
 
-        DefaultAesCipherPayload responsePayload = objectMapper.readValue(response.body(), DefaultAesCipherPayload.class);
+        AesCipherPayload responsePayload = objectMapper.readValue(response.body(), AesCipherPayload.class);
 
         // Decrypt the response data using the session key and IV
         String decryptedResponseData = decryptResponseData(responsePayload, sessionKey);

@@ -3,7 +3,7 @@ package com.ikea.crypto.server.service;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
-import com.ikea.crypto.common.core.HybridCryptoSessionService;
+import com.ikea.crypto.common.core.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.core.RsaSessionKeyService;
 import com.ikea.crypto.common.rsa.RsaCipherPayload;
 import com.ikea.crypto.common.rsa.RsaPublicKeyResponse;
@@ -63,6 +63,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
     public String decrypt(RsaCipherPayload payload) throws GeneralSecurityException {
         validatePayload(payload);
         SecretKey sessionKey = decryptSessionKeyToSecretKey(payload.encryptedSessionKeyBase64());
+        // Store the resolved session key in the request-scoped context for potential reuse
         CryptoSessionContextAccessor.setResolvedSessionKey(sessionKey);
         return decryptWithAes(payload, sessionKey);
     }
@@ -100,7 +101,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
         if (sessionKey == null) {
             sessionKey = decryptSessionKeyToSecretKey(encryptedSessionKeyBase64);
         }
-        byte[] iv = HybridCryptoSessionService.generateIv(new SecureRandom());
+        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
         String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, sessionKey, iv);
         return new RsaCipherPayload(
                 encryptedSessionKeyBase64,

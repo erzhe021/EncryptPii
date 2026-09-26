@@ -21,34 +21,6 @@ public final class RsaSessionKeyService {
     }
 
     /**
-     * Encrypts the given AES session key using the provided RSA public key.
-     *
-     * @param sessionKey The AES session key to encrypt.
-     * @param publicKey  The RSA public key used for encryption.
-     * @return The encrypted session key as a byte array.
-     * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
-     */
-    public static byte[] encryptSessionKey(SecretKey sessionKey, PublicKey publicKey) throws GeneralSecurityException {
-        Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
-        rsaCipher.init(Cipher.ENCRYPT_MODE, publicKey);
-        return rsaCipher.doFinal(sessionKey.getEncoded());
-    }
-
-    /**
-     * Decrypts the given AES session key using the provided RSA private key.
-     *
-     * @param encryptedSessionKey The encrypted AES session key as a byte array.
-     * @param privateKey          The RSA private key used for decryption.
-     * @return The decrypted AES session key.
-     * @throws GeneralSecurityException If decryption fails due to cryptographic errors.
-     */
-    public static SecretKey decryptSessionKey(byte[] encryptedSessionKey, PrivateKey privateKey) throws GeneralSecurityException {
-        Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
-        rsaCipher.init(Cipher.DECRYPT_MODE, privateKey);
-        return new SecretKeySpec(rsaCipher.doFinal(encryptedSessionKey), CryptoConstants.ALGORITHM_AES);
-    }
-
-    /**
      * Encrypts the given AES session key using the provided RSA public key and encodes the result as a Base64 string.
      *
      * @param sessionKey The AES session key to encrypt.
@@ -56,7 +28,7 @@ public final class RsaSessionKeyService {
      * @return The encrypted session key as a Base64-encoded string.
      * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
      */
-    public static String encryptSessionKeyBase64(SecretKey sessionKey, PublicKey publicKey) throws GeneralSecurityException {
+    public static String encryptSessionKeyAsBase64(SecretKey sessionKey, PublicKey publicKey) throws GeneralSecurityException {
         log.info("start to encrypt session key using RSA public key");
         return EncodingUtils.toBase64(encryptSessionKey(sessionKey, publicKey));
     }
@@ -72,5 +44,34 @@ public final class RsaSessionKeyService {
     public static SecretKey decryptSessionKeyBase64(String encryptedSessionKeyBase64, PrivateKey privateKey) throws GeneralSecurityException {
         log.info("start to decrypt session key using RSA private key");
         return decryptSessionKey(EncodingUtils.fromBase64(encryptedSessionKeyBase64), privateKey);
+    }
+
+
+    /**
+     * Encrypts the given AES session key using the provided RSA public key.
+     *
+     * @param sessionKey The AES session key to encrypt.
+     * @param publicKey  The RSA public key used for encryption.
+     * @return The encrypted session key as a byte array.
+     * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
+     */
+    private static byte[] encryptSessionKey(SecretKey sessionKey, PublicKey publicKey) throws GeneralSecurityException {
+        Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
+        rsaCipher.init(Cipher.ENCRYPT_MODE, publicKey);
+        return rsaCipher.doFinal(sessionKey.getEncoded());
+    }
+
+    /**
+     * Decrypts the given AES session key using the provided RSA private key.
+     *
+     * @param encryptedSessionKey The encrypted AES session key as a byte array.
+     * @param privateKey          The RSA private key used for decryption.
+     * @return The decrypted AES session key.
+     * @throws GeneralSecurityException If decryption fails due to cryptographic errors.
+     */
+    private static SecretKey decryptSessionKey(byte[] encryptedSessionKey, PrivateKey privateKey) throws GeneralSecurityException {
+        Cipher rsaCipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_RSA);
+        rsaCipher.init(Cipher.DECRYPT_MODE, privateKey);
+        return new SecretKeySpec(rsaCipher.doFinal(encryptedSessionKey), CryptoConstants.ALGORITHM_AES);
     }
 }

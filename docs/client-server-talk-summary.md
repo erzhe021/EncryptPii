@@ -13,7 +13,7 @@
 | Client -> Server | RSA 双向/请求加密 | 请求体 `RsaCipherPayload` | `encryptedSessionKeyBase64`、`ivBase64`、`encryptedDataBase64` |
 | Server -> Client | RSA 双向响应 | 响应体 `RsaCipherPayload` | `encryptedSessionKeyBase64(与请求一致)`、`ivBase64`、`encryptedDataBase64` |
 | Client -> Server | RSA 仅响应加密 | 请求头 | `X-Client-Session-Key=encryptedSessionKeyBase64`、`X-Client-Session-IV=ivBase64` |
-| Server -> Client | RSA 仅响应加密 | 响应体 `DefaultAesCipherPayload` | `ivBase64`、`encryptedDataBase64` |
+| Server -> Client | RSA 仅响应加密 | 响应体 `AesCipherPayload` | `ivBase64`、`encryptedDataBase64` |
 | Client -> Server | ECDH 双向/请求加密 | 请求体 `EcdhCipherPayload` | `clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64`、`ivBase64`、`encryptedDataBase64` |
 | Server -> Client | ECDH 双向响应 | 响应体 `EcdhCipherPayload` | `clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64`、`ivBase64`、`encryptedDataBase64` |
 | Client -> Server | ECDH 仅响应加密 | 请求体 `EcdhResponseOnlyRequest` | `data`、`clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64` |

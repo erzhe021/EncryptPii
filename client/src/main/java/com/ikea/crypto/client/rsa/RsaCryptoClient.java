@@ -5,7 +5,7 @@ import com.ikea.crypto.client.PublicKeyProvider;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
-import com.ikea.crypto.common.core.HybridCryptoSessionService;
+import com.ikea.crypto.common.core.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.core.RsaSessionKeyService;
 import com.ikea.crypto.common.rsa.RsaCipherPayload;
 import com.ikea.crypto.common.rsa.RsaPublicKeyResponse;
@@ -61,16 +61,16 @@ public class RsaCryptoClient {
 
         // Generate a random AES session key
         log.info("start to generate client AES session key");
-        SecretKey sessionKey = HybridCryptoSessionService.generateAesSessionKey(secureRandom);
+        SecretKey sessionKey = CryptoSessionMaterialFactory.generateAesSessionKey(secureRandom);
 
         // Generate a random IV for AES encryption
-        byte[] iv = HybridCryptoSessionService.generateIv(secureRandom);
+        byte[] iv = CryptoSessionMaterialFactory.generateIv(secureRandom);
 
         // Encrypt the data with AES using the session key and IV
         String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, sessionKey, iv);
 
         // Encrypt the AES session key with the server's RSA public key
-        String encryptedSessionKeyBase64 = RsaSessionKeyService.encryptSessionKeyBase64(sessionKey, serverPublicKey);
+        String encryptedSessionKeyBase64 = RsaSessionKeyService.encryptSessionKeyAsBase64(sessionKey, serverPublicKey);
 
         // Return the encrypted payload containing the encrypted session key, IV, and encrypted data
         log.info("put session key in context for future decryption");

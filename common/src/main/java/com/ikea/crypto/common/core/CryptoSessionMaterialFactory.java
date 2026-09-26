@@ -1,15 +1,18 @@
 package com.ikea.crypto.common.core;
 
 import com.ikea.crypto.common.CryptoConstants;
-import com.ikea.crypto.common.EncodingUtils;
 
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.security.GeneralSecurityException;
 import java.security.SecureRandom;
 
-public final class HybridCryptoSessionService {
-    private HybridCryptoSessionService() {
+/**
+ * CryptoSessionMaterialFactory provides utility methods for generating cryptographic session materials,
+ * including AES session keys and initialization vectors (IVs).
+ */
+public final class CryptoSessionMaterialFactory {
+    private CryptoSessionMaterialFactory() {
     }
 
     public static SecretKey generateAesSessionKey(SecureRandom secureRandom) throws GeneralSecurityException {
@@ -22,9 +25,5 @@ public final class HybridCryptoSessionService {
         byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
         secureRandom.nextBytes(iv);
         return iv;
-    }
-
-    public static String toBase64(byte[] bytes) {
-        return EncodingUtils.toBase64(bytes);
     }
 }

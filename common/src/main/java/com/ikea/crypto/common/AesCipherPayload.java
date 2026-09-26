@@ -1,13 +1,15 @@
 package com.ikea.crypto.common;
 
 /**
- * Represents the payload of an AES cipher, including the initialization vector and the encrypted data.
+ * Default AES cipher payload containing the initialization vector and encrypted data.
  */
-public interface AesCipherPayload {
+public record AesCipherPayload(
 
-    //initialization vector for aes
-    String ivBase64();
+        //initialization vector for aes
+        String ivBase64,
 
-    //data encrypted with aes
-    String encryptedDataBase64();
+        //data encrypted with aes
+        String encryptedDataBase64
+
+) {
 }

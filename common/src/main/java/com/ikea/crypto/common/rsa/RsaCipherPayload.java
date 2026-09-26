@@ -1,7 +1,5 @@
 package com.ikea.crypto.common.rsa;
 
-import com.ikea.crypto.common.AesCipherPayload;
-
 /**
  * RSA cipher payload containing the encrypted session key, initialization vector, and encrypted data.
  */
@@ -14,5 +12,5 @@ public record RsaCipherPayload(
 
         //data encrypted with aes
         String encryptedDataBase64
-) implements AesCipherPayload {
+) {
 }
