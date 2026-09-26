@@ -5,8 +5,6 @@ import com.ikea.crypto.server.codec.CryptoPayloadHandlerRegistry;
 import com.ikea.crypto.server.context.CryptoSessionContext;
 import com.ikea.crypto.server.context.CryptoSessionContextAccessor;
 import com.ikea.crypto.server.error.InvalidCryptoPayloadException;
-import lombok.NonNull;
-import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpInputMessage;
@@ -22,7 +20,6 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
 @ControllerAdvice
-@Slf4j
 public class RequestDecryptAdvice implements RequestBodyAdvice {
 
     private final CryptoPayloadHandlerRegistry handlerRegistry;
@@ -81,11 +78,11 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
      * In this case, we simply return the body as is.
      */
     @Override
-    public @NonNull Object afterBodyRead(@NonNull Object body,
-                                         @NonNull HttpInputMessage inputMessage,
-                                         @NonNull MethodParameter parameter,
-                                         @NonNull Type targetType,
-                                         @NonNull Class<? extends HttpMessageConverter<?>> converterType) {
+    public Object afterBodyRead(Object body,
+                                HttpInputMessage inputMessage,
+                                MethodParameter parameter,
+                                Type targetType,
+                                Class<? extends HttpMessageConverter<?>> converterType) {
         return body;
     }
 
@@ -93,11 +90,11 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
      * If the request body is empty, we can handle it here. In this case, we simply return the body as is.
      */
     @Override
-    public @NonNull Object handleEmptyBody(Object body,
-                                           @NonNull HttpInputMessage inputMessage,
-                                           @NonNull MethodParameter parameter,
-                                           @NonNull Type targetType,
-                                           @NonNull Class<? extends HttpMessageConverter<?>> converterType) {
+    public Object handleEmptyBody(Object body,
+                                  HttpInputMessage inputMessage,
+                                  MethodParameter parameter,
+                                  Type targetType,
+                                  Class<? extends HttpMessageConverter<?>> converterType) {
         return body;
     }
 

@@ -5,13 +5,13 @@ import com.ikea.crypto.client.PublicKeyProvider;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
+import com.ikea.crypto.common.core.HybridCryptoSessionService;
 import com.ikea.crypto.common.ecdh.*;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.KeyAgreement;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.UUID;
@@ -54,8 +54,7 @@ public class EcdhCryptoClient {
         verifyServerEphemeralPublicKey(publicKeyResponse);
         NegotiatedKeys negotiatedKeys = negotiateKeys(publicKeyResponse.ephemeralPublicKeyBase64());
 
-        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
-        secureRandom.nextBytes(iv);
+        byte[] iv = HybridCryptoSessionService.generateIv(secureRandom);
         log.info("Deriving AES key from sharedSecret and iv with hkdfInfo");
         SecretKey sessionKey = EcdhKeyAgreementService.deriveAesKey(
                 negotiatedKeys.sharedSecret(),
@@ -75,12 +74,11 @@ public class EcdhCryptoClient {
                 new CryptoRequestContext(
                         CryptoConstants.ALGORITHM_ECDH,
                         UUID.randomUUID().toString(),
-                        new SecretKeySpec(HkdfUtils.deriveAesKey(
+                        new SecretKeySpec(EcdhKeyAgreementService.deriveAesKey(
                                 negotiatedKeys.sharedSecret(),
                                 iv,
-                                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY.getBytes(StandardCharsets.UTF_8),
-                                CryptoConstants.AES_KEY_SIZE_BITS / Byte.SIZE
-                        ), CryptoConstants.ALGORITHM_AES),
+                                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY
+                        ).getEncoded(), CryptoConstants.ALGORITHM_AES),
                         iv,
                         negotiatedKeys.clientEphemeralPrivateKey(),
                         negotiatedKeys.serverEphemeralPublicKey()

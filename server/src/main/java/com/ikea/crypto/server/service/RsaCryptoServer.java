@@ -3,6 +3,7 @@ package com.ikea.crypto.server.service;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
+import com.ikea.crypto.common.core.HybridCryptoSessionService;
 import com.ikea.crypto.common.core.RsaSessionKeyService;
 import com.ikea.crypto.common.rsa.RsaCipherPayload;
 import com.ikea.crypto.common.rsa.RsaPublicKeyResponse;
@@ -99,8 +100,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
         if (sessionKey == null) {
             sessionKey = decryptSessionKeyToSecretKey(encryptedSessionKeyBase64);
         }
-        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
-        new SecureRandom().nextBytes(iv);
+        byte[] iv = HybridCryptoSessionService.generateIv(new SecureRandom());
         String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, sessionKey, iv);
         return new RsaCipherPayload(
                 encryptedSessionKeyBase64,

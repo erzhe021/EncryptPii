@@ -1,12 +1,14 @@
 package com.ikea.crypto.client;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.common.AesCipherPayload;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.PlainData;
-import com.ikea.crypto.common.rsa.SessionKeyTransport;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ikea.crypto.common.rsa.SessionKeyTransport;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
@@ -60,12 +62,12 @@ public abstract class AbstractClientController {
     private HttpRequest buildJsonRequest(URI endpoint, Object requestBody) throws Exception {
         if (requestBody == null) {
             return HttpRequest.newBuilder(endpoint)
-                    .header("Content-Type", "application/json")
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     .POST(HttpRequest.BodyPublishers.noBody())
                     .build();
         } else {
             return HttpRequest.newBuilder(endpoint)
-                    .header("Content-Type", "application/json")
+                    .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody)))
                     .build();
         }
@@ -74,13 +76,13 @@ public abstract class AbstractClientController {
     private HttpRequest buildSessionKeyRequest(URI endpoint, String data, SessionKeyTransport sessionKeyTransport) throws Exception {
         if (data != null) {
             return sessionKeyTransport.apply(
-                            HttpRequest.newBuilder(endpoint).header("Content-Type", "application/json")
+                            HttpRequest.newBuilder(endpoint).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     )
                     .POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(new PlainData(data))))
                     .build();
         } else {
             return sessionKeyTransport.apply(
-                            HttpRequest.newBuilder(endpoint).header("Content-Type", "application/json")
+                            HttpRequest.newBuilder(endpoint).header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
                     )
                     .POST(HttpRequest.BodyPublishers.noBody())
                     .build();

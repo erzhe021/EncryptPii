@@ -3,6 +3,7 @@ package com.ikea.crypto.server.service;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
+import com.ikea.crypto.common.core.HybridCryptoSessionService;
 import com.ikea.crypto.common.ecdh.*;
 import com.ikea.crypto.server.config.EcdhCryptoConfiguration;
 import lombok.Getter;
@@ -64,7 +65,7 @@ public class EcdhCryptoServer {
             throw new IllegalArgumentException("Maximum ephemeral key count must be greater than zero.");
         }
         if (redisTemplate == null) {
-            throw new IllegalArgumentException("Redis template is required for distributed ECDH ephemeral key storage.");
+            throw new IllegalArgumentException("Redis template is required for ECDH ephemeral key storage.");
         }
         this.ecdsaPrivateKey = ecdsaPrivateKey;
         this.ecdsaPublicKey = ecdsaPublicKey;
@@ -133,6 +134,7 @@ public class EcdhCryptoServer {
         log.info("start to decrypt EcdhCipherPayload");
         validatePayload(payload);
         String serverPublicKeyBase64 = payload.serverEphemeralPublicKeyBase64();
+        // Load the server's ephemeral private key corresponding to the provided server ephemeral public key
         PrivateKey serverPrivateKey = loadEphemeralPrivateKey(serverPublicKeyBase64);
         if (serverPrivateKey == null) {
             throw new IllegalArgumentException(
@@ -145,7 +147,7 @@ public class EcdhCryptoServer {
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(payload.clientEphemeralPublicKeyBase64()))
         );
 
-        log.info("Deriving AES key from serverPrivateKey, clientEphemeralPublicKey, iv and hkdfInfo");
+        log.info("Deriving AES key from serverPrivateKey(load from redis), clientEphemeralPublicKey, iv and hkdfInfo");
         SecretKey sessionKey = EcdhKeyAgreementService.deriveAesKey(
                 serverPrivateKey,
                 clientEphemeralPublicKey,
@@ -212,8 +214,7 @@ public class EcdhCryptoServer {
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(clientPublicKeyBase64))
         );
 
-        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
-        new SecureRandom().nextBytes(iv);
+        byte[] iv = HybridCryptoSessionService.generateIv(new SecureRandom());
 
         log.info("Deriving AES key from serverPrivateKey, clientEphemeralPublicKey, iv and hkdfInfo");
         SecretKey aesKey = EcdhKeyAgreementService.deriveAesKey(

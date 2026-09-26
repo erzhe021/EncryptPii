@@ -2,20 +2,22 @@
 
 ---
 
-**核心传输字段可以按“握手/请求/响应”来总结。** `CryptoRequestContext` 自身不上传；网络上传的是其中派生出的公钥、会话密钥封装、IV、密文等字段。
+**核心传输字段可以按“握手/请求/响应”来总结。** 
+
+网络上传的是派生出的公钥、会话密钥封装、IV、密文等字段。
 
 | 方向 | 场景 | 传输位置 | 核心字段 |
 |---|---|---|---|
-| Server -> Client | RSA 公钥获取 | 响应体 | `publicKey`（`RsaPublicKeyResponse`） |
-| Server -> Client | ECDH 公钥获取 | 响应体 | `ephemeralPublicKeyBase64`，以及其签名/验签相关字段（`EcdhPublicKeyResponse`） |
+| Server -> Client | RSA 公钥获取 | 响应体 `RsaPublicKeyResponse` | `publicKeyBase64` |
+| Server -> Client | ECDH 公钥获取 | 响应体 `EcdhPublicKeyResponse` | `ephemeralPublicKeyBase64`,`ecdsaPublicKeyBase64`,`signatureAlgorithm`,`signatureBase64` |
 | Client -> Server | RSA 双向/请求加密 | 请求体 `RsaCipherPayload` | `encryptedSessionKeyBase64`、`ivBase64`、`encryptedDataBase64` |
-| Server -> Client | RSA 双向响应 | 响应体 `RsaCipherPayload` | `encryptedSessionKeyBase64`、`ivBase64`、`encryptedDataBase64` |
-| Client -> Server | RSA 仅响应加密 | 请求头 | `X-Client-Session-Key`、`X-Client-Session-IV` |
-| Server -> Client | RSA 仅响应加密 | 响应体 | `ivBase64`、`encryptedDataBase64` |
+| Server -> Client | RSA 双向响应 | 响应体 `RsaCipherPayload` | `encryptedSessionKeyBase64(与请求一致)`、`ivBase64`、`encryptedDataBase64` |
+| Client -> Server | RSA 仅响应加密 | 请求头 | `X-Client-Session-Key=encryptedSessionKeyBase64`、`X-Client-Session-IV=ivBase64` |
+| Server -> Client | RSA 仅响应加密 | 响应体 `DefaultAesCipherPayload` | `ivBase64`、`encryptedDataBase64` |
 | Client -> Server | ECDH 双向/请求加密 | 请求体 `EcdhCipherPayload` | `clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64`、`ivBase64`、`encryptedDataBase64` |
 | Server -> Client | ECDH 双向响应 | 响应体 `EcdhCipherPayload` | `clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64`、`ivBase64`、`encryptedDataBase64` |
 | Client -> Server | ECDH 仅响应加密 | 请求体 `EcdhResponseOnlyRequest` | `data`、`clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64` |
-| Server -> Client | ECDH 仅响应加密 | 响应体 | `ivBase64`、`encryptedDataBase64` |
+| Server -> Client | ECDH 仅响应加密 | 响应体 `EcdhCipherPayload` | `clientEphemeralPublicKeyBase64`、`serverEphemeralPublicKeyBase64`、`ivBase64`、`encryptedDataBase64` |
 
 **字段含义：**
 - `encryptedSessionKeyBase64`：客户端生成的 AES 会话密钥，经服务端 RSA 公钥加密后的结果。
