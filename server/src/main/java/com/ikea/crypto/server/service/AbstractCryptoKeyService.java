@@ -1,5 +1,9 @@
 package com.ikea.crypto.server.service;
 
+import com.ikea.crypto.common.CryptoConstants;
+
+import javax.crypto.SecretKey;
+import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -16,6 +20,17 @@ public abstract class AbstractCryptoKeyService {
 
     public static void ensureKeyDirectory(Path keyDirectory) throws IOException {
         Files.createDirectories(keyDirectory);
+    }
+
+    public static SecretKey loadOrCreateMasterKey(Path keyPath) throws IOException {
+        if (Files.exists(keyPath)) {
+            byte[] keyBytes = Files.readAllBytes(keyPath);
+            return new SecretKeySpec(keyBytes, CryptoConstants.ALGORITHM_AES);
+        }
+        byte[] keyBytes = new byte[CryptoConstants.MASTER_KEY_SIZE_BYTES]; // 32 bytes = 256-bit AES Master Key
+        new SecureRandom().nextBytes(keyBytes);
+        Files.write(keyPath, keyBytes);
+        return new SecretKeySpec(keyBytes, CryptoConstants.ALGORITHM_AES);
     }
 
     public static KeyPair loadOrCreateLongLivedKeyPair(

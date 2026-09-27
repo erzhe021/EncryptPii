@@ -55,7 +55,7 @@ public class RsaServerController {
     public SensitiveData responseOnlyRsaEncrypt(
             @RequestBody(required = false)
             PlainData request,
-            @RequestHeader(CryptoConstants.HEADER_CLIENT_SESSION_KEY) @NotBlank(message = "client session key is required for response-only RSA encryption")
+            @RequestHeader(CryptoConstants.HEADER_ENCRYPTED_SESSION_KEY) @NotBlank(message = "client session key is required for response-only RSA encryption")
             String sessionKeyBase64
     ) {
         log.debug("【api called】start to processing response-only RSA encryption");

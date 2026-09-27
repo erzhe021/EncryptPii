@@ -6,10 +6,12 @@ package com.ikea.crypto.common.ecdh;
  * @param ephemeralPublicKeyBase64 The base64-encoded ephemeral public key.
  * @param signatureAlgorithm       The algorithm used for signing the ephemeral key.
  * @param signatureBase64          The base64-encoded signature of the ephemeral public key.
+ * @param keyTicket                The stateless encrypted ticket containing the ephemeral private key and expiration.
  */
 public record EcdhEphemeralKeyResponse(
         String ephemeralPublicKeyBase64,
         String signatureAlgorithm,
-        String signatureBase64
+        String signatureBase64,
+        String keyTicket
 ) {
 }

@@ -69,7 +69,8 @@ public class EcdhCryptoClient {
                 new EcdhCipherPayload(
                         new EcdhHandshakeContext(
                                 negotiatedKeys.clientEphemeralPublicKeyBase64(),
-                                ephemeralResponse.ephemeralPublicKeyBase64()
+                                ephemeralResponse.ephemeralPublicKeyBase64(),
+                                ephemeralResponse.keyTicket()
                         ),
                         new AesCipherPayload(
                                 EncodingUtils.toBase64(iv),
@@ -107,7 +108,8 @@ public class EcdhCryptoClient {
                 new EcdhPlainPayload(
                         new EcdhHandshakeContext(
                                 negotiatedKeys.clientEphemeralPublicKeyBase64(),
-                                ephemeralResponse.ephemeralPublicKeyBase64()
+                                ephemeralResponse.ephemeralPublicKeyBase64(),
+                                ephemeralResponse.keyTicket()
                         ),
                         data
                 ),

@@ -27,9 +27,10 @@ public final class CryptoConstants {
     public static final int AES_KEY_SIZE_BITS = 256;
     public static final int GCM_TAG_LENGTH_BITS = 128;
     public static final int GCM_IV_LENGTH_BYTES = 12;
+    public static final int MASTER_KEY_SIZE_BYTES = 32; // 256 bits
 
     // --- Header Names for Client Session Key Transport ---
-    public static final String HEADER_CLIENT_SESSION_KEY = "X-Client-Session-Key";
+    public static final String HEADER_ENCRYPTED_SESSION_KEY = "X-Encrypted-Session-Key";
 
     private CryptoConstants() {
         // Prevent instantiation

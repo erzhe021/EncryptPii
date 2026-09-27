@@ -43,6 +43,6 @@ public record SessionKeyTransport(String encryptedSessionKeyBase64) {
     public HttpRequest.Builder apply(HttpRequest.Builder requestBuilder) {
         log.debug("start to apply SessionKeyTransport to HttpRequest");
         return requestBuilder
-                .header(CryptoConstants.HEADER_CLIENT_SESSION_KEY, encryptedSessionKeyBase64);
+                .header(CryptoConstants.HEADER_ENCRYPTED_SESSION_KEY, encryptedSessionKeyBase64);
     }
 }

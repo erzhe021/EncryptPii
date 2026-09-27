@@ -52,7 +52,8 @@ class EcdhDirectionalCryptoClientTest {
         EcdhEphemeralKeyResponse ephemeralResponse = new EcdhEphemeralKeyResponse(
                 EncodingUtils.toBase64(serverEphemeralKeyPair.getPublic().getEncoded()),
                 CryptoConstants.SIGNATURE_ALGORITHM_SHA256_WITH_ECDSA,
-                signatureBase64
+                signatureBase64,
+                "mock-key-ticket"
         );
         EcdsaVerificationKeyResponse verificationKeyResponse = new EcdsaVerificationKeyResponse(
                 EncodingUtils.toBase64(ecdsaKeyPair.getPublic().getEncoded()),

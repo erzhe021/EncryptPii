@@ -48,11 +48,7 @@ public class EcdhCryptoCodec extends AbstractCryptoCodec {
             return ecdhCryptoServer.encryptWithEcdhHandshakeContext(responseBodyString, ecdhHandshakeContext);
         }
         if (sessionContext.requestKeyMaterial() instanceof EcdhCipherPayload requestPayload) {
-            EcdhHandshakeContext ecdhHandshakeContext = new EcdhHandshakeContext(
-                    requestPayload.handshakeContext().clientEphemeralPublicKeyBase64(),
-                    requestPayload.handshakeContext().serverEphemeralPublicKeyBase64()
-            );
-            return ecdhCryptoServer.encryptWithEcdhHandshakeContext(responseBodyString, ecdhHandshakeContext);
+            return ecdhCryptoServer.encryptWithEcdhHandshakeContext(responseBodyString, requestPayload.handshakeContext());
         }
         throw new InvalidCryptoPayloadException("Unsupported ECDH session key material: " + sessionContext.requestKeyMaterial());
     }

@@ -11,58 +11,32 @@ import com.ikea.crypto.server.service.EcdhCryptoServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-import org.springframework.data.redis.core.StringRedisTemplate;
-import org.springframework.data.redis.core.ValueOperations;
 
 import javax.crypto.SecretKey;
-import java.security.GeneralSecurityException;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.SecureRandom;
+import javax.crypto.spec.SecretKeySpec;
+import java.security.*;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
-import java.util.HashMap;
-import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.when;
 
 class EcdhDirectionalKeyIsolationTest {
 
-    private StringRedisTemplate redisTemplate;
-    private ValueOperations<String, String> valueOperations;
-    private final Map<String, String> redisStorage = new HashMap<>();
     private EcdhCryptoServer server;
+    private SecretKey ticketMasterKey;
 
     @BeforeEach
-    @SuppressWarnings("unchecked")
     void setUp() throws Exception {
-        redisTemplate = Mockito.mock(StringRedisTemplate.class);
-        valueOperations = Mockito.mock(ValueOperations.class);
-        when(redisTemplate.opsForValue()).thenReturn(valueOperations);
-
-        Mockito.doAnswer(inv -> {
-            String key = inv.getArgument(0);
-            String val = inv.getArgument(1);
-            redisStorage.put(key, val);
-            return null;
-        }).when(valueOperations).set(anyString(), anyString(), any());
-
-        when(valueOperations.get(anyString())).thenAnswer(inv -> {
-            String key = inv.getArgument(0);
-            return redisStorage.get(key);
-        });
+        byte[] masterKeyBytes = new byte[CryptoConstants.MASTER_KEY_SIZE_BYTES];
+        new SecureRandom().nextBytes(masterKeyBytes);
+        ticketMasterKey = new SecretKeySpec(masterKeyBytes, CryptoConstants.ALGORITHM_AES);
 
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
         keyGen.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
         KeyPair ecdsaKeyPair = keyGen.generateKeyPair();
 
-        server = new EcdhCryptoServer(ecdsaKeyPair.getPrivate(), ecdsaKeyPair.getPublic(), redisTemplate);
+        server = new EcdhCryptoServer(ecdsaKeyPair.getPrivate(), ecdsaKeyPair.getPublic(), ticketMasterKey);
     }
 
     @AfterEach
@@ -71,9 +45,10 @@ class EcdhDirectionalKeyIsolationTest {
     }
 
     @Test
-    void testDirectionalKeyIsolationWithSharedSecretReuse() throws Exception {
-        // 1. Server publishes ephemeral public key
+    void testStatelessTicketAndDirectionalKeyIsolation() throws Exception {
+        // 1. Server publishes ephemeral public key with stateless ticket
         EcdhEphemeralKeyResponse serverEphemeral = server.getEphemeralPublicKey();
+        assertNotNull(serverEphemeral.keyTicket());
 
         // 2. Client negotiates key pair and derives sharedSecret
         KeyPair clientEphemeral = EcdhKeyPairFactory.generateEphemeralKeyPair();
@@ -97,11 +72,11 @@ class EcdhDirectionalKeyIsolationTest {
         String encryptedRequestData = AesGcmCryptoService.encryptAsBase64(requestPlaintext, clientRequestKey, requestIv);
 
         EcdhCipherPayload requestPayload = new EcdhCipherPayload(
-                new EcdhHandshakeContext(clientPubBase64, serverEphemeral.ephemeralPublicKeyBase64()),
+                new EcdhHandshakeContext(clientPubBase64, serverEphemeral.ephemeralPublicKeyBase64(), serverEphemeral.keyTicket()),
                 new AesCipherPayload(EncodingUtils.toBase64(requestIv), encryptedRequestData)
         );
 
-        // 3. Server decrypts request: calculates sharedSecret, caches it in context, derives request key and decrypts
+        // 3. Server decrypts request statelessly from ticket: calculates sharedSecret, caches in context, decrypts
         String decryptedRequest = server.decrypt(requestPayload);
         assertEquals(requestPlaintext, decryptedRequest);
 
@@ -139,8 +114,24 @@ class EcdhDirectionalKeyIsolationTest {
                         responsePayload.ivBase64()
                 )
         );
+    }
 
-        // Verify Redis was queried only ONCE (for request decrypt), never for response encrypt
-        Mockito.verify(valueOperations, Mockito.times(1)).get(anyString());
+    @Test
+    void testTamperedTicketFails() throws Exception {
+        EcdhEphemeralKeyResponse serverEphemeral = server.getEphemeralPublicKey();
+        KeyPair clientEphemeral = EcdhKeyPairFactory.generateEphemeralKeyPair();
+        String clientPubBase64 = EncodingUtils.toBase64(clientEphemeral.getPublic().getEncoded());
+
+        // Tamper with ticket
+        byte[] ticketBytes = EncodingUtils.fromBase64(serverEphemeral.keyTicket());
+        ticketBytes[ticketBytes.length - 1] ^= 0xFF;
+        String tamperedTicket = EncodingUtils.toBase64(ticketBytes);
+
+        EcdhCipherPayload payload = new EcdhCipherPayload(
+                new EcdhHandshakeContext(clientPubBase64, serverEphemeral.ephemeralPublicKeyBase64(), tamperedTicket),
+                new AesCipherPayload(EncodingUtils.toBase64(new byte[12]), "encrypted")
+        );
+
+        assertThrows(GeneralSecurityException.class, () -> server.decrypt(payload));
     }
 }

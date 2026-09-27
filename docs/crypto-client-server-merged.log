@@ -1,0 +1,134 @@
+--- RSA - bidirectional client server log merged ---
+2026-09-27T18:58:00.253+08:00 DEBUG 81645 --- [nio-8080-exec-1] c.ikea.crypto.client.rsa.RsaHttpClient   : start to fetching RSA public key from server 【客户端】
+2026-09-27T18:58:00.253+08:00 DEBUG 81645 --- [nio-8080-exec-1] c.ikea.crypto.client.rsa.RsaHttpClient   : 【call api】start to call server endpoint to fetch RSA public key 【客户端】
+2026-09-27T18:58:00.335+08:00 DEBUG 81621 --- [nio-9090-exec-1] c.i.c.server.api.RsaServerController     : 【api called】start to retrieving RSA public key 【服务端】
+2026-09-27T18:58:00.370+08:00 DEBUG 81645 --- [nio-8080-exec-1] c.ikea.crypto.client.rsa.RsaHttpClient   : fetched RSA public key from server, caching it for future use 【客户端】
+2026-09-27T18:58:00.370+08:00 DEBUG 81645 --- [nio-8080-exec-1] c.i.crypto.client.rsa.RsaCryptoClient    : start to generate client session key 【客户端】
+2026-09-27T18:58:00.372+08:00 DEBUG 81645 --- [nio-8080-exec-1] c.i.c.common.core.AesGcmCryptoService    : start to encrypt data using session key 【客户端】
+2026-09-27T18:58:00.373+08:00 DEBUG 81645 --- [nio-8080-exec-1] c.i.c.common.core.RsaSessionKeyService   : start to encrypt session key using RSA public key 【客户端】
+2026-09-27T18:58:00.376+08:00 DEBUG 81645 --- [nio-8080-exec-1] c.i.crypto.client.rsa.RsaCryptoClient    : put session key in context for future decryption 【客户端】
+2026-09-27T18:58:00.378+08:00 DEBUG 81645 --- [nio-8080-exec-1] c.i.c.client.AbstractClientController    : 【call api】start to call server endpoint to send json request 【客户端】
+2026-09-27T18:58:00.394+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.s.advice.RequestDecryptAdvice      : 【api pre-called】start to decrypting request body 【服务端】
+2026-09-27T18:58:00.398+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.server.codec.rsa.RsaCryptoCodec    : Decrypting request body in session context with RSA algorithm 【服务端】
+2026-09-27T18:58:00.399+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.server.service.RsaCryptoServer     : start to decrypt session key from encryptedSessionKeyBase64 【服务端】
+2026-09-27T18:58:00.399+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.common.core.RsaSessionKeyService   : start to decrypt session key using RSA private key 【服务端】
+2026-09-27T18:58:00.421+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.s.c.CryptoSessionContextAccessor   : Store the resolved session key in the request-scoped context for potential reuse 【服务端】
+2026-09-27T18:58:00.421+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.common.core.AesGcmCryptoService    : start to decrypt data using session key 【服务端】
+2026-09-27T18:58:00.441+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.server.api.RsaServerController     : 【api called】start to processing bidirectional RSA encryption 【服务端】
+2026-09-27T18:58:00.442+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.s.advice.ResponseEncryptAdvice     : 【api post-called】start to encrypting response body 【服务端】
+2026-09-27T18:58:00.442+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.server.codec.rsa.RsaCryptoCodec    : Encrypting response body in session context with RSA algorithm 【服务端】
+2026-09-27T18:58:00.443+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.s.c.CryptoSessionContextAccessor   : Retrieve the resolved session key from the request-scoped context 【服务端】
+2026-09-27T18:58:00.443+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.common.core.AesGcmCryptoService    : start to encrypt data using session key 【服务端】
+2026-09-27T18:58:00.443+08:00 DEBUG 81621 --- [nio-9090-exec-2] c.i.c.s.c.CryptoSessionContextAccessor   : Clear the crypto context from the request-scoped context 【服务端】
+2026-09-27T18:58:00.446+08:00 DEBUG 81645 --- [nio-8080-exec-1] c.i.crypto.client.rsa.RsaCryptoClient    : start to decrypt data using session key in context 【客户端】
+2026-09-27T18:58:00.446+08:00 DEBUG 81645 --- [nio-8080-exec-1] c.i.c.common.core.AesGcmCryptoService    : start to decrypt data using session key 【客户端】
+
+--- RSA - request-only client server log merged ---
+2026-09-27T18:58:08.799+08:00 DEBUG 81645 --- [nio-8080-exec-2] c.ikea.crypto.client.rsa.RsaHttpClient   : use cached RSA public key which is still valid 【客户端】
+2026-09-27T18:58:08.799+08:00 DEBUG 81645 --- [nio-8080-exec-2] c.i.crypto.client.rsa.RsaCryptoClient    : start to generate client session key 【客户端】
+2026-09-27T18:58:08.800+08:00 DEBUG 81645 --- [nio-8080-exec-2] c.i.c.common.core.AesGcmCryptoService    : start to encrypt data using session key 【客户端】
+2026-09-27T18:58:08.800+08:00 DEBUG 81645 --- [nio-8080-exec-2] c.i.c.common.core.RsaSessionKeyService   : start to encrypt session key using RSA public key 【客户端】
+2026-09-27T18:58:08.801+08:00 DEBUG 81645 --- [nio-8080-exec-2] c.i.crypto.client.rsa.RsaCryptoClient    : put session key in context for future decryption 【客户端】
+2026-09-27T18:58:08.801+08:00 DEBUG 81645 --- [nio-8080-exec-2] c.i.c.client.AbstractClientController    : 【call api】start to call server endpoint to send json request 【客户端】
+2026-09-27T18:58:08.803+08:00 DEBUG 81621 --- [nio-9090-exec-3] c.i.c.s.advice.RequestDecryptAdvice      : 【api pre-called】start to decrypting request body 【服务端】
+2026-09-27T18:58:08.803+08:00 DEBUG 81621 --- [nio-9090-exec-3] c.i.c.server.codec.rsa.RsaCryptoCodec    : Decrypting request body in session context with RSA algorithm 【服务端】
+2026-09-27T18:58:08.803+08:00 DEBUG 81621 --- [nio-9090-exec-3] c.i.c.server.service.RsaCryptoServer     : start to decrypt session key from encryptedSessionKeyBase64 【服务端】
+2026-09-27T18:58:08.803+08:00 DEBUG 81621 --- [nio-9090-exec-3] c.i.c.common.core.RsaSessionKeyService   : start to decrypt session key using RSA private key 【服务端】
+2026-09-27T18:58:08.810+08:00 DEBUG 81621 --- [nio-9090-exec-3] c.i.c.s.c.CryptoSessionContextAccessor   : Store the resolved session key in the request-scoped context for potential reuse 【服务端】
+2026-09-27T18:58:08.811+08:00 DEBUG 81621 --- [nio-9090-exec-3] c.i.c.common.core.AesGcmCryptoService    : start to decrypt data using session key 【服务端】
+2026-09-27T18:58:08.811+08:00 DEBUG 81621 --- [nio-9090-exec-3] c.i.c.server.api.RsaServerController     : 【api called】start to processing request-only RSA encryption 【服务端】
+
+--- RSA - response-only client server log merged ---
+2026-09-27T18:58:11.977+08:00 DEBUG 81645 --- [nio-8080-exec-3] c.i.c.client.AbstractClientController    : start to generate session key 【客户端】
+2026-09-27T18:58:11.977+08:00 DEBUG 81645 --- [nio-8080-exec-3] c.ikea.crypto.client.rsa.RsaHttpClient   : use cached RSA public key which is still valid 【客户端】
+2026-09-27T18:58:11.977+08:00 DEBUG 81645 --- [nio-8080-exec-3] c.i.c.common.rsa.SessionKeyTransport     : start to build SessionKeyTransport from generated session key 【客户端】
+2026-09-27T18:58:11.977+08:00 DEBUG 81645 --- [nio-8080-exec-3] c.i.c.common.core.RsaSessionKeyService   : start to encrypt session key using RSA public key 【客户端】
+2026-09-27T18:58:11.978+08:00 DEBUG 81645 --- [nio-8080-exec-3] c.i.c.client.AbstractClientController    : 【call api】start to call server endpoint to send json request with SessionKeyTransport 【客户端】
+2026-09-27T18:58:11.978+08:00 DEBUG 81645 --- [nio-8080-exec-3] c.i.c.common.rsa.SessionKeyTransport     : start to apply SessionKeyTransport to HttpRequest 【客户端】
+2026-09-27T18:58:11.981+08:00 DEBUG 81621 --- [nio-9090-exec-4] c.i.c.server.api.RsaServerController     : 【api called】start to processing response-only RSA encryption 【服务端】
+2026-09-27T18:58:11.981+08:00 DEBUG 81621 --- [nio-9090-exec-4] c.i.c.s.advice.ResponseEncryptAdvice     : 【api post-called】start to encrypting response body 【服务端】
+2026-09-27T18:58:11.981+08:00 DEBUG 81621 --- [nio-9090-exec-4] c.i.c.server.codec.rsa.RsaCryptoCodec    : Encrypting response body in session context with RSA algorithm 【服务端】
+2026-09-27T18:58:11.981+08:00 DEBUG 81621 --- [nio-9090-exec-4] c.i.c.server.service.RsaCryptoServer     : start to decrypt session key from encryptedSessionKeyBase64 【服务端】
+2026-09-27T18:58:11.981+08:00 DEBUG 81621 --- [nio-9090-exec-4] c.i.c.common.core.RsaSessionKeyService   : start to decrypt session key using RSA private key 【服务端】
+2026-09-27T18:58:11.988+08:00 DEBUG 81621 --- [nio-9090-exec-4] c.i.c.common.core.AesGcmCryptoService    : start to encrypt data using session key 【服务端】
+2026-09-27T18:58:11.988+08:00 DEBUG 81621 --- [nio-9090-exec-4] c.i.c.s.c.CryptoSessionContextAccessor   : Clear the crypto context from the request-scoped context 【服务端】
+2026-09-27T18:58:11.989+08:00 DEBUG 81645 --- [nio-8080-exec-3] c.i.c.common.core.AesGcmCryptoService    : start to decrypt data using session key 【客户端】
+
+--- ECDH - bidirectional client server log merged ---
+2026-09-27T18:58:16.243+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.crypto.client.ecdh.EcdhCryptoClient  : start to encrypt data using ECDH key exchange and AES-GCM encryption 【客户端】
+2026-09-27T18:58:16.243+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.crypto.client.ecdh.EcdhHttpClient    : 【call api】fetching ECDH ephemeral public key from server 【客户端】
+2026-09-27T18:58:16.245+08:00 DEBUG 81621 --- [nio-9090-exec-5] c.i.c.server.api.EcdhServerController    : 【api called】start to generating ECDH ephemeral key pair and return public key 【服务端】
+2026-09-27T18:58:16.247+08:00 DEBUG 81621 --- [nio-9090-exec-5] c.i.c.common.ecdh.EcdhKeyPairFactory     : Generating ECDH ephemeral key pair 【服务端】
+2026-09-27T18:58:16.252+08:00 DEBUG 81621 --- [nio-9090-exec-5] c.i.c.server.service.EcdhCryptoServer    : Packing ephemeral private key into encrypted stateless ticket 【服务端】
+2026-09-27T18:58:16.258+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.crypto.client.ecdh.EcdhHttpClient    : 【call api】fetching ECDSA public key from server 【客户端】
+2026-09-27T18:58:16.259+08:00 DEBUG 81621 --- [nio-9090-exec-6] c.i.c.server.api.EcdhServerController    : 【api called】start to retrieving ECDSA public key for signature verification 【服务端】
+2026-09-27T18:58:16.262+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.crypto.client.ecdh.EcdhHttpClient    : fetched ECDSA public key from server, caching it for future use 【客户端】
+2026-09-27T18:58:16.262+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.crypto.client.ecdh.EcdhCryptoClient  : start to verify server ephemeral public key signature using ECDSA public key 【客户端】
+2026-09-27T18:58:16.268+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.crypto.client.ecdh.EcdhCryptoClient  : Start to negotiate ECDH keys with server ephemeral public key 【客户端】
+2026-09-27T18:58:16.268+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.c.common.ecdh.EcdhKeyPairFactory     : Generating ECDH ephemeral key pair 【客户端】
+2026-09-27T18:58:16.271+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.crypto.client.ecdh.EcdhCryptoClient  : Deriving request AES key from sharedSecret, iv and hkdfInfo 【客户端】
+2026-09-27T18:58:16.272+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.c.common.core.AesGcmCryptoService    : start to encrypt data using session key 【客户端】
+2026-09-27T18:58:16.273+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.c.client.AbstractClientController    : 【call api】start to call server endpoint to send json request 【客户端】
+2026-09-27T18:58:16.277+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.s.advice.RequestDecryptAdvice      : 【api pre-called】start to decrypting request body 【服务端】
+2026-09-27T18:58:16.278+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.server.codec.ecdh.EcdhCryptoCodec  : Decrypting request body in session context 【服务端】
+2026-09-27T18:58:16.278+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.server.service.EcdhCryptoServer    : start to decrypt EcdhCipherPayload 【服务端】
+2026-09-27T18:58:16.278+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.server.service.EcdhCryptoServer    : Unpacking ephemeral private key from encrypted stateless ticket 【服务端】
+2026-09-27T18:58:16.280+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.s.c.CryptoSessionContextAccessor   : Store the negotiated shared secret in the request-scoped context for potential reuse 【服务端】
+2026-09-27T18:58:16.280+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.server.service.EcdhCryptoServer    : Deriving request AES key from sharedSecret, iv and hkdfInfo 【服务端】
+2026-09-27T18:58:16.281+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.common.core.AesGcmCryptoService    : start to decrypt data using session key 【服务端】
+2026-09-27T18:58:16.281+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.server.api.EcdhServerController    : 【api called】start to processing bidirectional ECDH encryption 【服务端】
+2026-09-27T18:58:16.282+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.s.advice.ResponseEncryptAdvice     : 【api post-called】start to encrypting response body 【服务端】
+2026-09-27T18:58:16.282+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.server.codec.ecdh.EcdhCryptoCodec  : Encrypting response body in session context 【服务端】
+2026-09-27T18:58:16.282+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.server.service.EcdhCryptoServer    : start to encrypt using EcdhHandshakeContext 【服务端】
+2026-09-27T18:58:16.282+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.s.c.CryptoSessionContextAccessor   : Retrieve the negotiated shared secret from the request-scoped context 【服务端】
+2026-09-27T18:58:16.282+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.server.service.EcdhCryptoServer    : Reusing resolved shared secret from context to derive isolated response AES key 【服务端】
+2026-09-27T18:58:16.282+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.common.core.AesGcmCryptoService    : start to encrypt data using session key 【服务端】
+2026-09-27T18:58:16.282+08:00 DEBUG 81621 --- [nio-9090-exec-7] c.i.c.s.c.CryptoSessionContextAccessor   : Clear the crypto context from the request-scoped context 【服务端】
+2026-09-27T18:58:16.283+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.crypto.client.ecdh.EcdhCryptoClient  : start to decrypt payload using CryptoRequestContext 【客户端】
+2026-09-27T18:58:16.284+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.crypto.client.ecdh.EcdhCryptoClient  : Deriving response AES key from sharedSecret, iv and hkdfInfo 【客户端】
+2026-09-27T18:58:16.284+08:00 DEBUG 81645 --- [nio-8080-exec-4] c.i.c.common.core.AesGcmCryptoService    : start to decrypt data using session key 【客户端】
+
+--- ECDH - request-only client server log merged ---
+2026-09-27T18:58:19.249+08:00 DEBUG 81645 --- [nio-8080-exec-5] c.i.crypto.client.ecdh.EcdhCryptoClient  : start to encrypt data using ECDH key exchange and AES-GCM encryption 【客户端】
+2026-09-27T18:58:19.249+08:00 DEBUG 81645 --- [nio-8080-exec-5] c.i.crypto.client.ecdh.EcdhHttpClient    : 【call api】fetching ECDH ephemeral public key from server 【客户端】
+2026-09-27T18:58:19.250+08:00 DEBUG 81621 --- [nio-9090-exec-8] c.i.c.server.api.EcdhServerController    : 【api called】start to generating ECDH ephemeral key pair and return public key 【服务端】
+2026-09-27T18:58:19.251+08:00 DEBUG 81621 --- [nio-9090-exec-8] c.i.c.common.ecdh.EcdhKeyPairFactory     : Generating ECDH ephemeral key pair 【服务端】
+2026-09-27T18:58:19.251+08:00 DEBUG 81621 --- [nio-9090-exec-8] c.i.c.server.service.EcdhCryptoServer    : Packing ephemeral private key into encrypted stateless ticket 【服务端】
+2026-09-27T18:58:19.253+08:00 DEBUG 81645 --- [nio-8080-exec-5] c.i.crypto.client.ecdh.EcdhHttpClient    : use cached ECDSA public key which is still valid 【客户端】
+2026-09-27T18:58:19.254+08:00 DEBUG 81645 --- [nio-8080-exec-5] c.i.crypto.client.ecdh.EcdhCryptoClient  : start to verify server ephemeral public key signature using ECDSA public key 【客户端】
+2026-09-27T18:58:19.255+08:00 DEBUG 81645 --- [nio-8080-exec-5] c.i.crypto.client.ecdh.EcdhCryptoClient  : Start to negotiate ECDH keys with server ephemeral public key 【客户端】
+2026-09-27T18:58:19.255+08:00 DEBUG 81645 --- [nio-8080-exec-5] c.i.c.common.ecdh.EcdhKeyPairFactory     : Generating ECDH ephemeral key pair 【客户端】
+2026-09-27T18:58:19.256+08:00 DEBUG 81645 --- [nio-8080-exec-5] c.i.crypto.client.ecdh.EcdhCryptoClient  : Deriving request AES key from sharedSecret, iv and hkdfInfo 【客户端】
+2026-09-27T18:58:19.257+08:00 DEBUG 81645 --- [nio-8080-exec-5] c.i.c.common.core.AesGcmCryptoService    : start to encrypt data using session key 【客户端】
+2026-09-27T18:58:19.257+08:00 DEBUG 81645 --- [nio-8080-exec-5] c.i.c.client.AbstractClientController    : 【call api】start to call server endpoint to send json request 【客户端】
+2026-09-27T18:58:19.258+08:00 DEBUG 81621 --- [nio-9090-exec-9] c.i.c.s.advice.RequestDecryptAdvice      : 【api pre-called】start to decrypting request body 【服务端】
+2026-09-27T18:58:19.258+08:00 DEBUG 81621 --- [nio-9090-exec-9] c.i.c.server.codec.ecdh.EcdhCryptoCodec  : Decrypting request body in session context 【服务端】
+2026-09-27T18:58:19.258+08:00 DEBUG 81621 --- [nio-9090-exec-9] c.i.c.server.service.EcdhCryptoServer    : start to decrypt EcdhCipherPayload 【服务端】
+2026-09-27T18:58:19.258+08:00 DEBUG 81621 --- [nio-9090-exec-9] c.i.c.server.service.EcdhCryptoServer    : Unpacking ephemeral private key from encrypted stateless ticket 【服务端】
+2026-09-27T18:58:19.260+08:00 DEBUG 81621 --- [nio-9090-exec-9] c.i.c.s.c.CryptoSessionContextAccessor   : Store the negotiated shared secret in the request-scoped context for potential reuse 【服务端】
+2026-09-27T18:58:19.260+08:00 DEBUG 81621 --- [nio-9090-exec-9] c.i.c.server.service.EcdhCryptoServer    : Deriving request AES key from sharedSecret, iv and hkdfInfo 【服务端】
+2026-09-27T18:58:19.260+08:00 DEBUG 81621 --- [nio-9090-exec-9] c.i.c.common.core.AesGcmCryptoService    : start to decrypt data using session key 【服务端】
+2026-09-27T18:58:19.260+08:00 DEBUG 81621 --- [nio-9090-exec-9] c.i.c.server.api.EcdhServerController    : 【api called】start to processing request-only ECDH encryption 【服务端】
+
+--- ECDH - response-only client server log merged ---
+2026-09-27T18:58:22.163+08:00 DEBUG 81645 --- [nio-8080-exec-6] c.i.crypto.client.ecdh.EcdhCryptoClient  : start to create response only session 【客户端】
+2026-09-27T18:58:22.163+08:00 DEBUG 81645 --- [nio-8080-exec-6] c.i.crypto.client.ecdh.EcdhHttpClient    : 【call api】fetching ECDH ephemeral public key from server 【客户端】
+2026-09-27T18:58:22.165+08:00 DEBUG 81621 --- [io-9090-exec-10] c.i.c.server.api.EcdhServerController    : 【api called】start to generating ECDH ephemeral key pair and return public key 【服务端】
+2026-09-27T18:58:22.165+08:00 DEBUG 81621 --- [io-9090-exec-10] c.i.c.common.ecdh.EcdhKeyPairFactory     : Generating ECDH ephemeral key pair 【服务端】
+2026-09-27T18:58:22.165+08:00 DEBUG 81621 --- [io-9090-exec-10] c.i.c.server.service.EcdhCryptoServer    : Packing ephemeral private key into encrypted stateless ticket 【服务端】
+2026-09-27T18:58:22.167+08:00 DEBUG 81645 --- [nio-8080-exec-6] c.i.crypto.client.ecdh.EcdhHttpClient    : use cached ECDSA public key which is still valid 【客户端】
+2026-09-27T18:58:22.167+08:00 DEBUG 81645 --- [nio-8080-exec-6] c.i.crypto.client.ecdh.EcdhCryptoClient  : start to verify server ephemeral public key signature using ECDSA public key 【客户端】
+2026-09-27T18:58:22.168+08:00 DEBUG 81645 --- [nio-8080-exec-6] c.i.crypto.client.ecdh.EcdhCryptoClient  : Start to negotiate ECDH keys with server ephemeral public key 【客户端】
+2026-09-27T18:58:22.169+08:00 DEBUG 81645 --- [nio-8080-exec-6] c.i.c.common.ecdh.EcdhKeyPairFactory     : Generating ECDH ephemeral key pair 【客户端】
+2026-09-27T18:58:22.172+08:00 DEBUG 81645 --- [nio-8080-exec-6] c.i.c.client.AbstractClientController    : 【call api】start to call server endpoint to send json request 【客户端】
+2026-09-27T18:58:22.175+08:00 DEBUG 81621 --- [nio-9090-exec-1] c.i.c.server.api.EcdhServerController    : 【api called】start to processing response-only ECDH encryption 【服务端】
+2026-09-27T18:58:22.175+08:00 DEBUG 81621 --- [nio-9090-exec-1] c.i.c.s.advice.ResponseEncryptAdvice     : 【api post-called】start to encrypting response body 【服务端】
+2026-09-27T18:58:22.175+08:00 DEBUG 81621 --- [nio-9090-exec-1] c.i.c.server.codec.ecdh.EcdhCryptoCodec  : Encrypting response body in session context 【服务端】
+2026-09-27T18:58:22.175+08:00 DEBUG 81621 --- [nio-9090-exec-1] c.i.c.server.service.EcdhCryptoServer    : start to encrypt using EcdhHandshakeContext 【服务端】
+2026-09-27T18:58:22.175+08:00 DEBUG 81621 --- [nio-9090-exec-1] c.i.c.s.c.CryptoSessionContextAccessor   : Retrieve the negotiated shared secret from the request-scoped context 【服务端】
+2026-09-27T18:58:22.175+08:00 DEBUG 81621 --- [nio-9090-exec-1] c.i.c.server.service.EcdhCryptoServer    : Unpacking ephemeral private key from encrypted stateless ticket 【服务端】
+2026-09-27T18:58:22.176+08:00 DEBUG 81621 --- [nio-9090-exec-1] c.i.c.common.core.AesGcmCryptoService    : start to encrypt data using session key 【服务端】
+2026-09-27T18:58:22.176+08:00 DEBUG 81621 --- [nio-9090-exec-1] c.i.c.s.c.CryptoSessionContextAccessor   : Clear the crypto context from the request-scoped context 【服务端】
+2026-09-27T18:58:22.177+08:00 DEBUG 81645 --- [nio-8080-exec-6] c.i.crypto.client.ecdh.EcdhCryptoClient  : start to decrypt payload using CryptoRequestContext 【客户端】
+2026-09-27T18:58:22.177+08:00 DEBUG 81645 --- [nio-8080-exec-6] c.i.crypto.client.ecdh.EcdhCryptoClient  : Deriving response AES key from sharedSecret, iv and hkdfInfo 【客户端】
+2026-09-27T18:58:22.177+08:00 DEBUG 81645 --- [nio-8080-exec-6] c.i.c.common.core.AesGcmCryptoService    : start to decrypt data using session key 【客户端】
