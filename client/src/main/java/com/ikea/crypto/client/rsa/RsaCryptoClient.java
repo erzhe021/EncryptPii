@@ -53,7 +53,7 @@ public class RsaCryptoClient {
 
         // Generate a random AES session key
         log.debug("start to generate client session key");
-        SecretKey sessionKey = CryptoSessionMaterialFactory.generateAesSessionKey(secureRandom);
+        SecretKey sessionKey = CryptoSessionMaterialFactory.generateAesKey(secureRandom);
 
         // Generate a random IV for AES encryption
         byte[] iv = CryptoSessionMaterialFactory.generateIv(secureRandom);

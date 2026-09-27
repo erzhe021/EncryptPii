@@ -48,7 +48,7 @@ class EcdhDirectionalKeyIsolationTest {
     void testStatelessTicketAndDirectionalKeyIsolation() throws Exception {
         // 1. Server publishes ephemeral public key with stateless ticket
         EcdhEphemeralKeyResponse serverEphemeral = server.getEphemeralPublicKey();
-        assertNotNull(serverEphemeral.keyTicket());
+        assertNotNull(serverEphemeral.serverKeyTicketBase64());
 
         // 2. Client negotiates key pair and derives sharedSecret
         KeyPair clientEphemeral = EcdhKeyPairFactory.generateEphemeralKeyPair();
@@ -72,7 +72,7 @@ class EcdhDirectionalKeyIsolationTest {
         String encryptedRequestData = AesGcmCryptoService.encryptAsBase64(requestPlaintext, clientRequestKey, requestIv);
 
         EcdhCipherPayload requestPayload = new EcdhCipherPayload(
-                new EcdhHandshakeContext(clientPubBase64, serverEphemeral.ephemeralPublicKeyBase64(), serverEphemeral.keyTicket()),
+                new EcdhHandshakeContext(clientPubBase64, serverEphemeral.serverKeyTicketBase64()),
                 new AesCipherPayload(EncodingUtils.toBase64(requestIv), encryptedRequestData)
         );
 
@@ -123,12 +123,12 @@ class EcdhDirectionalKeyIsolationTest {
         String clientPubBase64 = EncodingUtils.toBase64(clientEphemeral.getPublic().getEncoded());
 
         // Tamper with ticket
-        byte[] ticketBytes = EncodingUtils.fromBase64(serverEphemeral.keyTicket());
+        byte[] ticketBytes = EncodingUtils.fromBase64(serverEphemeral.serverKeyTicketBase64());
         ticketBytes[ticketBytes.length - 1] ^= 0xFF;
         String tamperedTicket = EncodingUtils.toBase64(ticketBytes);
 
         EcdhCipherPayload payload = new EcdhCipherPayload(
-                new EcdhHandshakeContext(clientPubBase64, serverEphemeral.ephemeralPublicKeyBase64(), tamperedTicket),
+                new EcdhHandshakeContext(clientPubBase64, tamperedTicket),
                 new AesCipherPayload(EncodingUtils.toBase64(new byte[12]), "encrypted")
         );
 

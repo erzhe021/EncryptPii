@@ -120,7 +120,7 @@ public class EcdhCryptoServer {
         byte[] ephemeralPublicKeyBytes = ephemeralKeyPair.getPublic().getEncoded();
         String ephemeralPublicKeyBase64 = EncodingUtils.toBase64(ephemeralPublicKeyBytes);
 
-        String keyTicket = packEphemeralPrivateKeyToTicket(ephemeralKeyPair.getPrivate(), ticketTtl);
+        String serverKeyTicketBase64 = packEphemeralPrivateKeyToTicket(ephemeralKeyPair.getPrivate(), ticketTtl);
 
         Signature signature = Signature.getInstance(CryptoConstants.SIGNATURE_ALGORITHM_SHA256_WITH_ECDSA);
         signature.initSign(ecdsaPrivateKey);
@@ -132,7 +132,7 @@ public class EcdhCryptoServer {
                 ephemeralPublicKeyBase64,
                 CryptoConstants.SIGNATURE_ALGORITHM_SHA256_WITH_ECDSA,
                 signatureBase64,
-                keyTicket
+                serverKeyTicketBase64
         );
     }
 
@@ -144,8 +144,8 @@ public class EcdhCryptoServer {
         log.debug("start to decrypt EcdhCipherPayload");
         validatePayload(payload);
 
-        String keyTicket = payload.handshakeContext().keyTicket();
-        PrivateKey serverPrivateKey = unpackEphemeralPrivateKeyFromTicket(keyTicket);
+        String serverKeyTicketBase64 = payload.handshakeContext().serverKeyTicketBase64();
+        PrivateKey serverPrivateKey = unpackEphemeralPrivateKeyFromTicket(serverKeyTicketBase64);
 
         PublicKey clientEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(payload.handshakeContext().clientEphemeralPublicKeyBase64()))
@@ -192,7 +192,7 @@ public class EcdhCryptoServer {
         if (!StringUtils.hasLength(handshakeContext.clientEphemeralPublicKeyBase64())) {
             throw new IllegalArgumentException("Client ephemeral public key is required for response encryption");
         }
-        PrivateKey serverPrivateKey = unpackEphemeralPrivateKeyFromTicket(handshakeContext.keyTicket());
+        PrivateKey serverPrivateKey = unpackEphemeralPrivateKeyFromTicket(handshakeContext.serverKeyTicketBase64());
         PublicKey clientEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(handshakeContext.clientEphemeralPublicKeyBase64()))
         );
@@ -212,6 +212,14 @@ public class EcdhCryptoServer {
         );
     }
 
+    /**
+     * Packs the ephemeral private key into an encrypted stateless ticket using AES-GCM.
+     *
+     * @param privateKey The ephemeral private key to be packed.
+     * @param ttl        The time-to-live for the ticket.
+     * @return A Base64-encoded string representing the encrypted ticket.
+     * @throws GeneralSecurityException If encryption fails.
+     */
     private String packEphemeralPrivateKeyToTicket(PrivateKey privateKey, Duration ttl) throws GeneralSecurityException {
         log.debug("Packing ephemeral private key into encrypted stateless ticket");
         byte[] privateKeyBytes = privateKey.getEncoded();
@@ -232,14 +240,14 @@ public class EcdhCryptoServer {
         return EncodingUtils.toBase64(combined);
     }
 
-    private PrivateKey unpackEphemeralPrivateKeyFromTicket(String keyTicket) throws GeneralSecurityException {
+    private PrivateKey unpackEphemeralPrivateKeyFromTicket(String serverKeyTicketBase64) throws GeneralSecurityException {
         log.debug("Unpacking ephemeral private key from encrypted stateless ticket");
-        if (!StringUtils.hasLength(keyTicket)) {
+        if (!StringUtils.hasLength(serverKeyTicketBase64)) {
             throw new IllegalArgumentException("Key ticket is required for stateless ECDH decryption but was not provided.");
         }
         byte[] combined;
         try {
-            combined = EncodingUtils.fromBase64(keyTicket);
+            combined = EncodingUtils.fromBase64(serverKeyTicketBase64);
         } catch (Exception e) {
             throw new IllegalArgumentException("Key ticket is not valid Base64", e);
         }
@@ -278,10 +286,7 @@ public class EcdhCryptoServer {
         if (!StringUtils.hasLength(payload.handshakeContext().clientEphemeralPublicKeyBase64())) {
             throw new IllegalArgumentException("Client ephemeral public key is required for ECDH decryption but was not provided.");
         }
-        if (!StringUtils.hasLength(payload.handshakeContext().serverEphemeralPublicKeyBase64())) {
-            throw new IllegalArgumentException("Server ephemeral public key is required for ECDH Ephemeral decryption but was not provided.");
-        }
-        if (!StringUtils.hasLength(payload.handshakeContext().keyTicket())) {
+        if (!StringUtils.hasLength(payload.handshakeContext().serverKeyTicketBase64())) {
             throw new IllegalArgumentException("Key ticket is required in handshake context for stateless ECDH decryption.");
         }
         if (payload.aesCipherPayload() == null) {
