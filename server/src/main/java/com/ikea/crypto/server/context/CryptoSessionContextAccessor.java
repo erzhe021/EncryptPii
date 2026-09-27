@@ -1,5 +1,6 @@
 package com.ikea.crypto.server.context;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.context.request.RequestAttributes;
 import org.springframework.web.context.request.RequestContextHolder;
 
@@ -9,6 +10,7 @@ import javax.crypto.SecretKey;
  * Request-scoped crypto context accessor.
  * The context is kept only within the current request lifecycle and does not depend on Redis or request IDs.
  */
+@Slf4j
 public final class CryptoSessionContextAccessor {
     public static final String SESSION_KEY_ATTRIBUTE = "crypto.session.key";
 
@@ -52,6 +54,7 @@ public final class CryptoSessionContextAccessor {
     }
 
     public static void setResolvedSessionKey(SecretKey sessionKey) {
+        log.debug("Store the resolved session key in the request-scoped context for potential reuse");
         if (sessionKey == null) {
             SESSION_KEY_LOCAL.remove();
             return;
@@ -64,6 +67,7 @@ public final class CryptoSessionContextAccessor {
     }
 
     public static SecretKey getResolvedSessionKey() {
+        log.debug("Retrieve the resolved session key from the request-scoped context");
         SecretKey sessionKey = SESSION_KEY_LOCAL.get();
         if (sessionKey != null) {
             return sessionKey;
@@ -81,6 +85,7 @@ public final class CryptoSessionContextAccessor {
     }
 
     public static void clearCryptoSessionContext() {
+        log.debug("Clear the crypto context from the request-scoped context");
         THREAD_LOCAL.remove();
         SESSION_KEY_LOCAL.remove();
         RequestAttributes requestAttributes = RequestContextHolder.getRequestAttributes();

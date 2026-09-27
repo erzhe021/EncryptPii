@@ -79,8 +79,10 @@ class EcdhClientCryptoTest {
                 new AesCipherPayload(EncodingUtils.toBase64(serverResponseIv), serverEncryptedResponse)
         );
 
+        AesCipherPayload aesCipherPayload = new AesCipherPayload(EncodingUtils.toBase64(serverResponseIv), serverEncryptedResponse);
+
         // Client decrypts response with the existing context
-        String decryptedResponse = cryptoClient.decrypt(serverResponsePayload, result.context());
+        String decryptedResponse = cryptoClient.decrypt(aesCipherPayload, result.context());
         assertEquals(serverResponseText, decryptedResponse);
         assertNotEquals(result.payload().aesCipherPayload().ivBase64(), serverResponsePayload.aesCipherPayload().ivBase64());
     }

@@ -1,14 +1,15 @@
 package com.ikea.crypto.server.codec;
 
-import com.ikea.crypto.server.error.InvalidCryptoPayloadException;
-import com.ikea.crypto.server.error.ResponseEncryptionException;
-import com.ikea.crypto.server.context.CryptoSessionContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ikea.crypto.server.context.CryptoSessionContext;
+import com.ikea.crypto.server.error.InvalidCryptoPayloadException;
+import com.ikea.crypto.server.error.ResponseEncryptionException;
 
 import java.security.GeneralSecurityException;
 
 public abstract class AbstractCryptoCodec implements CryptoCodec {
+
     protected final ObjectMapper objectMapper;
 
     protected AbstractCryptoCodec(ObjectMapper objectMapper) {
@@ -16,7 +17,7 @@ public abstract class AbstractCryptoCodec implements CryptoCodec {
     }
 
     @Override
-    public final String decrypt(String encryptedRequestBody, CryptoSessionContext<?> sessionContext) throws GeneralSecurityException {
+    public final String decrypt(CryptoSessionContext<?> sessionContext) throws GeneralSecurityException {
         validateSessionContext(sessionContext);
         return doDecrypt(sessionContext);
     }
@@ -27,11 +28,6 @@ public abstract class AbstractCryptoCodec implements CryptoCodec {
         String responseBodyString = serializeResponseBody(responseBody);
         return doEncrypt(responseBodyString, sessionContext);
     }
-
-    protected abstract String doDecrypt(CryptoSessionContext<?> sessionContext) throws GeneralSecurityException;
-
-    protected abstract Object doEncrypt(String responseBodyString, CryptoSessionContext<?> sessionContext)
-            throws GeneralSecurityException;
 
     protected final String serializeResponseBody(Object responseBody) {
         try {
@@ -49,4 +45,9 @@ public abstract class AbstractCryptoCodec implements CryptoCodec {
             throw new InvalidCryptoPayloadException("Session context is required for " + algorithm().name() + " operations");
         }
     }
+
+    protected abstract String doDecrypt(CryptoSessionContext<?> sessionContext) throws GeneralSecurityException;
+
+    protected abstract Object doEncrypt(String responseBodyString, CryptoSessionContext<?> sessionContext)
+            throws GeneralSecurityException;
 }

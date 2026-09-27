@@ -1,6 +1,7 @@
 package com.ikea.crypto.client.ecdh;
 
 import com.ikea.crypto.client.AbstractClientController;
+import com.ikea.crypto.common.AesCipherPayload;
 import com.ikea.crypto.common.PlainData;
 import com.ikea.crypto.common.ecdh.EcdhCipherPayload;
 import com.ikea.crypto.common.ecdh.EcdhPlainPayload;
@@ -42,7 +43,7 @@ public class EcdhClientController extends AbstractClientController {
         EcdhCryptoClient.EncryptionResult encrypted = ecdhCryptoClient.encrypt(toJsonString(plainData));
         EcdhCipherPayload requestPayload = encrypted.payload();
         HttpResponse<String> response = sendJsonRequest(ecdhBidirectionalPath, requestPayload);
-        EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);
+        AesCipherPayload responsePayload = objectMapper.readValue(response.body(), AesCipherPayload.class);
         String decryptedServerResponse = ecdhCryptoClient.decrypt(responsePayload, encrypted.context());
         PlainData decryptedServerResponseData = objectMapper.readValue(decryptedServerResponse, PlainData.class);
 
@@ -74,7 +75,7 @@ public class EcdhClientController extends AbstractClientController {
         );
         EcdhPlainPayload requestPayload = responseOnlySession.request();
         HttpResponse<String> response = sendJsonRequest(ecdhResponseOnlyPath, requestPayload);
-        EcdhCipherPayload responsePayload = objectMapper.readValue(response.body(), EcdhCipherPayload.class);
+        AesCipherPayload responsePayload = objectMapper.readValue(response.body(), AesCipherPayload.class);
         // Decrypt the response using the session context
         String decryptedResponseData = ecdhCryptoClient.decrypt(responsePayload, responseOnlySession.context());
         PlainData decryptedServerResponseData = objectMapper.readValue(decryptedResponseData, PlainData.class);

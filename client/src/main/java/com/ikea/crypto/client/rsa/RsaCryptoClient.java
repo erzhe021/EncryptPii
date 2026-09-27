@@ -92,7 +92,7 @@ public class RsaCryptoClient {
      * @throws IllegalArgumentException If the payload is null.
      * @throws IllegalStateException    If the AES session key is not available for decryption.
      */
-    public String decrypt(RsaCipherPayload payload, CryptoRequestContext context) throws GeneralSecurityException {
+    public String decrypt(AesCipherPayload payload, CryptoRequestContext context) throws GeneralSecurityException {
         log.debug("start to decrypt data using session key in context");
         if (payload == null) {
             throw new IllegalArgumentException("payload cannot be null");

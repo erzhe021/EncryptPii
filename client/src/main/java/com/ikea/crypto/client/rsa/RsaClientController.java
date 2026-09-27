@@ -47,7 +47,7 @@ public class RsaClientController extends AbstractClientController {
         RsaCipherPayload requestPayload = encrypted.payload();
         HttpResponse<String> response = sendJsonRequest(rsaBidirectionalPath, requestPayload);
         // Decrypt the server's response using the same session key and IV
-        RsaCipherPayload responsePayload = objectMapper.readValue(response.body(), RsaCipherPayload.class);
+        AesCipherPayload responsePayload = objectMapper.readValue(response.body(), AesCipherPayload.class);
         String decryptedServerResponse = rsaCryptoClient.decrypt(responsePayload, encrypted.context());
         PlainData responsePlainData = objectMapper.readValue(decryptedServerResponse, PlainData.class);
 

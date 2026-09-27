@@ -3,7 +3,6 @@ package com.ikea.crypto.server.service;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
-import com.ikea.crypto.common.core.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.core.RsaSessionKeyService;
 import com.ikea.crypto.common.rsa.RsaCipherPayload;
 import com.ikea.crypto.common.rsa.RsaPublicKeyResponse;
@@ -29,8 +28,9 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @return an instance of RsaPublicKeyResponse containing the Base64-encoded RSA public key
      */
     public RsaPublicKeyResponse getPublicKey() {
-        String keyId = "rsa-current";
-        long expiresAt = System.currentTimeMillis() + 10 * 60 * 1000L;
+        String keyId = "rsa-20261001";
+        // Set the expiration time to one year from now (in milliseconds)
+        long expiresAt = System.currentTimeMillis() + 365 * 24 * 60 * 60 * 1000L;
         return new RsaPublicKeyResponse(EncodingUtils.toBase64(rsaPublicKey.getEncoded()), keyId, expiresAt);
     }
 
@@ -86,29 +86,6 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
             throw new IllegalArgumentException("Encrypted session key is required.");
         }
         return RsaSessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, rsaPrivateKey);
-    }
-
-    /**
-     * Encrypts the provided data using the AES session key decrypted from the provided Base64-encoded encrypted session key.
-     *
-     * @param data                       the plaintext data to encrypt
-     * @param encryptedSessionKeyBase64  the Base64-encoded encrypted AES session key
-     * @return an RsaCipherPayload containing the encrypted data, IV, and encrypted session key
-     * @throws GeneralSecurityException if a security exception occurs during encryption
-     */
-    public RsaCipherPayload encryptWithRequestSessionKey(String data, String encryptedSessionKeyBase64) throws GeneralSecurityException {
-        log.debug("start to encrypt data using session key decrypted from encryptedSessionKeyBase64");
-        SecretKey sessionKey = CryptoSessionContextAccessor.getResolvedSessionKey();
-        if (sessionKey == null) {
-            sessionKey = decryptSessionKeyToSecretKey(encryptedSessionKeyBase64);
-        }
-        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
-        String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, sessionKey, iv);
-        return new RsaCipherPayload(
-                encryptedSessionKeyBase64,
-                EncodingUtils.toBase64(iv),
-                encryptedDataBase64
-        );
     }
 
     /**

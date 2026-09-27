@@ -132,7 +132,7 @@ public class EcdhCryptoClient {
      * @return The decrypted plaintext data as a String.
      * @throws GeneralSecurityException If decryption fails due to cryptographic errors or missing keys.
      */
-    public String decrypt(EcdhCipherPayload payload, CryptoRequestContext context) throws GeneralSecurityException {
+    public String decrypt(AesCipherPayload payload, CryptoRequestContext context) throws GeneralSecurityException {
         log.debug("start to decrypt payload using CryptoRequestContext");
         if (payload == null) {
             throw new IllegalArgumentException("payload cannot be null");
@@ -145,9 +145,9 @@ public class EcdhCryptoClient {
         if (context.sessionKey() != null) {
             log.debug("start to decrypt data using existing session key in CryptoRequestContext");
             return AesGcmCryptoService.decryptFromBase64(
-                    payload.aesCipherPayload().encryptedDataBase64(),
+                    payload.encryptedDataBase64(),
                     context.sessionKey(),
-                    payload.aesCipherPayload().ivBase64()
+                    payload.ivBase64()
             );
         }
 
@@ -160,13 +160,13 @@ public class EcdhCryptoClient {
         SecretKey responseKey = EcdhKeyAgreementService.deriveAesKey(
                 context.clientEphemeralPrivateKey(),
                 context.serverEphemeralPublicKey(),
-                EncodingUtils.fromBase64(payload.aesCipherPayload().ivBase64()),
+                EncodingUtils.fromBase64(payload.ivBase64()),
                 CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY);
 
         return AesGcmCryptoService.decryptFromBase64(
-                payload.aesCipherPayload().encryptedDataBase64(),
+                payload.encryptedDataBase64(),
                 responseKey,
-                payload.aesCipherPayload().ivBase64()
+                payload.ivBase64()
         );
     }
 

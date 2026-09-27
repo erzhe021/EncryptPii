@@ -173,19 +173,16 @@ public class EcdhCryptoServer {
         return decryptedValue;
     }
 
-    public EcdhCipherPayload encryptWithEcdhHandshakeContext(String data, EcdhHandshakeContext ecdhHandshakeContext) throws GeneralSecurityException {
+    public AesCipherPayload encryptWithEcdhHandshakeContext(String data, EcdhHandshakeContext ecdhHandshakeContext) throws GeneralSecurityException {
         log.debug("start to encrypt using EcdhHandshakeContext");
         SecretKey sessionKey = CryptoSessionContextAccessor.getResolvedSessionKey();
         if (sessionKey != null) {
             log.debug("Reusing resolved session key from context for response encryption");
             byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
             String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, sessionKey, iv);
-            return new EcdhCipherPayload(
-                    ecdhHandshakeContext,
-                    new AesCipherPayload(
-                            EncodingUtils.toBase64(iv),
-                            encryptedDataBase64
-                    )
+            return new AesCipherPayload(
+                    EncodingUtils.toBase64(iv),
+                    encryptedDataBase64
             );
         }
         return encryptWithServerPublicKeyAndClientPublicKey(
@@ -195,7 +192,7 @@ public class EcdhCryptoServer {
         );
     }
 
-    private EcdhCipherPayload encryptWithServerPublicKeyAndClientPublicKey(
+    private AesCipherPayload encryptWithServerPublicKeyAndClientPublicKey(
             String data,
             String serverPublicKeyBase64,
             String clientPublicKeyBase64
@@ -228,7 +225,7 @@ public class EcdhCryptoServer {
      * @return An EcdhCipherPayload containing the encrypted data and keys.
      * @throws GeneralSecurityException If there is a security exception during encryption.
      */
-    private EcdhCipherPayload encryptWithServerPrivateKeyAndClientPublicKey(
+    private AesCipherPayload encryptWithServerPrivateKeyAndClientPublicKey(
             String data,
             String serverPublicKeyBase64,
             String clientPublicKeyBase64,
@@ -250,22 +247,16 @@ public class EcdhCryptoServer {
 
         String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, aesKey, iv);
 
-        return new EcdhCipherPayload(
-                new EcdhHandshakeContext(
-                        clientPublicKeyBase64,
-                        serverPublicKeyBase64
-                ),
-                new AesCipherPayload(
-                        EncodingUtils.toBase64(iv),
-                        encryptedDataBase64
-                )
+        return new AesCipherPayload(
+                EncodingUtils.toBase64(iv),
+                encryptedDataBase64
         );
     }
 
     /**
-     * Validates the provided EcdhCipherPayload to ensure that all required fields are present and not empty.
+     * Validates the provided AesCipherPayload to ensure that all required fields are present and not empty.
      *
-     * @param payload The EcdhCipherPayload to validate.
+     * @param payload The AesCipherPayload to validate.
      * @throws IllegalArgumentException If any required field is missing or empty.
      */
     private void validatePayload(EcdhCipherPayload payload) {
