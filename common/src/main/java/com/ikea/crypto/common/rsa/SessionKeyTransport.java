@@ -1,7 +1,6 @@
 package com.ikea.crypto.common.rsa;
 
 import com.ikea.crypto.common.CryptoConstants;
-import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.RsaSessionKeyService;
 import lombok.extern.slf4j.Slf4j;
 
@@ -11,27 +10,22 @@ import java.security.GeneralSecurityException;
 import java.security.PublicKey;
 
 /**
- * SessionKeyTransport is a record that encapsulates the encrypted session key and initialization vector (IV)
+ * SessionKeyTransport is a record that encapsulates the encrypted session key
  * for secure transport in HTTP headers. It provides methods to create an instance from a generated session key
- * and to apply the session key and IV to an HTTP request.
+ * and to apply the session key to an HTTP request.
  *
  * This record is only used in RSA response-only encryption, where the client sends a request without encryption, and the server responds with encrypted data.
- * The client must provide the session key and IV in the request headers for the server to encrypt the response.
+ * The client provides the session key in the request headers, and the server generates its own IV when encrypting the response.
  */
 @Slf4j
-public record SessionKeyTransport(
-        String encryptedSessionKeyBase64,
-        String ivBase64) {
+public record SessionKeyTransport(String encryptedSessionKeyBase64) {
 
-    public static SessionKeyTransport fromGeneratedKey(SecretKey sessionKey, byte[] iv, PublicKey serverPublicKey) throws GeneralSecurityException {
+    public static SessionKeyTransport fromGeneratedKey(SecretKey sessionKey, PublicKey serverPublicKey) throws GeneralSecurityException {
 
         log.debug("start to build SessionKeyTransport from generated session key");
 
         if (sessionKey == null) {
             throw new IllegalArgumentException("sessionKey is required");
-        }
-        if (iv == null || iv.length == 0) {
-            throw new IllegalArgumentException("iv is required");
         }
         if (serverPublicKey == null) {
             throw new IllegalArgumentException("serverPublicKey is required");
@@ -42,15 +36,13 @@ public record SessionKeyTransport(
         }
 
         return new SessionKeyTransport(
-                RsaSessionKeyService.encryptSessionKeyAsBase64(sessionKey, serverPublicKey),
-                EncodingUtils.toBase64(iv)
+                RsaSessionKeyService.encryptSessionKeyAsBase64(sessionKey, serverPublicKey)
         );
     }
 
     public HttpRequest.Builder apply(HttpRequest.Builder requestBuilder) {
         log.debug("start to apply SessionKeyTransport to HttpRequest");
         return requestBuilder
-                .header(CryptoConstants.HEADER_CLIENT_SESSION_KEY, encryptedSessionKeyBase64)
-                .header(CryptoConstants.HEADER_CLIENT_SESSION_IV, ivBase64);
+                .header(CryptoConstants.HEADER_CLIENT_SESSION_KEY, encryptedSessionKeyBase64);
     }
 }

@@ -53,12 +53,12 @@ public class RsaCryptoCodec extends AbstractCryptoCodec {
                     CryptoConstants.ALGORITHM_AES
             );
 
-            byte[] iv = EncodingUtils.fromBase64(sessionKeyTransport.ivBase64());
+            byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
 
             String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(responseBodyString, sessionKey, iv);
 
             return new AesCipherPayload(
-                    sessionKeyTransport.ivBase64(),
+                    EncodingUtils.toBase64(iv),
                     encryptedDataBase64
             );
 

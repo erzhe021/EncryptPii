@@ -7,22 +7,26 @@ import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
 import com.ikea.crypto.common.core.CryptoSessionMaterialFactory;
-import com.ikea.crypto.common.ecdh.*;
+import com.ikea.crypto.common.ecdh.EcdhEphemeralKeyResponse;
+import com.ikea.crypto.common.ecdh.EcdhKeyAgreementService;
+import com.ikea.crypto.common.ecdh.EcdsaVerificationKeyResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
 
+import javax.crypto.SecretKey;
+import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.SecureRandom;
 import java.security.Signature;
 import java.security.spec.ECGenParameterSpec;
+import java.util.Arrays;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
-class EcdhClientCryptoTest {
+class EcdhDirectionalCryptoClientTest {
 
     private EcdhHttpClient ecdhHttpClient;
     private EcdhCryptoClient cryptoClient;
@@ -61,29 +65,47 @@ class EcdhClientCryptoTest {
     }
 
     @Test
-    void testBidirectionalDecryptReusesSessionKey() throws Exception {
+    void testBidirectionalKeyIsolation() throws Exception {
         String requestText = "User Request Data";
         EcdhCryptoClient.EncryptionResult result = cryptoClient.encrypt(requestText);
 
-        // Server simulates response using SAME session key and a NEW IV
+        // Verify sharedSecret is stored in context
+        assertNotNull(result.context().sharedSecret());
+
+        // Server derives server-write-key (HKDF_INFO_RESPONSE_AES_KEY) with its new response IV
         byte[] serverResponseIv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+        SecretKey serverResponseKey = EcdhKeyAgreementService.deriveAesKey(
+                result.context().sharedSecret(),
+                serverResponseIv,
+                CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY
+        );
+
+        // Key isolation verification: Request key != Response key
+        assertFalse(Arrays.equals(result.context().sessionKey().getEncoded(), serverResponseKey.getEncoded()));
+
         String serverResponseText = "Server Response Data";
         String serverEncryptedResponse = AesGcmCryptoService.encryptAsBase64(
                 serverResponseText,
-                result.context().sessionKey(),
+                serverResponseKey,
                 serverResponseIv
         );
 
-        EcdhCipherPayload serverResponsePayload = new EcdhCipherPayload(
-                result.payload().handshakeContext(),
-                new AesCipherPayload(EncodingUtils.toBase64(serverResponseIv), serverEncryptedResponse)
+        AesCipherPayload responsePayload = new AesCipherPayload(
+                EncodingUtils.toBase64(serverResponseIv),
+                serverEncryptedResponse
         );
 
-        AesCipherPayload aesCipherPayload = new AesCipherPayload(EncodingUtils.toBase64(serverResponseIv), serverEncryptedResponse);
-
-        // Client decrypts response with the existing context
-        String decryptedResponse = cryptoClient.decrypt(aesCipherPayload, result.context());
+        // Client decrypts response: derives responseKey using sharedSecret from context
+        String decryptedResponse = cryptoClient.decrypt(responsePayload, result.context());
         assertEquals(serverResponseText, decryptedResponse);
-        assertNotEquals(result.payload().aesCipherPayload().ivBase64(), serverResponsePayload.aesCipherPayload().ivBase64());
+
+        // Trying to decrypt response with request session key MUST fail
+        assertThrows(GeneralSecurityException.class, () ->
+                AesGcmCryptoService.decryptFromBase64(
+                        responsePayload.encryptedDataBase64(),
+                        result.context().sessionKey(),
+                        responsePayload.ivBase64()
+                )
+        );
     }
 }

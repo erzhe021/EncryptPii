@@ -21,7 +21,7 @@ public final class EcdhKeyAgreementService {
         return deriveAesKey(sharedSecret, iv, hkdfInfo);
     }
 
-    private static byte[] deriveSharedSecret(PrivateKey privateKey, PublicKey publicKey) throws GeneralSecurityException {
+    public static byte[] deriveSharedSecret(PrivateKey privateKey, PublicKey publicKey) throws GeneralSecurityException {
         KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
         keyAgreement.init(privateKey);
         keyAgreement.doPhase(publicKey, true);

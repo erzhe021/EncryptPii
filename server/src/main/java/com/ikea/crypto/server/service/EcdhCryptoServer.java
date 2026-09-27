@@ -155,18 +155,18 @@ public class EcdhCryptoServer {
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(payload.handshakeContext().clientEphemeralPublicKeyBase64()))
         );
 
-        log.debug("Deriving session key with serverPrivateKey(redis), clientEphemeralPublicKey, etc");
-        SecretKey sessionKey = EcdhKeyAgreementService.deriveAesKey(
-                serverPrivateKey,
-                clientEphemeralPublicKey,
+        byte[] sharedSecret = EcdhKeyAgreementService.deriveSharedSecret(serverPrivateKey, clientEphemeralPublicKey);
+        // Store the negotiated shared secret in the request-scoped context for reuse in response encryption
+        CryptoSessionContextAccessor.setSharedSecret(sharedSecret);
+
+        log.debug("Deriving request AES key from sharedSecret, iv and hkdfInfo");
+        SecretKey requestKey = EcdhKeyAgreementService.deriveAesKey(
+                sharedSecret,
                 EncodingUtils.fromBase64(payload.aesCipherPayload().ivBase64()),
                 CryptoConstants.HKDF_INFO_REQUEST_AES_KEY
         );
 
-        // Store the resolved session key in the request-scoped context for reuse in response encryption
-        CryptoSessionContextAccessor.setResolvedSessionKey(sessionKey);
-
-        String decryptedValue = decryptWithAes(payload, sessionKey);
+        String decryptedValue = decryptWithAes(payload, requestKey);
         if (EcdhCryptoConfiguration.oneTimeUsedKey) {
             invalidateEphemeralPrivateKey(serverPublicKeyBase64);
         }
@@ -175,11 +175,16 @@ public class EcdhCryptoServer {
 
     public AesCipherPayload encryptWithEcdhHandshakeContext(String data, EcdhHandshakeContext ecdhHandshakeContext) throws GeneralSecurityException {
         log.debug("start to encrypt using EcdhHandshakeContext");
-        SecretKey sessionKey = CryptoSessionContextAccessor.getResolvedSessionKey();
-        if (sessionKey != null) {
-            log.debug("Reusing resolved session key from context for response encryption");
+        byte[] sharedSecret = CryptoSessionContextAccessor.getSharedSecret();
+        if (sharedSecret != null) {
+            log.debug("Reusing resolved shared secret from context to derive isolated response AES key");
             byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
-            String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, sessionKey, iv);
+            SecretKey responseKey = EcdhKeyAgreementService.deriveAesKey(
+                    sharedSecret,
+                    iv,
+                    CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY
+            );
+            String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, responseKey, iv);
             return new AesCipherPayload(
                     EncodingUtils.toBase64(iv),
                     encryptedDataBase64

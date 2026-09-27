@@ -56,7 +56,7 @@ public class EcdhCryptoClient {
         NegotiatedKeys negotiatedKeys = negotiateKeys(ephemeralResponse.ephemeralPublicKeyBase64());
 
         byte[] iv = CryptoSessionMaterialFactory.generateIv(secureRandom);
-        log.debug("Deriving session key from sharedSecret, iv and hkdfInfo");
+        log.debug("Deriving request AES key from sharedSecret, iv and hkdfInfo");
         SecretKey sessionKey = EcdhKeyAgreementService.deriveAesKey(
                 negotiatedKeys.sharedSecret(),
                 iv,
@@ -79,14 +79,11 @@ public class EcdhCryptoClient {
                 new CryptoRequestContext(
                         CryptoConstants.ALGORITHM_ECDH,
                         UUID.randomUUID().toString(),
-                        new SecretKeySpec(EcdhKeyAgreementService.deriveAesKey(
-                                negotiatedKeys.sharedSecret(),
-                                iv,
-                                CryptoConstants.HKDF_INFO_REQUEST_AES_KEY
-                        ).getEncoded(), CryptoConstants.ALGORITHM_AES),
+                        new SecretKeySpec(sessionKey.getEncoded(), CryptoConstants.ALGORITHM_AES),
                         iv,
                         negotiatedKeys.clientEphemeralPrivateKey(),
-                        negotiatedKeys.serverEphemeralPublicKey()
+                        negotiatedKeys.serverEphemeralPublicKey(),
+                        negotiatedKeys.sharedSecret()
                 )
         );
     }
@@ -120,7 +117,8 @@ public class EcdhCryptoClient {
                         null, // No session key is derived for response-only requests, as the server will derive its own session key for the response
                         null, // No IV is generated for response-only requests, as the server will generate its own IV for the response
                         negotiatedKeys.clientEphemeralPrivateKey(),
-                        negotiatedKeys.serverEphemeralPublicKey()
+                        negotiatedKeys.serverEphemeralPublicKey(),
+                        negotiatedKeys.sharedSecret()
                 )
         );
     }
@@ -141,27 +139,23 @@ public class EcdhCryptoClient {
             throw new IllegalStateException("CryptoRequestContext is required for response decryption");
         }
 
-        // In bidirectional flow, reuse the existing AES session key with the response's unique IV
-        if (context.sessionKey() != null) {
-            log.debug("start to decrypt data using existing session key in CryptoRequestContext");
-            return AesGcmCryptoService.decryptFromBase64(
-                    payload.encryptedDataBase64(),
-                    context.sessionKey(),
-                    payload.ivBase64()
+        byte[] sharedSecret = context.sharedSecret();
+        if (sharedSecret == null) {
+            if (context.clientEphemeralPrivateKey() == null || context.serverEphemeralPublicKey() == null) {
+                throw new IllegalStateException("No ECDH key agreement state available for response decryption");
+            }
+            sharedSecret = EcdhKeyAgreementService.deriveSharedSecret(
+                    context.clientEphemeralPrivateKey(),
+                    context.serverEphemeralPublicKey()
             );
         }
 
-        // In response-only flow, derive AES key from ephemeral key pair
-        if (context.clientEphemeralPrivateKey() == null || context.serverEphemeralPublicKey() == null) {
-            throw new IllegalStateException("No ECDH key agreement state available for response decryption");
-        }
-
-        log.debug("Deriving session key from CryptoRequestContext since session key is not available in response-only flow");
+        log.debug("Deriving response AES key from sharedSecret, iv and hkdfInfo");
         SecretKey responseKey = EcdhKeyAgreementService.deriveAesKey(
-                context.clientEphemeralPrivateKey(),
-                context.serverEphemeralPublicKey(),
+                sharedSecret,
                 EncodingUtils.fromBase64(payload.ivBase64()),
-                CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY);
+                CryptoConstants.HKDF_INFO_RESPONSE_AES_KEY
+        );
 
         return AesGcmCryptoService.decryptFromBase64(
                 payload.encryptedDataBase64(),
@@ -181,22 +175,23 @@ public class EcdhCryptoClient {
     private NegotiatedKeys negotiateKeys(String serverEphemeralPublicKeyBase64) throws GeneralSecurityException {
         log.debug("Start to negotiate ECDH keys with server ephemeral public key");
         // Decode the server's ephemeral public key from Base64 and create a PublicKey object
-        PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
+        PublicKey serverEphemeralPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
                 new X509EncodedKeySpec(EncodingUtils.fromBase64(serverEphemeralPublicKeyBase64))
         );
 
         // Generate a new ephemeral key pair for the client using the same curve as the server
-        KeyPair ephemeralKeyPair = EcdhKeyPairFactory.generateEphemeralKeyPair(secureRandom);
+        KeyPair clientEphemeralKeyPair = EcdhKeyPairFactory.generateEphemeralKeyPair(secureRandom);
 
         // Convert the client's ephemeral public key to Base64 for transmission
-        String clientEphemeralPublicKeyBase64 = EncodingUtils.toBase64(ephemeralKeyPair.getPublic().getEncoded());
+        String clientEphemeralPublicKeyBase64 = EncodingUtils.toBase64(clientEphemeralKeyPair.getPublic().getEncoded());
+        PrivateKey clientEphemeralPrivateKey = clientEphemeralKeyPair.getPrivate();
 
         // Perform ECDH key agreement to derive the shared secret using the client's private key and the server's public key
         KeyAgreement keyAgreement = KeyAgreement.getInstance(CryptoConstants.ALGORITHM_ECDH);
         // Initialize the key agreement with the client's ephemeral private key
-        keyAgreement.init(ephemeralKeyPair.getPrivate());
+        keyAgreement.init(clientEphemeralPrivateKey);
         // Complete the key agreement phase with the server's public key
-        keyAgreement.doPhase(serverPublicKey, true);
+        keyAgreement.doPhase(serverEphemeralPublicKey, true);
         // Generate the shared secret from the key agreement
         byte[] sharedSecret = keyAgreement.generateSecret();
 
@@ -204,8 +199,8 @@ public class EcdhCryptoClient {
         return new NegotiatedKeys(
                 sharedSecret,
                 clientEphemeralPublicKeyBase64,
-                ephemeralKeyPair.getPrivate(),
-                serverPublicKey
+                clientEphemeralPrivateKey,
+                serverEphemeralPublicKey
         );
     }
 

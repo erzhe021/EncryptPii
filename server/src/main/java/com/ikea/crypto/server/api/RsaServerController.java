@@ -56,12 +56,10 @@ public class RsaServerController {
             @RequestBody(required = false)
             PlainData request,
             @RequestHeader(CryptoConstants.HEADER_CLIENT_SESSION_KEY) @NotBlank(message = "client session key is required for response-only RSA encryption")
-            String sessionKeyBase64,
-            @RequestHeader(CryptoConstants.HEADER_CLIENT_SESSION_IV) @NotBlank(message = "client session IV is required for response-only RSA encryption")
-            String sessionIvBase64
+            String sessionKeyBase64
     ) {
         log.debug("【api called】start to processing response-only RSA encryption");
-        SessionKeyTransport sessionTransport = new SessionKeyTransport(sessionKeyBase64, sessionIvBase64);
+        SessionKeyTransport sessionTransport = new SessionKeyTransport(sessionKeyBase64);
         CryptoSessionContextAccessor.setCryptoSessionContext(CryptoSessionContext.rsaResponseOnly(sessionTransport));
 
         return new SensitiveData(

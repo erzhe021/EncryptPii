@@ -77,13 +77,12 @@ public class RsaClientController extends AbstractClientController {
 
         String data = plainData == null ? null : plainData.data();
 
-        // Generate a new session key and IV for AES encryption
+        // Generate a new session key for AES encryption
         SecretKey sessionKey = generateSessionKey();
-        byte[] iv = generateIv();
 
         PublicKey rsaPublicKey = rsaCryptoClient.fetchServerPublicKey();
-        // Create a SessionKeyTransport object that will handle the encryption of the session key and IV using the server's RSA public key
-        SessionKeyTransport sessionTransport = SessionKeyTransport.fromGeneratedKey(sessionKey, iv, rsaPublicKey);
+        // Create a SessionKeyTransport object that encapsulates the encrypted session key for transport in header
+        SessionKeyTransport sessionTransport = SessionKeyTransport.fromGeneratedKey(sessionKey, rsaPublicKey);
 
         HttpResponse<String> response = sendJsonRequestWithSessionKeyTransport(data, rsaResponseOnlyPath, sessionTransport);
 

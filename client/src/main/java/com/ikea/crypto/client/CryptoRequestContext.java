@@ -13,6 +13,7 @@ import java.security.PublicKey;
  * @param iv                        The initialization vector used for encryption/decryption.
  * @param clientEphemeralPrivateKey The client's ephemeral private key used for key exchange.
  * @param serverEphemeralPublicKey  The server's ephemeral public key used for key exchange.
+ * @param sharedSecret              The raw ECDH shared secret negotiated between client and server.
  */
 public record CryptoRequestContext(
         String algorithm,
@@ -20,11 +21,23 @@ public record CryptoRequestContext(
         SecretKey sessionKey,
         byte[] iv,
         PrivateKey clientEphemeralPrivateKey,
-        PublicKey serverEphemeralPublicKey
+        PublicKey serverEphemeralPublicKey,
+        byte[] sharedSecret
 ) {
     public CryptoRequestContext {
         if (algorithm == null || algorithm.isBlank()) {
             throw new IllegalArgumentException("algorithm is required");
         }
+    }
+
+    public CryptoRequestContext(
+            String algorithm,
+            String requestId,
+            SecretKey sessionKey,
+            byte[] iv,
+            PrivateKey clientEphemeralPrivateKey,
+            PublicKey serverEphemeralPublicKey
+    ) {
+        this(algorithm, requestId, sessionKey, iv, clientEphemeralPrivateKey, serverEphemeralPublicKey, null);
     }
 }
