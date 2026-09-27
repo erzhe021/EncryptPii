@@ -2,11 +2,8 @@ package com.ikea.crypto.client.rsa;
 
 import com.ikea.crypto.client.AbstractClientController;
 import com.ikea.crypto.common.AesCipherPayload;
-import com.ikea.crypto.common.CryptoConstants;
-import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.PlainData;
 import com.ikea.crypto.common.rsa.RsaCipherPayload;
-import com.ikea.crypto.common.rsa.RsaPublicKeyResponse;
 import com.ikea.crypto.common.rsa.SessionKeyTransport;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -16,9 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import javax.crypto.SecretKey;
 import java.net.http.HttpResponse;
-import java.security.KeyFactory;
 import java.security.PublicKey;
-import java.security.spec.X509EncodedKeySpec;
 import java.util.Map;
 
 @RestController
@@ -86,7 +81,7 @@ public class RsaClientController extends AbstractClientController {
         SecretKey sessionKey = generateSessionKey();
         byte[] iv = generateIv();
 
-        PublicKey rsaPublicKey = loadServerRsaPublicKey();
+        PublicKey rsaPublicKey = rsaCryptoClient.fetchServerPublicKey();
         // Create a SessionKeyTransport object that will handle the encryption of the session key and IV using the server's RSA public key
         SessionKeyTransport sessionTransport = SessionKeyTransport.fromGeneratedKey(sessionKey, iv, rsaPublicKey);
 
@@ -95,7 +90,7 @@ public class RsaClientController extends AbstractClientController {
         AesCipherPayload responsePayload = objectMapper.readValue(response.body(), AesCipherPayload.class);
 
         // Decrypt the response data using the session key and IV
-        String decryptedResponseData = decryptResponseData(responsePayload, sessionKey);
+        String decryptedResponseData = rsaCryptoClient.decrypt(responsePayload, sessionKey);
         PlainData responsePlainData = objectMapper.readValue(decryptedResponseData, PlainData.class);
 
         return Map.of(
@@ -104,17 +99,4 @@ public class RsaClientController extends AbstractClientController {
         );
     }
 
-    /**
-     * Loads the server's RSA public key by fetching it from the server and converting it to a PublicKey object.
-     *
-     * @return the server's RSA public key
-     * @throws Exception if an error occurs while fetching or converting the public key
-     */
-    private PublicKey loadServerRsaPublicKey() throws Exception {
-        RsaPublicKeyResponse serverPublicKey =
-                (RsaPublicKeyResponse) new RsaHttpClient(serverBaseUri, rsaPublicKeyPath).fetchServerPublicKey();
-        return KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(
-                new X509EncodedKeySpec(EncodingUtils.fromBase64(serverPublicKey.publicKeyBase64()))
-        );
-    }
 }

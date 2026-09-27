@@ -1,17 +1,19 @@
 package com.ikea.crypto.server.codec.ecdh;
 
-import com.ikea.crypto.common.rsa.SessionKeyTransport;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.common.ecdh.EcdhCipherPayload;
 import com.ikea.crypto.common.ecdh.EcdhHandshakeContext;
+import com.ikea.crypto.common.rsa.SessionKeyTransport;
 import com.ikea.crypto.server.codec.AbstractCryptoCodec;
-import com.ikea.crypto.server.model.CryptoAlgorithm;
 import com.ikea.crypto.server.context.CryptoSessionContext;
 import com.ikea.crypto.server.error.InvalidCryptoPayloadException;
+import com.ikea.crypto.server.model.CryptoAlgorithm;
 import com.ikea.crypto.server.service.EcdhCryptoServer;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 
 import java.security.GeneralSecurityException;
 
+@Slf4j
 public class EcdhCryptoCodec extends AbstractCryptoCodec {
     private final EcdhCryptoServer ecdhCryptoServer;
 
@@ -27,6 +29,7 @@ public class EcdhCryptoCodec extends AbstractCryptoCodec {
 
     @Override
     protected String doDecrypt(CryptoSessionContext<?> sessionContext) throws GeneralSecurityException {
+        log.debug("Decrypting request body in session context");
         if (sessionContext.requestKeyMaterial() instanceof EcdhCipherPayload payload) {
             return ecdhCryptoServer.decrypt(payload);
         }
@@ -35,6 +38,7 @@ public class EcdhCryptoCodec extends AbstractCryptoCodec {
 
     @Override
     protected Object doEncrypt(String responseBodyString, CryptoSessionContext<?> sessionContext) throws GeneralSecurityException {
+        log.debug("Encrypting response body in session context");
         if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport) {
             throw new InvalidCryptoPayloadException(
                     "SessionKeyTransport is not supported for ECDH response encryption; use EcdhHandshakeContext or EcdhCipherPayload instead."

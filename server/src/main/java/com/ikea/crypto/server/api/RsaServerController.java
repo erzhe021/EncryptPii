@@ -13,12 +13,14 @@ import com.ikea.crypto.server.model.CryptoAlgorithm;
 import com.ikea.crypto.server.service.RsaCryptoServer;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@Validated
 @RequestMapping("/crypto/server/rsa")
+@Validated
+@Slf4j
 public class RsaServerController {
 
     private final RsaCryptoServer rsaCryptoServer;
@@ -29,6 +31,7 @@ public class RsaServerController {
 
     @GetMapping("/public-key")
     public RsaPublicKeyResponse getRsaPublicKey() {
+        log.debug("【api called】start to retrieving RSA public key");
         return rsaCryptoServer.getPublicKey();
     }
 
@@ -36,12 +39,14 @@ public class RsaServerController {
     @DecryptRequest(CryptoAlgorithm.RSA)
     @EncryptResponse(CryptoAlgorithm.RSA)
     public SensitiveData bidirectionalRsaEncrypt(@Valid @RequestBody SensitiveData request) {
+        log.debug("【api called】start to processing bidirectional RSA encryption");
         return new SensitiveData("mock rsa response for request - " + request.data());
     }
 
     @PostMapping("/request-only")
     @DecryptRequest(CryptoAlgorithm.RSA)
     public PlainData requestOnlyRsaEncrypt(@Valid @RequestBody SensitiveData request) {
+        log.debug("【api called】start to processing request-only RSA encryption");
         return new PlainData("mock plain response for request - " + request.data());
     }
 
@@ -55,6 +60,7 @@ public class RsaServerController {
             @RequestHeader(CryptoConstants.HEADER_CLIENT_SESSION_IV) @NotBlank(message = "client session IV is required for response-only RSA encryption")
             String sessionIvBase64
     ) {
+        log.debug("【api called】start to processing response-only RSA encryption");
         SessionKeyTransport sessionTransport = new SessionKeyTransport(sessionKeyBase64, sessionIvBase64);
         CryptoSessionContextAccessor.setCryptoSessionContext(CryptoSessionContext.rsaResponseOnly(sessionTransport));
 

@@ -1,22 +1,24 @@
 package com.ikea.crypto.server.codec.rsa;
 
-import com.ikea.crypto.common.CryptoConstants;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.common.AesCipherPayload;
+import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
-import com.ikea.crypto.common.rsa.SessionKeyTransport;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
 import com.ikea.crypto.common.rsa.RsaCipherPayload;
+import com.ikea.crypto.common.rsa.SessionKeyTransport;
 import com.ikea.crypto.server.codec.AbstractCryptoCodec;
-import com.ikea.crypto.server.model.CryptoAlgorithm;
 import com.ikea.crypto.server.context.CryptoSessionContext;
 import com.ikea.crypto.server.error.InvalidCryptoPayloadException;
+import com.ikea.crypto.server.model.CryptoAlgorithm;
 import com.ikea.crypto.server.service.RsaCryptoServer;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import java.security.GeneralSecurityException;
 
+@Slf4j
 public class RsaCryptoCodec extends AbstractCryptoCodec {
     private final RsaCryptoServer rsaCryptoServer;
 
@@ -32,6 +34,7 @@ public class RsaCryptoCodec extends AbstractCryptoCodec {
 
     @Override
     protected String doDecrypt(CryptoSessionContext<?> sessionContext) throws GeneralSecurityException {
+        log.debug("Decrypting request body in session context with RSA algorithm");
         if (sessionContext.requestKeyMaterial() instanceof RsaCipherPayload payload) {
             return rsaCryptoServer.decrypt(payload);
         }
@@ -40,6 +43,7 @@ public class RsaCryptoCodec extends AbstractCryptoCodec {
 
     @Override
     protected Object doEncrypt(String responseBodyString, CryptoSessionContext<?> sessionContext) throws GeneralSecurityException {
+        log.debug("Encrypting response body in session context with RSA algorithm");
         if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport sessionKeyTransport) {
             return encryptWithSessionKeyTransport(responseBodyString, sessionKeyTransport);
         }

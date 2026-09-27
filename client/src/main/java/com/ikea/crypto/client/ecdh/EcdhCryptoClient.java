@@ -1,7 +1,6 @@
 package com.ikea.crypto.client.ecdh;
 
 import com.ikea.crypto.client.CryptoRequestContext;
-import com.ikea.crypto.client.PublicKeyProvider;
 import com.ikea.crypto.common.AesCipherPayload;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
@@ -25,7 +24,7 @@ import java.util.UUID;
  */
 @Slf4j
 public class EcdhCryptoClient {
-    private final PublicKeyProvider publicKeyProvider;
+    private final EcdhHttpClient ecdhHttpClient;
     private final SecureRandom secureRandom;
 
     public record EncryptionResult(EcdhCipherPayload payload, CryptoRequestContext context) {
@@ -34,8 +33,8 @@ public class EcdhCryptoClient {
     public record ResponseOnlySession(EcdhPlainPayload request, CryptoRequestContext context) {
     }
 
-    public EcdhCryptoClient(PublicKeyProvider publicKeyProvider) {
-        this.publicKeyProvider = publicKeyProvider;
+    public EcdhCryptoClient(EcdhHttpClient ecdhHttpClient) {
+        this.ecdhHttpClient = ecdhHttpClient;
         this.secureRandom = new SecureRandom();
     }
 
@@ -51,12 +50,13 @@ public class EcdhCryptoClient {
      */
     public EncryptionResult encrypt(String data) throws GeneralSecurityException {
         log.debug("start to encrypt data using ECDH key exchange and AES-GCM encryption");
-        EcdhPublicKeyResponse publicKeyResponse = (EcdhPublicKeyResponse) publicKeyProvider.fetchServerPublicKey();
-        verifyServerEphemeralPublicKey(publicKeyResponse);
-        NegotiatedKeys negotiatedKeys = negotiateKeys(publicKeyResponse.ephemeralPublicKeyBase64());
+        EcdhEphemeralKeyResponse ephemeralResponse = fetchEphemeralPublicKey();
+        EcdsaVerificationKeyResponse ecdsaResponse = fetchEcdsaPublicKey();
+        verifyServerEphemeralPublicKey(ephemeralResponse, ecdsaResponse);
+        NegotiatedKeys negotiatedKeys = negotiateKeys(ephemeralResponse.ephemeralPublicKeyBase64());
 
         byte[] iv = CryptoSessionMaterialFactory.generateIv(secureRandom);
-        log.debug("Deriving AES key from sharedSecret and iv with hkdfInfo");
+        log.debug("Deriving session key from sharedSecret, iv and hkdfInfo");
         SecretKey sessionKey = EcdhKeyAgreementService.deriveAesKey(
                 negotiatedKeys.sharedSecret(),
                 iv,
@@ -69,7 +69,7 @@ public class EcdhCryptoClient {
                 new EcdhCipherPayload(
                         new EcdhHandshakeContext(
                                 negotiatedKeys.clientEphemeralPublicKeyBase64(),
-                                publicKeyResponse.ephemeralPublicKeyBase64()
+                                ephemeralResponse.ephemeralPublicKeyBase64()
                         ),
                         new AesCipherPayload(
                                 EncodingUtils.toBase64(iv),
@@ -102,14 +102,15 @@ public class EcdhCryptoClient {
      */
     public ResponseOnlySession createResponseOnlySession(String data) throws GeneralSecurityException {
         log.debug("start to create response only session");
-        EcdhPublicKeyResponse publicKeyResponse = (EcdhPublicKeyResponse) publicKeyProvider.fetchServerPublicKey();
-        verifyServerEphemeralPublicKey(publicKeyResponse);
-        NegotiatedKeys negotiatedKeys = negotiateKeys(publicKeyResponse.ephemeralPublicKeyBase64());
+        EcdhEphemeralKeyResponse ephemeralResponse = fetchEphemeralPublicKey();
+        EcdsaVerificationKeyResponse ecdsaResponse = fetchEcdsaPublicKey();
+        verifyServerEphemeralPublicKey(ephemeralResponse, ecdsaResponse);
+        NegotiatedKeys negotiatedKeys = negotiateKeys(ephemeralResponse.ephemeralPublicKeyBase64());
         return new ResponseOnlySession(
                 new EcdhPlainPayload(
                         new EcdhHandshakeContext(
                                 negotiatedKeys.clientEphemeralPublicKeyBase64(),
-                                publicKeyResponse.ephemeralPublicKeyBase64()
+                                ephemeralResponse.ephemeralPublicKeyBase64()
                         ),
                         data
                 ),
@@ -132,15 +133,30 @@ public class EcdhCryptoClient {
      * @throws GeneralSecurityException If decryption fails due to cryptographic errors or missing keys.
      */
     public String decrypt(EcdhCipherPayload payload, CryptoRequestContext context) throws GeneralSecurityException {
-        log.debug("start to decrypt payload using context");
+        log.debug("start to decrypt payload using CryptoRequestContext");
         if (payload == null) {
             throw new IllegalArgumentException("payload cannot be null");
         }
-        if (context == null || context.clientEphemeralPrivateKey() == null || context.serverEphemeralPublicKey() == null) {
+        if (context == null) {
+            throw new IllegalStateException("CryptoRequestContext is required for response decryption");
+        }
+
+        // In bidirectional flow, reuse the existing AES session key with the response's unique IV
+        if (context.sessionKey() != null) {
+            log.debug("start to decrypt data using existing session key in CryptoRequestContext");
+            return AesGcmCryptoService.decryptFromBase64(
+                    payload.aesCipherPayload().encryptedDataBase64(),
+                    context.sessionKey(),
+                    payload.aesCipherPayload().ivBase64()
+            );
+        }
+
+        // In response-only flow, derive AES key from ephemeral key pair
+        if (context.clientEphemeralPrivateKey() == null || context.serverEphemeralPublicKey() == null) {
             throw new IllegalStateException("No ECDH key agreement state available for response decryption");
         }
 
-        log.debug("Deriving AES key from context.clientEphemeralPrivateKey, context.serverEphemeralPublicKey, iv and hkdfInfo");
+        log.debug("Deriving session key from CryptoRequestContext since session key is not available in response-only flow");
         SecretKey responseKey = EcdhKeyAgreementService.deriveAesKey(
                 context.clientEphemeralPrivateKey(),
                 context.serverEphemeralPublicKey(),
@@ -207,32 +223,42 @@ public class EcdhCryptoClient {
                                   PublicKey serverEphemeralPublicKey) {
     }
 
+    private EcdhEphemeralKeyResponse fetchEphemeralPublicKey() throws GeneralSecurityException {
+        return ecdhHttpClient.fetchEphemeralPublicKey();
+    }
+
+    private EcdsaVerificationKeyResponse fetchEcdsaPublicKey() throws GeneralSecurityException {
+        return ecdhHttpClient.fetchEcdsaPublicKey();
+    }
+
     /**
-     * Verifies the server's ephemeral public key signature using the provided EcdhPublicKeyResponse.
-     * Throws a GeneralSecurityException if the signature verification fails or if required fields are missing.
-     *
-     * @param response The EcdhPublicKeyResponse containing the server's ephemeral public key and signature.
-     * @throws GeneralSecurityException If signature verification fails or required fields are missing.
+     * Verifies the server's ephemeral public key signature using the ECDSA verification key.
      */
-    private void verifyServerEphemeralPublicKey(EcdhPublicKeyResponse response) throws GeneralSecurityException {
+    private void verifyServerEphemeralPublicKey(
+            EcdhEphemeralKeyResponse ephemeralResponse,
+            EcdsaVerificationKeyResponse ecdsaResponse
+    ) throws GeneralSecurityException {
         log.debug("start to verify server ephemeral public key signature using ECDSA public key");
-        if (response == null) {
-            throw new GeneralSecurityException("ECDH public key response is missing");
+        if (ephemeralResponse == null) {
+            throw new GeneralSecurityException("ECDH ephemeral public key response is missing");
         }
-        if (response.ecdsaPublicKeyBase64() == null || response.ecdsaPublicKeyBase64().isBlank()) {
+        if (ecdsaResponse == null) {
             throw new GeneralSecurityException("Server ECDSA public key is required for ECDH signature verification");
         }
-        if (response.signatureBase64() == null || response.signatureBase64().isBlank()) {
+        if (ecdsaResponse.ecdsaPublicKeyBase64() == null || ecdsaResponse.ecdsaPublicKeyBase64().isBlank()) {
+            throw new GeneralSecurityException("Server ECDSA public key is required for ECDH signature verification");
+        }
+        if (ephemeralResponse.signatureBase64() == null || ephemeralResponse.signatureBase64().isBlank()) {
             throw new GeneralSecurityException("Server ECDH signature is missing");
         }
 
         PublicKey ecdsaPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC).generatePublic(
-                new X509EncodedKeySpec(EncodingUtils.fromBase64(response.ecdsaPublicKeyBase64()))
+                new X509EncodedKeySpec(EncodingUtils.fromBase64(ecdsaResponse.ecdsaPublicKeyBase64()))
         );
-        Signature signature = Signature.getInstance(response.signatureAlgorithm());
+        Signature signature = Signature.getInstance(ephemeralResponse.signatureAlgorithm());
         signature.initVerify(ecdsaPublicKey);
-        signature.update(EncodingUtils.fromBase64(response.ephemeralPublicKeyBase64()));
-        boolean verified = signature.verify(EncodingUtils.fromBase64(response.signatureBase64()));
+        signature.update(EncodingUtils.fromBase64(ephemeralResponse.ephemeralPublicKeyBase64()));
+        boolean verified = signature.verify(EncodingUtils.fromBase64(ephemeralResponse.signatureBase64()));
         if (!verified) {
             throw new GeneralSecurityException("Server ECDH ephemeral public key signature verification failed");
         }

@@ -1,8 +1,7 @@
 package com.ikea.crypto.client.rsa;
 
-import com.ikea.crypto.client.PublicKeyProvider;
-import com.ikea.crypto.common.rsa.RsaPublicKeyResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ikea.crypto.common.rsa.RsaPublicKeyResponse;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -12,17 +11,14 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.security.GeneralSecurityException;
 
-/**
- * RsaHttpCryptoClient is a client that fetches the server's RSA public key over HTTP.
- * It implements the PublicKeyProvider interface, allowing it to be used in cryptographic operations
- * that require the server's public key.
- */
 @Slf4j
-public class RsaHttpClient implements PublicKeyProvider {
+public class RsaHttpClient {
     private final HttpClient httpClient;
     private final URI serverBaseUri;
     private final ObjectMapper objectMapper;
     private final String publicKeyEndpoint;
+    // Cache the fetched RSA public key response to avoid unnecessary network calls.
+    private volatile RsaPublicKeyResponse cachedResponse;
 
     public RsaHttpClient(URI serverBaseUri, String publicKeyEndpoint) {
         this.httpClient = HttpClient.newHttpClient();
@@ -31,25 +27,26 @@ public class RsaHttpClient implements PublicKeyProvider {
         this.publicKeyEndpoint = publicKeyEndpoint;
     }
 
-    /**
-     * Fetches the server's RSA public key from the specified endpoint.
-     *
-     * @return An RsaPublicKeyResponse containing the server's RSA public key.
-     * @throws GeneralSecurityException If there is an error fetching or parsing the public key.
-     */
-    @Override
-    public Object fetchServerPublicKey() throws GeneralSecurityException {
+    public RsaPublicKeyResponse fetchServerPublicKey() throws GeneralSecurityException {
+        if (cachedResponse != null && System.currentTimeMillis() < cachedResponse.expiresAtEpochMillis()) {
+            log.debug("use cached RSA public key which is still valid");
+            return cachedResponse;
+        }
+
         log.debug("start to fetching RSA public key from server");
         HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
                 .build();
         try {
-            log.debug("start to call server endpoint to fetch RSA public key");
+            log.debug("【call api】start to call server endpoint to fetch RSA public key");
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() != 200) {
                 throw new GeneralSecurityException("Failed to fetch RSA public key, status=" + response.statusCode());
             }
-            return objectMapper.readValue(response.body(), RsaPublicKeyResponse.class);
+            RsaPublicKeyResponse fetched = objectMapper.readValue(response.body(), RsaPublicKeyResponse.class);
+            log.debug("fetched RSA public key from server, caching it for future use");
+            cachedResponse = fetched;
+            return fetched;
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();

@@ -59,7 +59,7 @@ public final class AesGcmCryptoService {
      * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
      */
     public static String encryptAsBase64(String plainText, SecretKey sessionKey, byte[] iv) throws GeneralSecurityException {
-        log.debug("start to encrypt data using AES session key");
+        log.debug("start to encrypt data using session key");
         byte[] encrypted = encrypt(plainText.getBytes(StandardCharsets.UTF_8), sessionKey, iv);
         return EncodingUtils.toBase64(encrypted);
     }
@@ -74,7 +74,7 @@ public final class AesGcmCryptoService {
      * @throws GeneralSecurityException If decryption fails due to cryptographic errors.
      */
     public static String decryptFromBase64(String encryptedBase64, SecretKey sessionKey, String ivBase64) throws GeneralSecurityException {
-        log.debug("start to decrypt data using AES session key");
+        log.debug("start to decrypt data using session key");
         byte[] decrypted = decrypt(EncodingUtils.fromBase64(encryptedBase64), sessionKey, EncodingUtils.fromBase64(ivBase64));
         return new String(decrypted, StandardCharsets.UTF_8);
     }

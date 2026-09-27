@@ -47,14 +47,14 @@ public abstract class AbstractClientController {
     }
 
     protected HttpResponse<String> sendJsonRequest(String path, Object requestBody) throws Exception {
-        log.debug("start to call server endpoint to send json request");
+        log.debug("【call api】start to call server endpoint to send json request");
         HttpResponse<String> response = httpClient.send(buildJsonRequest(serverBaseUri.resolve(path), requestBody), HttpResponse.BodyHandlers.ofString());
         ensureSuccess(response, path);
         return response;
     }
 
     protected HttpResponse<String> sendJsonRequestWithSessionKeyTransport(String data, String path, SessionKeyTransport sessionTransport) throws Exception {
-        log.debug("start to call server endpoint to send json request with SessionKeyTransport");
+        log.debug("【call api】start to call server endpoint to send json request with SessionKeyTransport");
         HttpResponse<String> response = httpClient.send(
                 buildSessionKeyRequest(serverBaseUri.resolve(path), data, sessionTransport),
                 HttpResponse.BodyHandlers.ofString()
@@ -100,7 +100,7 @@ public abstract class AbstractClientController {
     }
 
     protected SecretKey generateSessionKey() throws Exception {
-        log.debug("start to generate AES session key");
+        log.debug("start to generate session key");
         KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
         return keyGenerator.generateKey();
@@ -113,19 +113,4 @@ public abstract class AbstractClientController {
         return iv;
     }
 
-    /**
-     * Decrypts the response data using the provided AES session key and the response payload.
-     *
-     * @param responsePayload the response payload containing the encrypted data and IV
-     * @param sessionKey      the AES session key used for decryption
-     * @return the decrypted response data as a String
-     * @throws Exception if an error occurs during decryption
-     */
-    protected String decryptResponseData(AesCipherPayload responsePayload, SecretKey sessionKey) throws Exception {
-        return AesGcmCryptoService.decryptFromBase64(
-                responsePayload.encryptedDataBase64(),
-                sessionKey,
-                responsePayload.ivBase64()
-        );
-    }
 }

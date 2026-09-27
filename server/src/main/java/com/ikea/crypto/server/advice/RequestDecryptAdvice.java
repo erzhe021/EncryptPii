@@ -5,6 +5,7 @@ import com.ikea.crypto.server.codec.CryptoPayloadHandlerRegistry;
 import com.ikea.crypto.server.context.CryptoSessionContext;
 import com.ikea.crypto.server.context.CryptoSessionContextAccessor;
 import com.ikea.crypto.server.error.InvalidCryptoPayloadException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpInputMessage;
@@ -20,6 +21,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
 @ControllerAdvice
+@Slf4j
 public class RequestDecryptAdvice implements RequestBodyAdvice {
 
     private final CryptoPayloadHandlerRegistry handlerRegistry;
@@ -45,6 +47,7 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
                                          Type targetType,
                                          Class<? extends HttpMessageConverter<?>> converterType)
             throws IOException {
+        log.debug("【api pre-called】start to decrypting request body");
         DecryptRequest decryptRequest = findDecryptRequest(parameter);
         if (decryptRequest == null) {
             return inputMessage;

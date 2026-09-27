@@ -24,7 +24,8 @@ public class EcdhClientController extends AbstractClientController {
 
     public EcdhClientController(
             @Value("${crypto.server.base-url:http://localhost:9090}") String serverBaseUrl,
-            @Value("${crypto.server.endpoints.ecdh.public-key:/crypto/server/ecdh/public-key}") String ecdhPublicKeyPath,
+            @Value("${crypto.server.endpoints.ecdh.ephemeral-public-key:/crypto/server/ecdh/ephemeral-public-key}") String ecdhEphemeralPublicKeyPath,
+            @Value("${crypto.server.endpoints.ecdh.ecdsa-public-key:/crypto/server/ecdh/ecdsa-public-key}") String ecdsaPublicKeyPath,
             @Value("${crypto.server.endpoints.ecdh.bidirectional:/crypto/server/ecdh/bidirectional}") String ecdhBidirectionalPath,
             @Value("${crypto.server.endpoints.ecdh.request-only:/crypto/server/ecdh/request-only}") String ecdhRequestOnlyPath,
             @Value("${crypto.server.endpoints.ecdh.response-only:/crypto/server/ecdh/response-only}") String ecdhResponseOnlyPath
@@ -33,7 +34,7 @@ public class EcdhClientController extends AbstractClientController {
         this.ecdhBidirectionalPath = ecdhBidirectionalPath;
         this.ecdhRequestOnlyPath = ecdhRequestOnlyPath;
         this.ecdhResponseOnlyPath = ecdhResponseOnlyPath;
-        this.ecdhCryptoClient = new EcdhCryptoClient(new EcdhHttpClient(serverBaseUri, ecdhPublicKeyPath));
+        this.ecdhCryptoClient = new EcdhCryptoClient(new EcdhHttpClient(serverBaseUri, ecdhEphemeralPublicKeyPath, ecdsaPublicKeyPath));
     }
 
     @PostMapping("/bidirectional")

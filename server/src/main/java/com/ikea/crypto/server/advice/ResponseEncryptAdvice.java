@@ -5,6 +5,7 @@ import com.ikea.crypto.server.context.CryptoSessionContext;
 import com.ikea.crypto.server.context.CryptoSessionContextAccessor;
 import com.ikea.crypto.server.error.CryptoException;
 import com.ikea.crypto.server.error.ResponseEncryptionException;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
@@ -20,6 +21,7 @@ import java.security.GeneralSecurityException;
  * The response body is encrypted using the same algorithm and session context as the request.
  */
 @ControllerAdvice
+@Slf4j
 public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
 
     private final CryptoPayloadHandlerRegistry handlerRegistry;
@@ -49,6 +51,7 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
                                   Class<? extends HttpMessageConverter<?>> selectedConverterType,
                                   ServerHttpRequest request,
                                   ServerHttpResponse response) {
+        log.debug("【api post-called】start to encrypting response body");
         EncryptResponse encryptResponse = findEncryptResponse(returnType);
         if (encryptResponse == null || body == null) {
             return body;
@@ -63,6 +66,8 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
             return handlerRegistry.getRequiredHandler(encryptResponse.value()).encrypt(body, sessionContext);
         } catch (GeneralSecurityException e) {
             throw new ResponseEncryptionException("Failed to encrypt response body", e);
+        } finally {
+            CryptoSessionContextAccessor.clearCryptoSessionContext();
         }
     }
 

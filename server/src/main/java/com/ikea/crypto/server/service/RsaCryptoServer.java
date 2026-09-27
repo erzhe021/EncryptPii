@@ -29,7 +29,9 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @return an instance of RsaPublicKeyResponse containing the Base64-encoded RSA public key
      */
     public RsaPublicKeyResponse getPublicKey() {
-        return new RsaPublicKeyResponse(EncodingUtils.toBase64(rsaPublicKey.getEncoded()));
+        String keyId = "rsa-current";
+        long expiresAt = System.currentTimeMillis() + 10 * 60 * 1000L;
+        return new RsaPublicKeyResponse(EncodingUtils.toBase64(rsaPublicKey.getEncoded()), keyId, expiresAt);
     }
 
     /**
@@ -95,7 +97,7 @@ public record RsaCryptoServer(PrivateKey rsaPrivateKey, PublicKey rsaPublicKey) 
      * @throws GeneralSecurityException if a security exception occurs during encryption
      */
     public RsaCipherPayload encryptWithRequestSessionKey(String data, String encryptedSessionKeyBase64) throws GeneralSecurityException {
-        log.debug("start to encrypt data using AES session key decrypted from encryptedSessionKeyBase64");
+        log.debug("start to encrypt data using session key decrypted from encryptedSessionKeyBase64");
         SecretKey sessionKey = CryptoSessionContextAccessor.getResolvedSessionKey();
         if (sessionKey == null) {
             sessionKey = decryptSessionKeyToSecretKey(encryptedSessionKeyBase64);

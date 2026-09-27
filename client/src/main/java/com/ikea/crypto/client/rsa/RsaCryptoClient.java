@@ -1,7 +1,7 @@
 package com.ikea.crypto.client.rsa;
 
 import com.ikea.crypto.client.CryptoRequestContext;
-import com.ikea.crypto.client.PublicKeyProvider;
+import com.ikea.crypto.common.AesCipherPayload;
 import com.ikea.crypto.common.CryptoConstants;
 import com.ikea.crypto.common.EncodingUtils;
 import com.ikea.crypto.common.core.AesGcmCryptoService;
@@ -27,16 +27,11 @@ import java.util.UUID;
  */
 @Slf4j
 public class RsaCryptoClient {
-    private final PublicKeyProvider publicKeyProvider;
+    private final RsaHttpClient rsaHttpClient;
     private final SecureRandom secureRandom;
 
-    /**
-     * Constructs a new RsaCryptoClient with the given PublicKeyProvider.
-     *
-     * @param publicKeyProvider The PublicKeyProvider used to fetch the server's RSA public key.
-     */
-    public RsaCryptoClient(PublicKeyProvider publicKeyProvider) {
-        this.publicKeyProvider = publicKeyProvider;
+    public RsaCryptoClient(RsaHttpClient rsaHttpClient) {
+        this.rsaHttpClient = rsaHttpClient;
         this.secureRandom = new SecureRandom();
     }
 
@@ -53,14 +48,11 @@ public class RsaCryptoClient {
      * @throws GeneralSecurityException If encryption fails due to cryptographic errors.
      */
     public EncryptionResult encrypt(String data) throws GeneralSecurityException {
-        // Fetch the server's RSA public key
-        RsaPublicKeyResponse publicKeyResponse = (RsaPublicKeyResponse) publicKeyProvider.fetchServerPublicKey();
-        PublicKey serverPublicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(
-                new X509EncodedKeySpec(EncodingUtils.fromBase64(publicKeyResponse.publicKeyBase64()))
-        );
+
+        PublicKey serverPublicKey = fetchServerPublicKey();
 
         // Generate a random AES session key
-        log.debug("start to generate client AES session key");
+        log.debug("start to generate client session key");
         SecretKey sessionKey = CryptoSessionMaterialFactory.generateAesSessionKey(secureRandom);
 
         // Generate a random IV for AES encryption
@@ -101,17 +93,32 @@ public class RsaCryptoClient {
      * @throws IllegalStateException    If the AES session key is not available for decryption.
      */
     public String decrypt(RsaCipherPayload payload, CryptoRequestContext context) throws GeneralSecurityException {
-        log.debug("start to decrypt data using AES session key in context");
+        log.debug("start to decrypt data using session key in context");
         if (payload == null) {
             throw new IllegalArgumentException("payload cannot be null");
         }
         if (context == null || context.sessionKey() == null) {
-            throw new IllegalStateException("No AES session key available for local RSA decryption");
+            throw new IllegalStateException("No session key available for local RSA decryption");
         }
         // Decrypt the data using AES with the provided session key and the payload IV
         return AesGcmCryptoService.decryptFromBase64(
                 payload.encryptedDataBase64(),
                 context.sessionKey(),
                 payload.ivBase64());
+    }
+
+    public String decrypt(AesCipherPayload responsePayload, SecretKey sessionKey) throws GeneralSecurityException {
+        return AesGcmCryptoService.decryptFromBase64(
+                responsePayload.encryptedDataBase64(),
+                sessionKey,
+                responsePayload.ivBase64()
+        );
+    }
+
+    public PublicKey fetchServerPublicKey() throws GeneralSecurityException {
+        RsaPublicKeyResponse publicKeyResponse = rsaHttpClient.fetchServerPublicKey();
+        return KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(
+                new X509EncodedKeySpec(EncodingUtils.fromBase64(publicKeyResponse.publicKeyBase64()))
+        );
     }
 }
