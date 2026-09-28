@@ -19,7 +19,7 @@ public final class CryptoAdviceSupport {
         return AnnotatedElementUtils.findMergedAnnotation(methodParameter.getContainingClass(), annotationType);
     }
 
-    public static CryptoSessionContext<?> getSessionContext() {
+    public static CryptoSessionContext getSessionContext() {
         return CryptoSessionContextAccessor.getCryptoSessionContext();
     }
 }

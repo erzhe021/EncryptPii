@@ -1,13 +1,9 @@
 server:
   port: 9090
 
-ecdh:
-  crypto:
-    key-directory: ${user.dir}/server/src/main/resources/keys
-
-rsa:
-  crypto:
-    key-directory: ${user.dir}/server/src/main/resources/keys
+crypto:
+  key:
+    directory: ${user.dir}/server/src/main/resources/keys
 
 logging:
   level:
