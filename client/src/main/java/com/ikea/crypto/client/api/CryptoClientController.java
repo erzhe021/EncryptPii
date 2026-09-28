@@ -51,8 +51,8 @@ public class CryptoClientController {
     @PostMapping("/bidirectional")
     public Map<String, Object> bidirectionalEncrypt(@RequestBody PlainData plainData) throws Exception {
         log.debug("starting bidirectional RSA encryption with request data: {}", plainData.data());
-        PublicKey serverPublicKey = cryptoHttpClient.fetchServerPublicKey();
-        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(toJsonString(plainData), serverPublicKey);
+        CryptoHttpClient.ServerKeyInfo serverKeyInfo = cryptoHttpClient.fetchServerKeyInfo();
+        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(toJsonString(plainData), serverKeyInfo.keyId(), serverKeyInfo.publicKey());
         CipherRequestPayload requestPayload = encrypted.payload();
 
         CipherResponsePayload responsePayload = cryptoHttpClient.postBidirectional(bidirectionalPath, requestPayload);
@@ -69,8 +69,8 @@ public class CryptoClientController {
     @PostMapping("/request-only")
     public Map<String, Object> requestOnlyEncrypt(@RequestBody PlainData plainData) throws Exception {
         log.debug("starting request-only RSA encryption with request data: {}", plainData.data());
-        PublicKey serverPublicKey = cryptoHttpClient.fetchServerPublicKey();
-        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(toJsonString(plainData), serverPublicKey);
+        CryptoHttpClient.ServerKeyInfo serverKeyInfo = cryptoHttpClient.fetchServerKeyInfo();
+        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(toJsonString(plainData), serverKeyInfo.keyId(), serverKeyInfo.publicKey());
         CipherRequestPayload requestPayload = encrypted.payload();
 
         PlainData responseData = cryptoHttpClient.postRequestOnly(requestOnlyPath, requestPayload);
@@ -89,8 +89,8 @@ public class CryptoClientController {
 
         // Generate a new session key for AES encryption
         SecretKey sessionKey = generateSessionKey();
-        PublicKey publicKey = cryptoHttpClient.fetchServerPublicKey();
-        SessionKeyTransport sessionTransport = SessionKeyTransport.fromGeneratedKey(sessionKey, publicKey);
+        CryptoHttpClient.ServerKeyInfo serverKeyInfo = cryptoHttpClient.fetchServerKeyInfo();
+        SessionKeyTransport sessionTransport = SessionKeyTransport.fromGeneratedKey(serverKeyInfo.keyId(), sessionKey, serverKeyInfo.publicKey());
 
         CipherResponsePayload responsePayload = cryptoHttpClient.postResponseOnly(responseOnlyPath, data, sessionTransport);
 

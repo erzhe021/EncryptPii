@@ -78,21 +78,29 @@ EncryptPii/
 | 方向 | 场景 | 传输位置 | 核心传输字段 | 说明 |
 |---|---|---|---|---|
 | **Server -> Client** | RSA 公钥获取 | 响应体 `PublicKeyResponse` | `publicKeyBase64`<br/>`keyId`<br/>`expiresAtEpochMillis` | 客户端启动或缓存失效时拉取，动态获取最新 RSA 公钥及轮换标识 |
-| **Client -> Server** | RSA 双向加密<br/>(Bidirectional) | 请求体 `CipherRequestPayload` | `encryptedSessionKeyBase64`<br/>`ivBase64`<br/>`encryptedDataBase64` | 客户端生成单次 AES 密钥并封装，随业务密文一同上传 |
+| **Client -> Server** | RSA 双向加密<br/>(Bidirectional) | 请求体 `CipherRequestPayload` | `keyId` (可选)<br/>`encryptedSessionKeyBase64`<br/>`ivBase64`<br/>`encryptedDataBase64` | 客户端生成单次 AES 密钥并封装，随业务密文及使用的 keyId 一同上传 |
 | **Server -> Client** | RSA 双向加密<br/>(Bidirectional) | 响应体 `CipherResponsePayload` | `ivBase64`<br/>`encryptedDataBase64` | 服务端复用该请求已解密的 AES 密钥，配合全新 IV 加密响应内容 |
-| **Client -> Server** | RSA 仅请求加密<br/>(Request-Only) | 请求体 `CipherRequestPayload` | `encryptedSessionKeyBase64`<br/>`ivBase64`<br/>`encryptedDataBase64` | 敏感入参加密上报，服务端解密后执行业务逻辑 |
+| **Client -> Server** | RSA 仅请求加密<br/>(Request-Only) | 请求体 `CipherRequestPayload` | `keyId` (可选)<br/>`encryptedSessionKeyBase64`<br/>`ivBase64`<br/>`encryptedDataBase64` | 敏感入参加密上报，服务端精准/多版本回退解密后执行业务逻辑 |
 | **Server -> Client** | RSA 仅请求加密<br/>(Request-Only) | 响应体 `PlainData` | `data` | 服务端直接返回明文业务响应体 |
-| **Client -> Server** | RSA 仅响应加密<br/>(Response-Only) | 请求头 (Header)<br/>请求体 (Body) | Header: `X-Client-Session-Key`<br/>Body: `PlainData` (`data`) | 请求入参明文，客户端将 RSA 公钥加密后的 AES 密钥置于 Header 中 |
+| **Client -> Server** | RSA 仅响应加密<br/>(Response-Only) | 请求头 (Header)<br/>请求体 (Body) | Header: `X-Encrypted-Session-Key`<br/>Header: `X-Crypto-Key-Id` (可选)<br/>Body: `PlainData` (`data`) | 请求入参明文，客户端将 RSA 公钥加密后的 AES 密钥置于 Header 中 |
 | **Server -> Client** | RSA 仅响应加密<br/>(Response-Only) | 响应体 `CipherResponsePayload` | `ivBase64`<br/>`encryptedDataBase64` | 服务端解密 Header 获取 AES 密钥，对敏感出参进行加密传输 |
 
 ### 3. 核心传输字段说明
 
 - **`publicKeyBase64`**：服务端导出的 RSA 公钥 X.509 编码 Base64 字符串。
-- **`keyId`**：服务端密钥版本标识（如 `rsa-20261001`），便于支持密钥无缝轮换与版本校验。
-- **`expiresAtEpochMillis`**：公钥有效截止时间戳（毫秒），供客户端制定公钥缓存与刷新策略。
+- **`keyId`**：服务端密钥版本标识（如 `rsa-20261001`），客户端请求可携带该值，服务端据此精准定位解密私钥，支持平滑轮换过渡。
+- **`expiresAtEpochMillis`**：公钥有效截止时间戳（毫秒），驱动客户端本地缓存更新与定期拉取。
 - **`encryptedSessionKeyBase64`**：客户端随机生成的 AES-256 会话密钥，经服务端 RSA 公钥（OAEP 填充模式）加密封装后的 Base64 字符串。
 - **`ivBase64`**：AES-GCM 使用的 12 字节随机初始化向量（IV）Base64 字符串，严禁复用。
 - **`encryptedDataBase64`**：业务明文使用 AES 会话密钥和对应 IV 加密后的 Base64 字符串（含 128 位 GCM 认证标签 Tag）。
+
+### 4. 密钥平滑轮换（Key Rotation）机制
+
+- **主动按期轮换**：服务端密钥默认以年为周期生成全新 `keyId` 与密钥对，并将新密钥标记为当前唯一活跃的下发密钥（Active Key）。
+- **多版本密钥环（KeyRing）**：历史私钥持久化保留在服务端的密钥环中，过渡期（Grace Period）内仍可解密由旧密钥加密的数据。
+- **精准路由与全量容错回退**：
+  1. 客户端请求携带 `keyId` 时，服务端 O(1) 快速定位对应私钥解密；
+  2. 若客户端未携带 `keyId` 或使用了过渡期旧公钥，服务端会先用活跃密钥尝试，失败后自动回退遍历密钥环中的历史过渡密钥，确保旧客户端请求零报错、平滑无感知升级。
 
 ### 4. 关键本地字段与安全边界（严禁明文传输）
 
@@ -132,7 +140,7 @@ public class UserController {
     @EncryptResponse
     public UserProfileResponse getSecretProfile(
             @RequestBody PlainQuery query,
-            @RequestHeader(CryptoConstants.HEADER_CLIENT_SESSION_KEY) String sessionKeyBase64) {
+            @RequestHeader(CryptoConstants.HEADER_ENCRYPTED_SESSION_KEY) String sessionKeyBase64) {
         // 请求头中解析会话密钥并缓存到上下文，返回对象自动使用该会话密钥加密
         SessionKeyTransport transport = new SessionKeyTransport(sessionKeyBase64);
         CryptoSessionContextAccessor.setCryptoSessionContext(CryptoSessionContext.rsaResponseOnly(transport));

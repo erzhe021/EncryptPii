@@ -19,4 +19,5 @@ public final class CryptoConstants {
 
     // --- Header Names for Encrypted Session Key Transport ---
     public static final String HEADER_ENCRYPTED_SESSION_KEY = "X-Encrypted-Session-Key";
+    public static final String HEADER_KEY_ID = "X-Crypto-Key-Id";
 }

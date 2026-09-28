@@ -71,7 +71,7 @@ public class CryptoPayloadHandler {
 
         if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport sessionKeyTransport) {
             SecretKey sessionKey = new SecretKeySpec(
-                    cryptoServer.decryptSessionKey(sessionKeyTransport.encryptedSessionKeyBase64()),
+                    cryptoServer.decryptSessionKey(sessionKeyTransport.keyId(), sessionKeyTransport.encryptedSessionKeyBase64()),
                     CryptoConstants.ALGORITHM_AES
             );
             byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
@@ -83,7 +83,7 @@ public class CryptoPayloadHandler {
             cryptoServer.validatePayload(requestPayload);
             SecretKey sessionKey = CryptoSessionContextAccessor.getResolvedSessionKey();
             if (sessionKey == null) {
-                sessionKey = cryptoServer.decryptSessionKeyToSecretKey(requestPayload.encryptedSessionKeyBase64());
+                sessionKey = cryptoServer.decryptSessionKeyToSecretKey(requestPayload.keyId(), requestPayload.encryptedSessionKeyBase64());
             }
             byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
             String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(responseBodyString, sessionKey, iv);

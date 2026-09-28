@@ -18,10 +18,17 @@ import java.security.PublicKey;
  * and the server generates its own IV when encrypting the response.
  */
 @Slf4j
-public record SessionKeyTransport(String encryptedSessionKeyBase64) {
+public record SessionKeyTransport(String keyId, String encryptedSessionKeyBase64) {
+
+    public SessionKeyTransport(String encryptedSessionKeyBase64) {
+        this(null, encryptedSessionKeyBase64);
+    }
 
     public static SessionKeyTransport fromGeneratedKey(SecretKey sessionKey, PublicKey serverPublicKey) throws GeneralSecurityException {
+        return fromGeneratedKey(null, sessionKey, serverPublicKey);
+    }
 
+    public static SessionKeyTransport fromGeneratedKey(String keyId, SecretKey sessionKey, PublicKey serverPublicKey) throws GeneralSecurityException {
         log.debug("start to build SessionKeyTransport from generated session key");
 
         if (sessionKey == null) {
@@ -36,13 +43,18 @@ public record SessionKeyTransport(String encryptedSessionKeyBase64) {
         }
 
         return new SessionKeyTransport(
+                keyId,
                 SessionKeyService.encryptSessionKeyAsBase64(sessionKey, serverPublicKey)
         );
     }
 
     public HttpRequest.Builder apply(HttpRequest.Builder requestBuilder) {
         log.debug("start to apply SessionKeyTransport to HttpRequest");
-        return requestBuilder
+        HttpRequest.Builder builder = requestBuilder
                 .header(CryptoConstants.HEADER_ENCRYPTED_SESSION_KEY, encryptedSessionKeyBase64);
+        if (keyId != null && !keyId.isBlank()) {
+            builder.header(CryptoConstants.HEADER_KEY_ID, keyId);
+        }
+        return builder;
     }
 }

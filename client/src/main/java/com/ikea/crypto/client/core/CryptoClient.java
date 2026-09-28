@@ -4,8 +4,8 @@ import com.ikea.crypto.client.context.CryptoRequestContext;
 import com.ikea.crypto.common.crypto.AesGcmCryptoService;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
-import com.ikea.crypto.common.model.payload.CipherResponsePayload;
 import com.ikea.crypto.common.model.payload.CipherRequestPayload;
+import com.ikea.crypto.common.model.payload.CipherResponsePayload;
 import com.ikea.crypto.common.util.EncodingUtils;
 import lombok.extern.slf4j.Slf4j;
 
@@ -35,16 +35,11 @@ public class CryptoClient {
     public record EncryptionResult(CipherRequestPayload payload, CryptoRequestContext context) {
     }
 
-    /**
-     * Encrypts the given plaintext data using a hybrid RSA-AES encryption scheme with the provided server RSA public key.
-     * The data is encrypted with a newly generated AES session key, which is encrypted with the server RSA public key.
-     *
-     * @param data            The plaintext string to encrypt.
-     * @param serverPublicKey The server's RSA public key.
-     * @return EncryptionResult containing the RsaCipherPayload and local CryptoRequestContext.
-     * @throws GeneralSecurityException If cryptographic operations fail.
-     */
     public EncryptionResult encrypt(String data, PublicKey serverPublicKey) throws GeneralSecurityException {
+        return encrypt(data, null, serverPublicKey);
+    }
+
+    public EncryptionResult encrypt(String data, String keyId, PublicKey serverPublicKey) throws GeneralSecurityException {
         if (serverPublicKey == null) {
             throw new IllegalArgumentException("serverPublicKey cannot be null");
         }
@@ -66,6 +61,7 @@ public class CryptoClient {
         log.debug("put session key in context for future decryption");
         return new EncryptionResult(
                 new CipherRequestPayload(
+                        keyId,
                         encryptedSessionKeyBase64,
                         EncodingUtils.toBase64(iv),
                         encryptedDataBase64
@@ -78,14 +74,6 @@ public class CryptoClient {
         );
     }
 
-    /**
-     * Decrypts the given AesCipherPayload using the session key stored in the request context.
-     *
-     * @param payload The encrypted response payload containing ciphertext and IV.
-     * @param context The CryptoRequestContext containing the AES session key.
-     * @return Decrypted plaintext string.
-     * @throws GeneralSecurityException If decryption fails.
-     */
     public String decrypt(CipherResponsePayload payload, CryptoRequestContext context) throws GeneralSecurityException {
         log.debug("start to decrypt data using session key in context");
         if (payload == null) {
@@ -101,14 +89,6 @@ public class CryptoClient {
         );
     }
 
-    /**
-     * Decrypts the given AesCipherPayload directly with an AES SecretKey.
-     *
-     * @param responsePayload The encrypted response payload containing ciphertext and IV.
-     * @param sessionKey      The AES session key.
-     * @return Decrypted plaintext string.
-     * @throws GeneralSecurityException If decryption fails.
-     */
     public String decrypt(CipherResponsePayload responsePayload, SecretKey sessionKey) throws GeneralSecurityException {
         if (responsePayload == null) {
             throw new IllegalArgumentException("responsePayload cannot be null");

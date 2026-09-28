@@ -55,10 +55,12 @@ public class CryptoServerController {
             @RequestBody(required = false)
             PlainData request,
             @RequestHeader(CryptoConstants.HEADER_ENCRYPTED_SESSION_KEY) @NotBlank(message = "client session key is required for response-only RSA encryption")
-            String sessionKeyBase64
+            String sessionKeyBase64,
+            @RequestHeader(value = CryptoConstants.HEADER_KEY_ID, required = false)
+            String keyId
     ) {
-        log.debug("【api called】start to processing response-only RSA encryption, request data: {}", request == null ? "null" : request.data());
-        SessionKeyTransport sessionTransport = new SessionKeyTransport(sessionKeyBase64);
+        log.debug("【api called】start to processing response-only RSA encryption, keyId={}, request data: {}", keyId, request == null ? "null" : request.data());
+        SessionKeyTransport sessionTransport = new SessionKeyTransport(keyId, sessionKeyBase64);
         CryptoSessionContextAccessor.setCryptoSessionContext(CryptoSessionContext.responseOnly(sessionTransport));
 
         return new SensitiveData(

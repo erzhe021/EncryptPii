@@ -38,9 +38,19 @@ public class CryptoHttpClient {
     // Cache the fetched RSA public key and its parsed PublicKey instance to avoid unnecessary network calls.
     private volatile CachedPublicKey cachedPublicKey;
 
-    private record CachedPublicKey(PublicKey publicKey, long expiresAtEpochMillis) {
+    public record ServerKeyInfo(String keyId, PublicKey publicKey, long expiresAtEpochMillis) {
         boolean isValid() {
             return System.currentTimeMillis() < expiresAtEpochMillis;
+        }
+    }
+
+    private record CachedPublicKey(String keyId, PublicKey publicKey, long expiresAtEpochMillis) {
+        boolean isValid() {
+            return System.currentTimeMillis() < expiresAtEpochMillis;
+        }
+
+        ServerKeyInfo toServerKeyInfo() {
+            return new ServerKeyInfo(keyId, publicKey, expiresAtEpochMillis);
         }
     }
 
@@ -52,13 +62,13 @@ public class CryptoHttpClient {
     }
 
     /**
-     * Fetches the server's RSA public key, returning the cached instance if still valid.
+     * Fetches the server's RSA public key metadata, returning the cached instance if still valid.
      */
-    public PublicKey fetchServerPublicKey() throws GeneralSecurityException {
+    public ServerKeyInfo fetchServerKeyInfo() throws GeneralSecurityException {
         CachedPublicKey currentCache = this.cachedPublicKey;
         if (currentCache != null && currentCache.isValid()) {
-            log.debug("use cached RSA public key which is still valid");
-            return currentCache.publicKey();
+            log.debug("use cached RSA public key which is still valid, keyId={}", currentCache.keyId());
+            return currentCache.toServerKeyInfo();
         }
 
         log.debug("start to fetching RSA public key from server");
@@ -74,15 +84,22 @@ public class CryptoHttpClient {
             PublicKey parsedKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(
                     new X509EncodedKeySpec(EncodingUtils.fromBase64(keyResponse.publicKeyBase64()))
             );
-            this.cachedPublicKey = new CachedPublicKey(parsedKey, keyResponse.expiresAtEpochMillis());
-            log.debug("fetched RSA public key from server, caching it for future use");
-            return parsedKey;
+            this.cachedPublicKey = new CachedPublicKey(keyResponse.keyId(), parsedKey, keyResponse.expiresAtEpochMillis());
+            log.debug("fetched RSA public key from server, keyId={}, caching it for future use", keyResponse.keyId());
+            return this.cachedPublicKey.toServerKeyInfo();
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
             }
             throw new GeneralSecurityException("Failed to fetch RSA public key from server", e);
         }
+    }
+
+    /**
+     * Fetches the server's RSA public key, returning the cached instance if still valid.
+     */
+    public PublicKey fetchServerPublicKey() throws GeneralSecurityException {
+        return fetchServerKeyInfo().publicKey();
     }
 
     /**
