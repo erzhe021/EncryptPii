@@ -1,7 +1,6 @@
 package com.ikea.crypto.server.advice;
 
 import com.ikea.crypto.server.codec.CryptoPayloadHandler;
-import com.ikea.crypto.server.codec.CryptoPayloadHandlerRegistry;
 import com.ikea.crypto.server.context.CryptoSessionContext;
 import com.ikea.crypto.server.context.CryptoSessionContextAccessor;
 import com.ikea.crypto.server.error.InvalidCryptoPayloadException;
@@ -24,10 +23,10 @@ import java.security.GeneralSecurityException;
 @Slf4j
 public class RequestDecryptAdvice implements RequestBodyAdvice {
 
-    private final CryptoPayloadHandlerRegistry handlerRegistry;
+    private final CryptoPayloadHandler payloadHandler;
 
-    public RequestDecryptAdvice(CryptoPayloadHandlerRegistry handlerRegistry) {
-        this.handlerRegistry = handlerRegistry;
+    public RequestDecryptAdvice(CryptoPayloadHandler payloadHandler) {
+        this.payloadHandler = payloadHandler;
     }
 
     @Override
@@ -37,10 +36,6 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
         return findDecryptRequest(methodParameter) != null;
     }
 
-    /**
-     * Decrypt the request body before it is read and converted to an object.
-     * The decrypted JSON string is then wrapped in a new HttpInputMessage and returned.
-     */
     @Override
     public HttpInputMessage beforeBodyRead(HttpInputMessage inputMessage,
                                          MethodParameter parameter,
@@ -55,10 +50,9 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
         String encryptedBody = new String(inputMessage.getBody().readAllBytes(), StandardCharsets.UTF_8);
         String decryptedBody;
         try {
-            CryptoPayloadHandler handler = handlerRegistry.getRequiredHandler(decryptRequest.value());
-            CryptoSessionContext<?> sessionContext = handler.createSessionContext(encryptedBody);
+            CryptoSessionContext sessionContext = payloadHandler.createSessionContext(encryptedBody);
             CryptoSessionContextAccessor.setCryptoSessionContext(sessionContext);
-            decryptedBody = handler.decrypt(encryptedBody);
+            decryptedBody = payloadHandler.decrypt(sessionContext);
         } catch (GeneralSecurityException e) {
             throw new InvalidCryptoPayloadException("Failed to decrypt request body", e);
         }
@@ -76,10 +70,6 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
         };
     }
 
-    /**
-     * After the body is read and converted to an object, we can perform additional processing if needed.
-     * In this case, we simply return the body as is.
-     */
     @Override
     public Object afterBodyRead(Object body,
                                 HttpInputMessage inputMessage,
@@ -89,9 +79,6 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
         return body;
     }
 
-    /**
-     * If the request body is empty, we can handle it here. In this case, we simply return the body as is.
-     */
     @Override
     public Object handleEmptyBody(Object body,
                                   HttpInputMessage inputMessage,
@@ -101,12 +88,6 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
         return body;
     }
 
-    /**
-     * Find the DecryptRequest annotation on the method or class.
-     *
-     * @param methodParameter the method parameter
-     * @return the DecryptRequest annotation, or null if not found
-     */
     private DecryptRequest findDecryptRequest(MethodParameter methodParameter) {
         return CryptoAdviceSupport.findAnnotation(methodParameter, DecryptRequest.class);
     }

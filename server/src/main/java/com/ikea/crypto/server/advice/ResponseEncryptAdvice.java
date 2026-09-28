@@ -1,6 +1,6 @@
 package com.ikea.crypto.server.advice;
 
-import com.ikea.crypto.server.codec.CryptoPayloadHandlerRegistry;
+import com.ikea.crypto.server.codec.CryptoPayloadHandler;
 import com.ikea.crypto.server.context.CryptoSessionContext;
 import com.ikea.crypto.server.context.CryptoSessionContextAccessor;
 import com.ikea.crypto.server.error.CryptoException;
@@ -16,34 +16,22 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
 import java.security.GeneralSecurityException;
 
-/**
- * Advice to encrypt the response body for methods annotated with @EncryptResponse.
- * The response body is encrypted using the same algorithm and session context as the request.
- */
 @ControllerAdvice
 @Slf4j
 public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
 
-    private final CryptoPayloadHandlerRegistry handlerRegistry;
+    private final CryptoPayloadHandler payloadHandler;
 
-    public ResponseEncryptAdvice(CryptoPayloadHandlerRegistry handlerRegistry) {
-        this.handlerRegistry = handlerRegistry;
+    public ResponseEncryptAdvice(CryptoPayloadHandler payloadHandler) {
+        this.payloadHandler = payloadHandler;
     }
 
-    /**
-     * Check if the method return type is annotated with @EncryptResponse.
-     * If so, this advice will be applied to encrypt the response body.
-     */
     @Override
     public boolean supports(MethodParameter returnType,
                             Class<? extends HttpMessageConverter<?>> converterType) {
         return findEncryptResponse(returnType) != null;
     }
 
-    /**
-     * Encrypt the response body before it is written to the HTTP response.
-     * The response body is encrypted using the appropriate handler and session context.
-     */
     @Override
     public Object beforeBodyWrite(Object body,
                                   MethodParameter returnType,
@@ -58,12 +46,12 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
         }
         try {
             // Get the CryptoSessionContext for response encryption
-            CryptoSessionContext<?> sessionContext = CryptoSessionContextAccessor.getCryptoSessionContext();
+            CryptoSessionContext sessionContext = CryptoSessionContextAccessor.getCryptoSessionContext();
             if (sessionContext == null) {
                 throw new CryptoException("No request session context available for response encryption");
             }
-            // Encrypt the response body using the appropriate handler
-            return handlerRegistry.getRequiredHandler(encryptResponse.value()).encrypt(body, sessionContext);
+            // Encrypt the response body using the handler
+            return payloadHandler.encrypt(body, sessionContext);
         } catch (GeneralSecurityException e) {
             throw new ResponseEncryptionException("Failed to encrypt response body", e);
         } finally {
@@ -71,9 +59,6 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
         }
     }
 
-    /**
-     * Find the @EncryptResponse annotation on the method return type.
-     */
     private EncryptResponse findEncryptResponse(MethodParameter returnType) {
         return CryptoAdviceSupport.findAnnotation(returnType, EncryptResponse.class);
     }

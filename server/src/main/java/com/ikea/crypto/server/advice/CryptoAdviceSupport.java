@@ -1,7 +1,5 @@
 package com.ikea.crypto.server.advice;
 
-import com.ikea.crypto.server.context.CryptoSessionContext;
-import com.ikea.crypto.server.context.CryptoSessionContextAccessor;
 import org.springframework.core.MethodParameter;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 
@@ -17,9 +15,5 @@ public final class CryptoAdviceSupport {
             return annotation;
         }
         return AnnotatedElementUtils.findMergedAnnotation(methodParameter.getContainingClass(), annotationType);
-    }
-
-    public static CryptoSessionContext<?> getSessionContext() {
-        return CryptoSessionContextAccessor.getCryptoSessionContext();
     }
 }
