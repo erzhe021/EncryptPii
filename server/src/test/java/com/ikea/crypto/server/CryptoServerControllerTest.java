@@ -2,7 +2,7 @@ package com.ikea.crypto.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.crypto.AesGcmCryptoService;
+import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
 import com.ikea.crypto.common.model.demo.PlainData;
@@ -57,7 +57,7 @@ class CryptoServerControllerTest {
         byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
         String requestJson = objectMapper.writeValueAsString(new SensitiveData("secret message"));
 
-        String encryptedData = AesGcmCryptoService.encryptAsBase64(requestJson, sessionKey, iv);
+        String encryptedData = AesGcmCipher.encryptAsBase64(requestJson, sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, cryptoServer.publicKey());
 
         CipherRequestPayload requestPayload = new CipherRequestPayload(
@@ -83,7 +83,7 @@ class CryptoServerControllerTest {
         byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
         String requestJson = objectMapper.writeValueAsString(new SensitiveData("plain response needed"));
 
-        String encryptedData = AesGcmCryptoService.encryptAsBase64(requestJson, sessionKey, iv);
+        String encryptedData = AesGcmCipher.encryptAsBase64(requestJson, sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, cryptoServer.publicKey());
 
         CipherRequestPayload requestPayload = new CipherRequestPayload(
@@ -110,7 +110,7 @@ class CryptoServerControllerTest {
         PlainData plainRequest = new PlainData("ping");
 
         mockMvc.perform(post("/crypto/server/response-only")
-                        .header(CryptoConstants.HEADER_ENCRYPTED_SESSION_KEY, sessionTransport.encryptedSessionKeyBase64())
+                        .header(CryptoConstants.HEADER_CRYPTO_SESSION_KEY, sessionTransport.encryptedSessionKeyBase64())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(plainRequest)))
                 .andExpect(status().isOk())

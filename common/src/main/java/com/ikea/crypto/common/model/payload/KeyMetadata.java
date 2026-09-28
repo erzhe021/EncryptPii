@@ -9,6 +9,18 @@ public record KeyMetadata(
         long expiresAtEpochMillis
 ) {
     public boolean isExpired() {
-        return System.currentTimeMillis() >= expiresAtEpochMillis;
+        return isExpired(System.currentTimeMillis());
+    }
+
+    public boolean isExpired(long now) {
+        return now >= expiresAtEpochMillis;
+    }
+
+    public boolean isGracePeriodExpired(long gracePeriodMillis, long now) {
+        return now >= expiresAtEpochMillis + gracePeriodMillis;
+    }
+
+    public boolean isWithinGracePeriod(long gracePeriodMillis, long now) {
+        return isExpired(now) && !isGracePeriodExpired(gracePeriodMillis, now);
     }
 }

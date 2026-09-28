@@ -1,7 +1,7 @@
 package com.ikea.crypto.server;
 
 import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.crypto.AesGcmCryptoService;
+import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
 import com.ikea.crypto.common.model.payload.CipherRequestPayload;
@@ -46,7 +46,7 @@ class CryptoServerTest {
         PublicKeyResponse response = server.getPublicKey();
         assertNotNull(response);
         assertNotNull(response.publicKeyBase64());
-        assertEquals("rsa-20261001", response.keyId());
+        assertEquals("in-memory-test-key", response.keyId());
         assertTrue(response.expiresAtEpochMillis() > System.currentTimeMillis());
     }
 
@@ -59,7 +59,7 @@ class CryptoServerTest {
         byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
         String plaintext = "Secret Message from Client";
 
-        String encryptedData = AesGcmCryptoService.encryptAsBase64(plaintext, sessionKey, iv);
+        String encryptedData = AesGcmCipher.encryptAsBase64(plaintext, sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, keyPair.getPublic());
 
         CipherRequestPayload payload = new CipherRequestPayload(

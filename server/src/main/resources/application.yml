@@ -1,10 +1,17 @@
 server:
   port: 9090
 
-
 crypto:
-  key:
-    directory: ${user.dir}/server/src/main/resources/keys
+  vault:
+    enabled: true
+    addr: ${VAULT_ADDR:http://127.0.0.1:8200}
+    auth-method: ${VAULT_AUTH_METHOD:TOKEN}
+    token: ${VAULT_TOKEN:root}
+    secret-path: ${VAULT_SECRET_PATH:secret/data/crypto/rsa-keys}
+    auto-bootstrap: true
+    kubernetes:
+      role: ${VAULT_K8S_ROLE:crypto-server}
+      token-path: ${VAULT_K8S_TOKEN_PATH:/var/run/secrets/kubernetes.io/serviceaccount/token}
 
 logging:
   level:

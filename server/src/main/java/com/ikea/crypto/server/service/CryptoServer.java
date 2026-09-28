@@ -1,6 +1,6 @@
 package com.ikea.crypto.server.service;
 
-import com.ikea.crypto.common.crypto.AesGcmCryptoService;
+import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.SessionKeyService;
 import com.ikea.crypto.common.model.payload.CipherRequestPayload;
 import com.ikea.crypto.common.model.payload.KeyMetadata;
@@ -11,8 +11,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
-import java.io.IOException;
-import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
@@ -30,23 +28,15 @@ public record CryptoServer(KeyRing keyRing) {
     }
 
     private static KeyRing createInMemoryKeyRing(PrivateKey privateKey, PublicKey publicKey) {
-        String keyId = "rsa-20261001";
+        String keyId = "in-memory-test-key";
         long now = System.currentTimeMillis();
         long expiresAt = now + 365L * 24 * 60 * 60 * 1000;
         KeyMetadata metadata = new KeyMetadata(keyId, now, expiresAt);
         KeyRing.KeyEntry entry = new KeyRing.KeyEntry(metadata, new KeyPair(publicKey, privateKey));
 
-        return new KeyRing(Path.of(".")) {
-            @Override
-            public KeyEntry getActiveKeyEntry() {
-                return entry;
-            }
-
-            @Override
-            public Optional<KeyEntry> findKeyEntry(String requestedKeyId) {
-                return Optional.of(entry);
-            }
-        };
+        KeyRing ring = new KeyRing();
+        ring.registerKeyEntry(entry, true);
+        return ring;
     }
 
     public PublicKey publicKey() {
@@ -70,13 +60,6 @@ public record CryptoServer(KeyRing keyRing) {
                 active.metadata().keyId(),
                 active.metadata().expiresAtEpochMillis()
         );
-    }
-
-    public static CryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
-        log.info("Creating CryptoServer from keyDirectory={}", keyDirectory);
-        KeyRing keyRing = new KeyRing(keyDirectory);
-        keyRing.initialize();
-        return new CryptoServer(keyRing);
     }
 
     /**
@@ -120,7 +103,7 @@ public record CryptoServer(KeyRing keyRing) {
                 try {
                     return SessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, entryOpt.get().privateKey());
                 } catch (GeneralSecurityException e) {
-                    log.warn("Failed to decrypt session key with matched keyId={}, attempting keyring fallback", keyId);
+                    log.warn("Failed to decrypt session key with matched keyId={}, attempting keyring fallback", keyId, e);
                 }
             }
         }
@@ -131,7 +114,7 @@ public record CryptoServer(KeyRing keyRing) {
             try {
                 return SessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, activeEntry.privateKey());
             } catch (GeneralSecurityException e) {
-                log.debug("Decryption with active key failed, trying historical transition keys in keyring...");
+                log.warn("Decryption with active key failed, trying historical transition keys in keyring...", e);
             }
         }
 
@@ -144,8 +127,8 @@ public record CryptoServer(KeyRing keyRing) {
                 SecretKey decrypted = SessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, entry.privateKey());
                 log.info("Successfully decrypted session key using historical transition key: {}", entry.metadata().keyId());
                 return decrypted;
-            } catch (GeneralSecurityException ignored) {
-                // Try next historical key
+            } catch (GeneralSecurityException e) {
+                log.warn("Fallback decryption failed for keyId={}", entry.metadata().keyId(), e);
             }
         }
 
@@ -168,7 +151,7 @@ public record CryptoServer(KeyRing keyRing) {
     }
 
     private String decryptWithAes(CipherRequestPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
-        return AesGcmCryptoService.decryptFromBase64(
+        return AesGcmCipher.decryptFromBase64(
                 payload.encryptedDataBase64(),
                 sessionKey,
                 payload.ivBase64()

@@ -1,7 +1,7 @@
 package com.ikea.crypto.client.core;
 
 import com.ikea.crypto.client.context.CryptoRequestContext;
-import com.ikea.crypto.common.crypto.AesGcmCryptoService;
+import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
 import com.ikea.crypto.common.model.payload.CipherRequestPayload;
@@ -52,7 +52,7 @@ public class CryptoClient {
         byte[] iv = CryptoSessionMaterialFactory.generateIv(secureRandom);
 
         // Encrypt the data with AES using the session key and IV
-        String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(data, sessionKey, iv);
+        String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(data, sessionKey, iv);
 
         // Encrypt the AES session key with the server's RSA public key
         String encryptedSessionKeyBase64 = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, serverPublicKey);
@@ -82,7 +82,7 @@ public class CryptoClient {
         if (context == null || context.sessionKey() == null) {
             throw new IllegalStateException("No session key available in context for decryption");
         }
-        return AesGcmCryptoService.decryptFromBase64(
+        return AesGcmCipher.decryptFromBase64(
                 payload.encryptedDataBase64(),
                 context.sessionKey(),
                 payload.ivBase64()
@@ -96,7 +96,7 @@ public class CryptoClient {
         if (sessionKey == null) {
             throw new IllegalArgumentException("sessionKey cannot be null");
         }
-        return AesGcmCryptoService.decryptFromBase64(
+        return AesGcmCipher.decryptFromBase64(
                 responsePayload.encryptedDataBase64(),
                 sessionKey,
                 responsePayload.ivBase64()

@@ -3,7 +3,7 @@ package com.ikea.crypto.client;
 import com.ikea.crypto.client.context.CryptoRequestContext;
 import com.ikea.crypto.client.core.CryptoClient;
 import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.crypto.AesGcmCryptoService;
+import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
 import com.ikea.crypto.common.model.payload.CipherResponsePayload;
@@ -60,7 +60,7 @@ class CryptoClientTest {
         assertArrayEquals(context.sessionKey().getEncoded(), recoveredSessionKey.getEncoded());
 
         // Server decrypts AES data
-        String decryptedByServer = AesGcmCryptoService.decryptFromBase64(
+        String decryptedByServer = AesGcmCipher.decryptFromBase64(
                 payload.encryptedDataBase64(),
                 recoveredSessionKey,
                 payload.ivBase64()
@@ -70,7 +70,7 @@ class CryptoClientTest {
         // Server encrypts a response using the same session key
         String serverResponse = "Response Data from Server";
         byte[] responseIv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
-        String encryptedResponseData = AesGcmCryptoService.encryptAsBase64(serverResponse, recoveredSessionKey, responseIv);
+        String encryptedResponseData = AesGcmCipher.encryptAsBase64(serverResponse, recoveredSessionKey, responseIv);
         CipherResponsePayload responsePayload = new CipherResponsePayload(EncodingUtils.toBase64(responseIv), encryptedResponseData);
 
         // Client decrypts response using context
@@ -88,7 +88,7 @@ class CryptoClientTest {
         CryptoClient.EncryptionResult result = cryptoClient.encrypt(originalData, serverKeyPair.getPublic());
 
         byte[] responseIv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
-        String encryptedResponse = AesGcmCryptoService.encryptAsBase64("Response", result.context().sessionKey(), responseIv);
+        String encryptedResponse = AesGcmCipher.encryptAsBase64("Response", result.context().sessionKey(), responseIv);
         CipherResponsePayload tamperedPayload = new CipherResponsePayload(
                 EncodingUtils.toBase64(responseIv),
                 encryptedResponse + "corrupt"

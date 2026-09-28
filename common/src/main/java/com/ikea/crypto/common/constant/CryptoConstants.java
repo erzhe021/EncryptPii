@@ -17,7 +17,7 @@ public final class CryptoConstants {
     public static final int GCM_TAG_LENGTH_BITS = 128;
     public static final int GCM_IV_LENGTH_BYTES = 12;
 
-    // --- Header Names for Encrypted Session Key Transport ---
-    public static final String HEADER_ENCRYPTED_SESSION_KEY = "X-Encrypted-Session-Key";
+    // --- Header Names for Crypto Session Key Transport ---
+    public static final String HEADER_CRYPTO_SESSION_KEY = "X-Crypto-Session-Key";
     public static final String HEADER_KEY_ID = "X-Crypto-Key-Id";
 }

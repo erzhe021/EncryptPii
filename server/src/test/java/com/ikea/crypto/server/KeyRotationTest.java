@@ -1,6 +1,6 @@
 package com.ikea.crypto.server;
 
-import com.ikea.crypto.common.crypto.AesGcmCryptoService;
+import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
 import com.ikea.crypto.common.model.payload.CipherRequestPayload;
@@ -10,11 +10,9 @@ import com.ikea.crypto.server.service.CryptoServer;
 import com.ikea.crypto.server.service.KeyRing;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
-import java.nio.file.Path;
 import java.security.PublicKey;
 import java.security.SecureRandom;
 
@@ -22,14 +20,13 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class KeyRotationTest {
 
-    @TempDir
-    Path tempDir;
-
     private CryptoServer server;
 
     @BeforeEach
     void setUp() throws Exception {
-        server = CryptoServer.create(tempDir);
+        KeyRing keyRing = new KeyRing();
+        keyRing.initialize();
+        server = new CryptoServer(keyRing);
     }
 
     @Test
@@ -53,7 +50,7 @@ class KeyRotationTest {
         keyGenerator.init(256);
         SecretKey sessionKey = keyGenerator.generateKey();
         byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
-        String encryptedData = AesGcmCryptoService.encryptAsBase64("data-from-old-client", sessionKey, iv);
+        String encryptedData = AesGcmCipher.encryptAsBase64("data-from-old-client", sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, oldPublicKey);
 
         // 3. Server rotates to new Key 2 (simulating 1-year periodic rotation)
@@ -85,7 +82,7 @@ class KeyRotationTest {
         // 6. Client encrypts with new key - decrypted successfully as well
         SecretKey newSessionKey = keyGenerator.generateKey();
         byte[] newIv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
-        String newEncryptedData = AesGcmCryptoService.encryptAsBase64("data-from-new-client", newSessionKey, newIv);
+        String newEncryptedData = AesGcmCipher.encryptAsBase64("data-from-new-client", newSessionKey, newIv);
         String newEncryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(newSessionKey, newKeyEntry.publicKey());
 
         CipherRequestPayload payloadWithNewKey = new CipherRequestPayload(

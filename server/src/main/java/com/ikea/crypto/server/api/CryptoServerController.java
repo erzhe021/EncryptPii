@@ -54,7 +54,7 @@ public class CryptoServerController {
     public SensitiveData responseOnlyEncrypt(
             @RequestBody(required = false)
             PlainData request,
-            @RequestHeader(CryptoConstants.HEADER_ENCRYPTED_SESSION_KEY) @NotBlank(message = "client session key is required for response-only RSA encryption")
+            @RequestHeader(CryptoConstants.HEADER_CRYPTO_SESSION_KEY) @NotBlank(message = "client session key is required for response-only RSA encryption")
             String sessionKeyBase64,
             @RequestHeader(value = CryptoConstants.HEADER_KEY_ID, required = false)
             String keyId

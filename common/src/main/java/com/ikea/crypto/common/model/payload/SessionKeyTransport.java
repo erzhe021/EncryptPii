@@ -51,7 +51,7 @@ public record SessionKeyTransport(String keyId, String encryptedSessionKeyBase64
     public HttpRequest.Builder apply(HttpRequest.Builder requestBuilder) {
         log.debug("start to apply SessionKeyTransport to HttpRequest");
         HttpRequest.Builder builder = requestBuilder
-                .header(CryptoConstants.HEADER_ENCRYPTED_SESSION_KEY, encryptedSessionKeyBase64);
+                .header(CryptoConstants.HEADER_CRYPTO_SESSION_KEY, encryptedSessionKeyBase64);
         if (keyId != null && !keyId.isBlank()) {
             builder.header(CryptoConstants.HEADER_KEY_ID, keyId);
         }

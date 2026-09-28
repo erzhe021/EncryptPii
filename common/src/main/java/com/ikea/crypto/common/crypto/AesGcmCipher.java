@@ -11,8 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
 @Slf4j
-public final class AesGcmCryptoService {
-    private AesGcmCryptoService() {
+public final class AesGcmCipher {
+    private AesGcmCipher() {
     }
 
     public static byte[] encrypt(byte[] data, SecretKey sessionKey, byte[] iv) throws GeneralSecurityException {

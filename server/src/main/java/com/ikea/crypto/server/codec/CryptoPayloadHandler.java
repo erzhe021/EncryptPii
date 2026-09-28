@@ -3,7 +3,7 @@ package com.ikea.crypto.server.codec;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.crypto.AesGcmCryptoService;
+import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.model.payload.CipherRequestPayload;
 import com.ikea.crypto.common.model.payload.CipherResponsePayload;
@@ -75,7 +75,7 @@ public class CryptoPayloadHandler {
                     CryptoConstants.ALGORITHM_AES
             );
             byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
-            String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(responseBodyString, sessionKey, iv);
+            String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(responseBodyString, sessionKey, iv);
             return new CipherResponsePayload(EncodingUtils.toBase64(iv), encryptedDataBase64);
         }
 
@@ -86,7 +86,7 @@ public class CryptoPayloadHandler {
                 sessionKey = cryptoServer.decryptSessionKeyToSecretKey(requestPayload.keyId(), requestPayload.encryptedSessionKeyBase64());
             }
             byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
-            String encryptedDataBase64 = AesGcmCryptoService.encryptAsBase64(responseBodyString, sessionKey, iv);
+            String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(responseBodyString, sessionKey, iv);
             return new CipherResponsePayload(EncodingUtils.toBase64(iv), encryptedDataBase64);
         }
 

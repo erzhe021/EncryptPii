@@ -3,7 +3,7 @@ package com.ikea.crypto.server;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.crypto.AesGcmCryptoService;
+import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
 import com.ikea.crypto.common.model.payload.CipherResponsePayload;
@@ -60,7 +60,7 @@ class CryptoPayloadHandlerTest {
         byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
         String plaintext = "{\"message\":\"hello payload handler\"}";
 
-        String encryptedData = AesGcmCryptoService.encryptAsBase64(plaintext, sessionKey, iv);
+        String encryptedData = AesGcmCipher.encryptAsBase64(plaintext, sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, keyPair.getPublic());
 
         CipherRequestPayload payload = new CipherRequestPayload(
@@ -92,7 +92,7 @@ class CryptoPayloadHandlerTest {
         assertNotNull(aesPayload.encryptedDataBase64());
 
         // Decrypt and verify
-        String decrypted = AesGcmCryptoService.decryptFromBase64(
+        String decrypted = AesGcmCipher.decryptFromBase64(
                 aesPayload.encryptedDataBase64(),
                 sessionKey,
                 aesPayload.ivBase64()
@@ -122,7 +122,7 @@ class CryptoPayloadHandlerTest {
         assertInstanceOf(CipherResponsePayload.class, result);
         CipherResponsePayload aesPayload = (CipherResponsePayload) result;
 
-        String decrypted = AesGcmCryptoService.decryptFromBase64(
+        String decrypted = AesGcmCipher.decryptFromBase64(
                 aesPayload.encryptedDataBase64(),
                 sessionKey,
                 aesPayload.ivBase64()
