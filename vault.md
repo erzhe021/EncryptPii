@@ -9,7 +9,7 @@ Pod 启动阶段:
 1. 读取 K8s SA Token (/var/run/secrets/kubernetes.io/serviceaccount/token)
 2. 调用 Vault API: POST /v1/auth/kubernetes/login (携带 role + SA JWT)
 3. 获取 Vault Client Token
-4. 调用 KV v2 接口: GET /v1/secret/data/crypto/rsa-keys
+4. 调用 KV v2 接口: GET /v1/secret/data/crypto/pii-transport-key
 5. 将 RSA 密钥对加载至 JVM 内存的 KeyRing (私钥不落地)
 
 业务请求阶段 (完全本地化，0 网络 RTT):
@@ -46,7 +46,7 @@ crypto:
     kubernetes:
       role: crypto-server
       token-path: /var/run/secrets/kubernetes.io/serviceaccount/token
-    secret-path: secret/data/crypto/rsa-keys
+    secret-path: secret/data/crypto/pii-transport-key
 ```
 
 

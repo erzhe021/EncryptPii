@@ -34,7 +34,8 @@ class KeyRotationTest {
         PublicKeyResponse response = server.getPublicKey();
         assertNotNull(response);
         assertNotNull(response.keyId());
-        assertTrue(response.keyId().startsWith("rsa-"));
+        assertEquals("pii-transport-key:1", response.keyId());
+        assertTrue(response.keyId().matches("^[a-zA-Z0-9_-]+:\\d+$"));
         assertTrue(response.expiresAtEpochMillis() > System.currentTimeMillis());
     }
 
@@ -43,6 +44,7 @@ class KeyRotationTest {
         // 1. Client fetches active Key 1 (old key)
         PublicKeyResponse oldKeyResponse = server.getPublicKey();
         String oldKeyId = oldKeyResponse.keyId();
+        assertEquals("pii-transport-key:1", oldKeyId);
         PublicKey oldPublicKey = server.publicKey();
 
         // 2. Client prepares request encrypted with old key (simulate client caching old key)
@@ -56,6 +58,7 @@ class KeyRotationTest {
         // 3. Server rotates to new Key 2 (simulating 1-year periodic rotation)
         KeyRing.KeyEntry newKeyEntry = server.keyRing().rotateKey();
         String newKeyId = newKeyEntry.metadata().keyId();
+        assertEquals("pii-transport-key:2", newKeyId);
         assertNotEquals(oldKeyId, newKeyId);
         assertEquals(newKeyId, server.getPublicKey().keyId());
 
@@ -93,5 +96,23 @@ class KeyRotationTest {
         );
         String decryptedNew = server.decrypt(payloadWithNewKey);
         assertEquals("data-from-new-client", decryptedNew);
+    }
+
+    @Test
+    void testCustomKeyAliasAndSequentialVersions() throws Exception {
+        KeyRing customRing = new KeyRing("my-service-key");
+        customRing.initialize();
+
+        assertEquals("my-service-key:1", customRing.getActiveKeyEntry().metadata().keyId());
+        assertEquals("my-service-key", customRing.getActiveKeyEntry().metadata().keyAlias());
+        assertEquals(1L, customRing.getActiveKeyEntry().metadata().version());
+
+        KeyRing.KeyEntry v2 = customRing.rotateKey();
+        assertEquals("my-service-key:2", v2.metadata().keyId());
+        assertEquals(2L, v2.metadata().version());
+
+        KeyRing.KeyEntry v3 = customRing.rotateKey();
+        assertEquals("my-service-key:3", v3.metadata().keyId());
+        assertEquals(3L, v3.metadata().version());
     }
 }

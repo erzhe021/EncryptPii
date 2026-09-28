@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.security.*;
-import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,9 +27,12 @@ public class KeyRing {
         }
     }
 
-    public static final long DEFAULT_VALIDITY_MILLIS = 365L * 24 * 60 * 60 * 1000; // 1 year
-    public static final long DEFAULT_GRACE_PERIOD_MILLIS = 30L * 24 * 60 * 60 * 1000; // 30 days grace
+    public static final String DEFAULT_KEY_ALIAS = KeyMetadata.DEFAULT_KEY_ALIAS;
+    public static final long DEFAULT_VALIDITY_MILLIS = 60 * 1000; // 1 minute
+    public static final long DEFAULT_GRACE_PERIOD_MILLIS = 30 * 1000; // 30 seconds grace
 
+    @Getter
+    private final String keyAlias;
     @Getter
     private final long validityMillis;
     @Getter
@@ -42,16 +44,29 @@ public class KeyRing {
     private final Map<String, KeyEntry> keyEntriesById = new ConcurrentHashMap<>();
 
     public KeyRing() {
-        this(DEFAULT_VALIDITY_MILLIS, DEFAULT_GRACE_PERIOD_MILLIS);
+        this(DEFAULT_KEY_ALIAS, DEFAULT_VALIDITY_MILLIS, DEFAULT_GRACE_PERIOD_MILLIS);
+    }
+
+    public KeyRing(String keyAlias) {
+        this(keyAlias, DEFAULT_VALIDITY_MILLIS, DEFAULT_GRACE_PERIOD_MILLIS);
     }
 
     public KeyRing(long validityMillis, long gracePeriodMillis) {
+        this(DEFAULT_KEY_ALIAS, validityMillis, gracePeriodMillis);
+    }
+
+    public KeyRing(String keyAlias, long validityMillis, long gracePeriodMillis) {
+        this.keyAlias = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : DEFAULT_KEY_ALIAS;
         this.validityMillis = validityMillis;
         this.gracePeriodMillis = gracePeriodMillis;
     }
 
     public static KeyRing createInMemory() {
         return new KeyRing();
+    }
+
+    public static KeyRing createInMemory(String keyAlias) {
+        return new KeyRing(keyAlias);
     }
 
     /**
@@ -111,21 +126,38 @@ public class KeyRing {
     }
 
     /**
+     * Determines the next sequential version number for the given key alias
+     * by scanning existing keys in the key ring.
+     */
+    public synchronized long getNextVersion(String keyAlias) {
+        long maxVersion = 0;
+        String targetName = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : this.keyAlias;
+        String prefix = targetName + ":";
+        for (String id : keyEntriesById.keySet()) {
+            if (id != null && id.startsWith(prefix)) {
+                String verStr = id.substring(prefix.length());
+                try {
+                    long ver = Long.parseLong(verStr);
+                    if (ver > maxVersion) {
+                        maxVersion = ver;
+                    }
+                } catch (NumberFormatException ignored) {
+                    // ignore non-numeric version suffix
+                }
+            }
+        }
+        return maxVersion + 1;
+    }
+
+    /**
      * Rotates to a new RSA key pair. The newly generated key becomes the active key.
      * Previous keys remain in the keyring for decrypting requests in transition.
      * Any historical keys that have expired beyond the grace period are purged.
      */
     public synchronized KeyEntry rotateKey() throws GeneralSecurityException, IOException {
         long now = System.currentTimeMillis();
-        String dateSuffix = new SimpleDateFormat("yyyyMMdd").format(new Date(now));
-        String baseKeyId = "rsa-" + dateSuffix;
-        String newKeyId = baseKeyId;
-
-        // If a key with this keyId already exists (e.g., rotated on same day), append sequence
-        int seq = 1;
-        while (keyEntriesById.containsKey(newKeyId)) {
-            newKeyId = baseKeyId + "-" + seq++;
-        }
+        long nextVersion = getNextVersion(keyAlias);
+        String newKeyId = KeyMetadata.buildKeyId(keyAlias, nextVersion);
 
         long expiresAt = now + validityMillis;
         KeyMetadata metadata = new KeyMetadata(newKeyId, now, expiresAt);

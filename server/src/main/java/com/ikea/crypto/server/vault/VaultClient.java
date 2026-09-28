@@ -72,17 +72,21 @@ public class VaultClient {
         return clientTokenNode.asText();
     }
 
+    public record VaultSecretEntry(JsonNode data, int version, String createdTime) {}
+
     /**
-     * Reads secret data from Vault KV v2 engine.
-     * Endpoint: GET /v1/{path}
+     * Reads a specific version of secret data from Vault KV v2 engine.
+     * When version is null, the latest version is returned along with its metadata.
      *
      * @param vaultToken Vault client token
      * @param path       Secret path (e.g. secret/data/crypto/rsa-keys)
-     * @return Optional containing the 'data' node under data.data, or empty if 404
+     * @param version    Optional version number (null for latest)
+     * @return Optional containing the VaultSecretEntry, or empty if 404 or destroyed
      */
-    public Optional<JsonNode> readSecret(String vaultToken, String path) throws IOException, InterruptedException {
+    public Optional<VaultSecretEntry> readSecretVersion(String vaultToken, String path, Integer version)
+            throws IOException, InterruptedException {
         String cleanPath = path.startsWith("/") ? path.substring(1) : path;
-        String endpoint = vaultAddr + "/v1/" + cleanPath;
+        String endpoint = vaultAddr + "/v1/" + cleanPath + (version != null ? "?version=" + version : "");
 
         HttpRequest request = HttpRequest.newBuilder()
                 .uri(URI.create(endpoint))
@@ -104,12 +108,37 @@ public class VaultClient {
         }
 
         JsonNode root = objectMapper.readTree(response.body());
-        // In KV v2, the payload is located at root.data.data
-        JsonNode dataNode = root.path("data").path("data");
+        JsonNode dataWrapper = root.path("data");
+        JsonNode dataNode = dataWrapper.path("data");
         if (dataNode.isMissingNode() || dataNode.isNull()) {
+            if (dataWrapper.isObject() && !dataWrapper.has("metadata")) {
+                return Optional.of(new VaultSecretEntry(dataWrapper, version != null ? version : 1, null));
+            }
             return Optional.empty();
         }
-        return Optional.of(dataNode);
+
+        boolean destroyed = dataWrapper.path("metadata").path("destroyed").asBoolean(false);
+        if (destroyed) {
+            log.info("Vault secret version {} is destroyed, skipping: {}", version, endpoint);
+            return Optional.empty();
+        }
+
+        int ver = dataWrapper.path("metadata").path("version").asInt(version != null ? version : 1);
+        String createdTime = dataWrapper.path("metadata").path("created_time").asText(null);
+
+        return Optional.of(new VaultSecretEntry(dataNode, ver, createdTime));
+    }
+
+    /**
+     * Reads latest secret data from Vault KV v2 engine.
+     * Endpoint: GET /v1/{path}
+     *
+     * @param vaultToken Vault client token
+     * @param path       Secret path (e.g. secret/data/crypto/rsa-keys)
+     * @return Optional containing the 'data' node under data.data, or empty if 404
+     */
+    public Optional<JsonNode> readSecret(String vaultToken, String path) throws IOException, InterruptedException {
+        return readSecretVersion(vaultToken, path, null).map(VaultSecretEntry::data);
     }
 
     /**
@@ -117,7 +146,7 @@ public class VaultClient {
      * Endpoint: POST /v1/{path}
      *
      * @param vaultToken Vault client token
-     * @param path       Secret path (e.g. secret/data/crypto/rsa-keys)
+     * @param path       Secret path (e.g. secret/data/crypto/pii-transport-key)
      * @param data       Key-value pairs to store under "data"
      */
     public void writeSecret(String vaultToken, String path, Map<String, Object> data) throws IOException, InterruptedException {

@@ -46,7 +46,7 @@ class CryptoServerTest {
         PublicKeyResponse response = server.getPublicKey();
         assertNotNull(response);
         assertNotNull(response.publicKeyBase64());
-        assertEquals("in-memory-test-key", response.keyId());
+        assertEquals("in-memory-test-key:1", response.keyId());
         assertTrue(response.expiresAtEpochMillis() > System.currentTimeMillis());
     }
 

@@ -33,9 +33,14 @@ public class VaultProperties {
     private String token = "root";
 
     /**
-     * Vault KV v2 secret path (relative to /v1/), e.g. secret/data/crypto/rsa-keys
+     * Vault KV v2 secret path (relative to /v1/), e.g. secret/data/crypto/pii-transport-key
      */
-    private String secretPath = "secret/data/crypto/rsa-keys";
+    private String secretPath = "secret/data/crypto/pii-transport-keys";
+
+    /**
+     * Logical key alias used in keyId format <keyAlias>:<version>.
+     */
+    private String keyAlias = "pii-transport-key";
 
     /**
      * Automatically bootstrap and initialize keys in Vault if none exist.

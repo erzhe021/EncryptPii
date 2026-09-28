@@ -28,13 +28,14 @@ public record CryptoServer(KeyRing keyRing) {
     }
 
     private static KeyRing createInMemoryKeyRing(PrivateKey privateKey, PublicKey publicKey) {
-        String keyId = "in-memory-test-key";
+        String keyAlias = "in-memory-test-key";
+        String keyId = KeyMetadata.buildKeyId(keyAlias, 1);
         long now = System.currentTimeMillis();
         long expiresAt = now + 365L * 24 * 60 * 60 * 1000;
         KeyMetadata metadata = new KeyMetadata(keyId, now, expiresAt);
         KeyRing.KeyEntry entry = new KeyRing.KeyEntry(metadata, new KeyPair(publicKey, privateKey));
 
-        KeyRing ring = new KeyRing();
+        KeyRing ring = new KeyRing(keyAlias);
         ring.registerKeyEntry(entry, true);
         return ring;
     }

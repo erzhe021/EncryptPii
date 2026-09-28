@@ -1,6 +1,5 @@
 package com.ikea.crypto.server;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
@@ -9,7 +8,6 @@ import com.ikea.crypto.common.model.payload.PublicKeyResponse;
 import com.ikea.crypto.common.util.EncodingUtils;
 import com.ikea.crypto.server.service.CryptoServer;
 import com.ikea.crypto.server.service.KeyRing;
-import com.ikea.crypto.server.vault.VaultClient;
 import com.ikea.crypto.server.vault.VaultKeySynchronizer;
 import com.ikea.crypto.server.vault.VaultProperties;
 import com.sun.net.httpserver.HttpServer;
@@ -28,7 +26,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
-import java.util.Map;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -140,15 +137,16 @@ public class VaultIntegrationTest {
                     {
                       "data": {
                         "data": {
-                          "keyId": "rsa-k8s-20261001",
                           "publicKey": "%s",
-                          "privateKey": "%s",
-                          "createdAt": %d,
-                          "expiresAt": %d
+                          "privateKey": "%s"
+                        },
+                        "metadata": {
+                          "version": 1,
+                          "created_time": "2026-09-28T12:00:00Z"
                         }
                       }
                     }
-                    """, pubBase64, privBase64, System.currentTimeMillis(), System.currentTimeMillis() + 365L * 24 * 3600 * 1000);
+                    """, pubBase64, privBase64);
             byte[] bytes = response.getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().set("Content-Type", "application/json");
             exchange.sendResponseHeaders(200, bytes.length);
@@ -165,6 +163,7 @@ public class VaultIntegrationTest {
             props.setEnabled(true);
             props.setAddr(mockVaultAddr);
             props.setAuthMethod(VaultProperties.AuthMethod.KUBERNETES);
+            props.setKeyAlias("rsa-k8s");
             props.getKubernetes().setRole("crypto-server");
             props.getKubernetes().setJwt("mock-k8s-service-account-jwt-token");
             props.setSecretPath("secret/data/crypto/k8s-keys");
@@ -176,7 +175,7 @@ public class VaultIntegrationTest {
 
             // 2. Client fetches public key
             PublicKeyResponse pubKeyResponse = server.getPublicKey();
-            assertEquals("rsa-k8s-20261001", pubKeyResponse.keyId());
+            assertEquals("rsa-k8s:1", pubKeyResponse.keyId());
 
             // 3. Client prepares encrypted request
             KeyGenerator keyGen = KeyGenerator.getInstance("AES");

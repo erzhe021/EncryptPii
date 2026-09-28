@@ -1,9 +1,5 @@
 package com.ikea.crypto.server.vault;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.model.payload.KeyMetadata;
-import com.ikea.crypto.common.util.EncodingUtils;
 import com.ikea.crypto.server.service.KeyRing;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -12,11 +8,7 @@ import org.springframework.stereotype.Component;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.*;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
-import java.util.HashMap;
-import java.util.Map;
+import java.security.GeneralSecurityException;
 
 /**
  * Synchronizes cryptographic keys from HashiCorp Vault into an in-memory KeyRing.
@@ -64,53 +56,6 @@ public class VaultKeySynchronizer {
         VaultKeyRing vaultKeyRing = new VaultKeyRing(properties, vaultClient);
         vaultKeyRing.initialize();
         return vaultKeyRing;
-    }
-
-    private KeyRing.KeyEntry parseKeyEntry(JsonNode node, KeyFactory keyFactory) throws GeneralSecurityException {
-        String keyId = node.path("keyId").asText();
-        String pubBase64 = node.path("publicKey").asText();
-        String privBase64 = node.path("privateKey").asText();
-        long createdAt = node.path("createdAt").asLong(System.currentTimeMillis());
-        long expiresAt = node.path("expiresAt").asLong(createdAt + KeyRing.DEFAULT_VALIDITY_MILLIS);
-
-        byte[] pubBytes = EncodingUtils.fromBase64(pubBase64);
-        byte[] privBytes = EncodingUtils.fromBase64(privBytesBase64(privBase64));
-
-        PublicKey publicKey = keyFactory.generatePublic(new X509EncodedKeySpec(pubBytes));
-        PrivateKey privateKey = keyFactory.generatePrivate(new PKCS8EncodedKeySpec(privBytes));
-        KeyPair keyPair = new KeyPair(publicKey, privateKey);
-
-        KeyMetadata metadata = new KeyMetadata(keyId, createdAt, expiresAt);
-        return new KeyRing.KeyEntry(metadata, keyPair);
-    }
-
-    private String privBytesBase64(String priv) {
-        return priv.replace("-----BEGIN PRIVATE KEY-----", "")
-                .replace("-----END PRIVATE KEY-----", "")
-                .replaceAll("\\s+", "");
-    }
-
-    private KeyRing.KeyEntry generateAndStoreNewKey(String vaultToken, String path)
-            throws GeneralSecurityException, IOException, InterruptedException {
-        KeyPairGenerator generator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
-        generator.initialize(2048);
-        KeyPair keyPair = generator.generateKeyPair();
-
-        long now = System.currentTimeMillis();
-        long expiresAt = now + KeyRing.DEFAULT_VALIDITY_MILLIS;
-        String keyId = "rsa-vault-" + java.time.LocalDate.now().toString().replace("-", "");
-
-        Map<String, Object> data = new HashMap<>();
-        data.put("keyId", keyId);
-        data.put("publicKey", EncodingUtils.toBase64(keyPair.getPublic().getEncoded()));
-        data.put("privateKey", EncodingUtils.toBase64(keyPair.getPrivate().getEncoded()));
-        data.put("createdAt", now);
-        data.put("expiresAt", expiresAt);
-
-        vaultClient.writeSecret(vaultToken, path, data);
-
-        KeyMetadata metadata = new KeyMetadata(keyId, now, expiresAt);
-        return new KeyRing.KeyEntry(metadata, keyPair);
     }
 
     private String resolveKubernetesJwt() throws IOException {
