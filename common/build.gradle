@@ -6,12 +6,14 @@ plugins {
 dependencyManagement {
     imports {
         mavenBom 'org.springframework.boot:spring-boot-dependencies:3.3.4'
+        mavenBom 'org.springframework.vault:spring-vault-dependencies:3.0.0'
     }
 }
 
 dependencies {
     api 'org.springframework.boot:spring-boot-starter-web'
     api 'org.springframework.boot:spring-boot-starter-validation'
+    api "org.springframework.vault:spring-vault-core:${rootProject.ext.springVaultVersion}"
     api 'com.fasterxml.jackson.core:jackson-databind'
     api 'jakarta.validation:jakarta.validation-api'
 
@@ -21,4 +23,3 @@ dependencies {
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
-

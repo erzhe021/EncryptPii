@@ -37,7 +37,7 @@ public class VaultAuthenticator {
                 String jwt = resolveKubernetesJwt();
                 String role = properties.getKubernetes().getRole();
                 log.info("Authenticating to Vault via Kubernetes Auth (role: '{}')", role);
-                this.cachedToken = vaultClient.loginWithKubernetes(role, jwt);
+                this.cachedToken = vaultClient.loginWithKubernetes(properties.getAuthPath(), role, jwt);
             } else {
                 log.debug("Using configured Vault static token for authentication");
                 this.cachedToken = properties.getToken();

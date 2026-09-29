@@ -32,6 +32,11 @@ public class VaultProperties {
     private String token = "root";
 
     /**
+     * Authentication mount path, e.g. auth/kubernetes or auth/token.
+     */
+    private String authPath = "auth/kubernetes";
+
+    /**
      * Vault KV v2 secret path (relative to /v1/), e.g. secret/data/crypto/pii-transport-key
      */
     private String secretPath = "secret/data/crypto/pii-transport-keys";

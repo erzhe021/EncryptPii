@@ -6,6 +6,7 @@ crypto:
     enabled: true
     addr: ${VAULT_ADDR:http://127.0.0.1:8200}
     auth-method: ${VAULT_AUTH_METHOD:TOKEN}
+    auth-path: ${VAULT_AUTH_PATH:auth/kubernetes}
     token: ${VAULT_TOKEN:root}
     secret-path: ${VAULT_SECRET_PATH:secret/data/crypto/pii-transport-key}
     auto-bootstrap: true
