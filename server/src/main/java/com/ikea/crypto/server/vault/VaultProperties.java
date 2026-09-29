@@ -51,6 +51,22 @@ public class VaultProperties {
     private long gracePeriodMillis = 30L * 24 * 60 * 60 * 1000; // 30 days grace
 
     /**
+     * Wait time in milliseconds for pods that lost CAS competition before re-fetching the updated key from Vault.
+     * Default: 1200ms (1~2 seconds).
+     */
+    private long casBackoffMillis = 1200L;
+
+    /**
+     * Maximum number of attempts to poll Vault after CAS competition loss.
+     */
+    private int casMaxRetries = 3;
+
+    /**
+     * Interval in milliseconds between retries when polling Vault after CAS conflict.
+     */
+    private long casRetryIntervalMillis = 500L;
+
+    /**
      * Kubernetes authentication properties.
      */
     private KubernetesProperties kubernetes = new KubernetesProperties();

@@ -61,14 +61,6 @@ public class KeyRing {
         this.gracePeriodMillis = gracePeriodMillis;
     }
 
-    public static KeyRing createInMemory() {
-        return new KeyRing();
-    }
-
-    public static KeyRing createInMemory(String keyAlias) {
-        return new KeyRing(keyAlias);
-    }
-
     /**
      * Initializes the key ring. Generates a new active key in memory if none exists or if expired.
      * Obsolete keys beyond the grace period are automatically cleaned up.
@@ -91,6 +83,7 @@ public class KeyRing {
             return;
         }
         keyEntriesById.put(entry.metadata().keyId(), entry);
+        logCurrentEntries(keyEntriesById);
         if (makeActive || activeKeyEntry == null || entry.metadata().expiresAtEpochMillis() > activeKeyEntry.metadata().expiresAtEpochMillis()) {
             this.activeKeyEntry = entry;
         }
@@ -126,6 +119,35 @@ public class KeyRing {
     }
 
     /**
+     * Finds the active or latest valid key entry for a specific key alias.
+     */
+    public Optional<KeyEntry> findActiveKeyEntry(String keyAlias) {
+        purgeExpiredKeys();
+        if (keyAlias == null || keyAlias.isBlank()) {
+            return Optional.ofNullable(activeKeyEntry);
+        }
+        String targetAlias = keyAlias.trim();
+        if (activeKeyEntry != null && targetAlias.equals(activeKeyEntry.metadata().keyAlias())) {
+            return Optional.of(activeKeyEntry);
+        }
+        String prefix = targetAlias + ":";
+        KeyEntry latest = null;
+        long maxVersion = -1;
+        for (KeyEntry entry : keyEntriesById.values()) {
+            String id = entry.metadata().keyId();
+            if (id != null && id.startsWith(prefix)) {
+                Long ver = entry.metadata().version();
+                long v = (ver != null) ? ver : 0;
+                if (v > maxVersion && !isExpiredBeyondGrace(entry.metadata())) {
+                    maxVersion = v;
+                    latest = entry;
+                }
+            }
+        }
+        return Optional.ofNullable(latest);
+    }
+
+    /**
      * Determines the next sequential version number for the given key alias
      * by scanning existing keys in the key ring.
      */
@@ -150,32 +172,81 @@ public class KeyRing {
     }
 
     /**
-     * Rotates to a new RSA key pair. The newly generated key becomes the active key.
-     * Previous keys remain in the keyring for decrypting requests in transition.
-     * Any historical keys that have expired beyond the grace period are purged.
+     * Determines the current highest known version number in memory for the given key alias.
      */
-    public synchronized KeyEntry rotateKey() throws GeneralSecurityException, IOException {
-        long now = System.currentTimeMillis();
-        long nextVersion = getNextVersion(keyAlias);
-        String newKeyId = KeyMetadata.buildKeyId(keyAlias, nextVersion);
+    public long getCurrentVersion(String keyAlias) {
+        String targetName = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : this.keyAlias;
+        long maxVersion = 0;
+        String prefix = targetName + ":";
+        for (String id : keyEntriesById.keySet()) {
+            if (id != null && id.startsWith(prefix)) {
+                String verStr = id.substring(prefix.length());
+                try {
+                    long ver = Long.parseLong(verStr);
+                    if (ver > maxVersion) {
+                        maxVersion = ver;
+                    }
+                } catch (NumberFormatException ignored) {
+                }
+            }
+        }
+        if (maxVersion > 0) {
+            return maxVersion;
+        }
+        if (activeKeyEntry != null && targetName.equals(activeKeyEntry.metadata().keyAlias()) && activeKeyEntry.metadata().version() != null) {
+            return activeKeyEntry.metadata().version();
+        }
+        return 0;
+    }
 
-        long expiresAt = now + validityMillis;
-        KeyMetadata metadata = new KeyMetadata(newKeyId, now, expiresAt);
-
+    public KeyPair generateKeyPair() throws GeneralSecurityException {
         KeyPairGenerator generator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
         generator.initialize(2048);
-        KeyPair keyPair = generator.generateKeyPair();
+        return generator.generateKeyPair();
+    }
 
+    protected synchronized KeyEntry activateNewKeyEntry(KeyMetadata metadata, KeyPair keyPair, long now) {
         KeyEntry newEntry = new KeyEntry(metadata, keyPair);
-        keyEntriesById.put(newKeyId, newEntry);
+        keyEntriesById.put(metadata.keyId(), newEntry);
         this.activeKeyEntry = newEntry;
 
-        log.info("Rotated to new active RSA key: keyId={}, expiresAt={}", newKeyId, new Date(expiresAt));
+        log.info("Rotated to new active RSA key: keyId={}, expiresAt={}", metadata.keyId(), new Date(metadata.expiresAtEpochMillis()));
+        logCurrentEntries(keyEntriesById);
 
         // Purge historical keys whose grace period has expired
         purgeExpiredKeys(now);
 
         return newEntry;
+    }
+
+    /**
+     * Rotates to a new RSA key pair for the default key alias.
+     */
+    public synchronized KeyEntry rotateKey() throws GeneralSecurityException, IOException {
+        return rotateKey(this.keyAlias);
+    }
+
+    /**
+     * Rotates to a new RSA key pair for the specified key alias.
+     * The newly generated key becomes the active key.
+     * Previous keys remain in the keyring for decrypting requests in transition.
+     * Any historical keys that have expired beyond the grace period are purged.
+     */
+    public synchronized KeyEntry rotateKey(String targetKeyAlias) throws GeneralSecurityException, IOException {
+        long now = System.currentTimeMillis();
+        String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : this.keyAlias;
+        long nextVersion = getNextVersion(alias);
+        String newKeyId = KeyMetadata.buildKeyId(alias, nextVersion);
+
+        long expiresAt = now + validityMillis;
+        KeyMetadata metadata = new KeyMetadata(newKeyId, now, expiresAt);
+        KeyPair keyPair = generateKeyPair();
+
+        return activateNewKeyEntry(metadata, keyPair, now);
+    }
+
+    private void logCurrentEntries(Map<String, KeyEntry> keyEntriesById) {
+        log.debug("Current key entries in keyring: {}", keyEntriesById.keySet());
     }
 
     /**
@@ -199,6 +270,8 @@ public class KeyRing {
         List<String> keysToPurge = new ArrayList<>();
         for (Map.Entry<String, KeyEntry> mapEntry : keyEntriesById.entrySet()) {
             KeyEntry entry = mapEntry.getValue();
+            // Only purge keys that are not the active key and have expired beyond the grace period
+            // however, we keep the active key even if it has expired, to allow for graceful transition.
             if (entry != activeKeyEntry && isExpiredBeyondGrace(entry.metadata(), now)) {
                 keysToPurge.add(mapEntry.getKey());
             }
@@ -214,6 +287,7 @@ public class KeyRing {
     private synchronized void purgeKey(String keyId) {
         keyEntriesById.remove(keyId);
         log.info("Purged expired key beyond grace period: keyId={}", keyId);
+        logCurrentEntries(keyEntriesById);
     }
 
     public boolean isExpiredBeyondGrace(KeyMetadata metadata) {

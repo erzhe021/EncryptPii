@@ -1,78 +1,252 @@
-已在本项目中完成 **Vault 密钥同步与本地高性能加解密** 的完整实现，并通过了真实 Vault 实例与 Kubernetes Auth 的集成测试。
+# HashiCorp Vault 密钥生命周期管理与分布式轮换设计
+
+本项目实现了基于 **HashiCorp Vault KV v2** 的端到端传输密钥生命周期管理与多 Pod 分布式平滑轮换。通过将密钥管理下沉至 Vault 并结合本地内存密钥环（`VaultKeyRing`），在保证**私钥不落地、统一集中治理**的前提下，实现了**纳秒级本地加解密（0 网络 RTT）**与**零停机平滑轮转**。
 
 ---
 
-### 一、实现架构与时序
+## 一、架构设计与核心价值
 
 ```text
-Pod 启动阶段:
-1. 读取 K8s SA Token (/var/run/secrets/kubernetes.io/serviceaccount/token)
-2. 调用 Vault API: POST /v1/auth/kubernetes/login (携带 role + SA JWT)
-3. 获取 Vault Client Token
-4. 调用 KV v2 接口: GET /v1/secret/data/crypto/pii-transport-key
-5. 将 RSA 密钥对加载至 JVM 内存的 KeyRing (私钥不落地)
-
-业务请求阶段 (完全本地化，0 网络 RTT):
-1. 客户端通过 GET /crypto/server/public-key 获取服务端公钥
-2. 客户端加密生成 CipherRequestPayload
-3. 服务端本地查找 KeyRing 内存私钥解密 SessionKey，AES-GCM 解密数据
+                                  +---------------------------------------+
+                                  |         HashiCorp Vault KV v2         |
+                                  |  - 权威多版本托管 (v1, v2, v3...)        |
+                                  |  - Check-And-Set (CAS) 原子并发控制   |
+                                  +-------------------+-------------------+
+                                                      ^
+                               [控制面: 启动/轮换/Cache Miss]
+                                                      v
+      +-----------------------------------------------+-----------------------------------------------+
+      |                                               |                                               |
++-----+----------------------------------+     +-----+----------------------------------+     +-----+----------------------------------+
+| Pod 1 (Crypto Server)                  |     | Pod 2 (Crypto Server)                  |     | Pod N (Crypto Server)                  |
+|  - VaultKeyRing (JVM 内存)             |     |  - VaultKeyRing (JVM 内存)             |     |  - VaultKeyRing (JVM 内存)             |
+|    * Active Key (v2) -> 提供公钥        |     |    * Active Key (v2) -> 提供公钥        |     |    * Active Key (v2) -> 提供公钥        |
+|    * Transition Keys (v1) -> 宽限期解密  |     |    * Transition Keys (v1) -> 宽限期解密  |     |    * Transition Keys (v1) -> 宽限期解密  |
+|  - 本地加解密引擎 (0 网络 RTT)          |     |  - 本地加解密引擎 (0 网络 RTT)          |     |  - 本地加解密引擎 (0 网络 RTT)          |
++----------------------------------------+     +----------------------------------------+     +----------------------------------------+
 ```
 
----
-
-### 二、核心改动组件
-
-1. **`VaultProperties`** (`com.ikea.crypto.server.vault`):  
-   配置 Vault 地址、认证方式（`KUBERNETES` 或 `TOKEN`）、K8s role、SA Token 路径及 KV 路径。
-2. **`VaultClient`** (`com.ikea.crypto.server.vault`):  
-   轻量级 HTTP 客户端（基于原生 `java.net.http.HttpClient`），实现 `loginWithKubernetes`、`readSecret`、`writeSecret`。
-3. **`VaultKeySynchronizer`** (`com.ikea.crypto.server.vault`):  
-   负责登录凭证换取、拉取/自动初始化 Vault 中的 RSA 密钥对，并反序列化注入内存 `KeyRing`。
-4. **`KeyRing` & `CryptoConfiguration`**:  
-   支持纯内存模式（`KeyRing.createInMemory()`），当 `crypto.vault.enabled=true` 时自动走 Vault 托管。
-5. **`VaultIntegrationTest`**:  
-   测试通过 `http://127.0.0.1:8200` 真实容器执行，涵盖 Token Auth、Kubernetes Auth 模拟、密文加解密全流程。
+### 核心优势
+1. **安全合规（私钥不落地）**：RSA 密钥对由应用或 Vault 生成，持久化存储于 Vault KV v2，Pod 仅在内存中加载，绝不落地磁盘。
+2. **极速性能（0 外部网络 RTT）**：数据加解密与会话密钥（SessionKey）解密完全在 JVM 本地内存完成，吞吐不受 Vault 网络延迟与吞吐限制。
+3. **高可用平滑过渡**：内置**多版本共存**与**宽限期（Grace Period）**机制，客户端无需停机或瞬间全量切换。
+4. **集群并发安全**：基于 Vault KV v2 原生 **Check-And-Set (CAS)** 与 **双重检查刷新（Double-Checked Refresh）**，杜绝多 Pod 轮换时的竞态脑裂与版本暴增。
+5. **透明按需补拉（Cache Miss Fallback）**：未同步新版本的 Pod 在收到新密钥密文时，自动触发按需补拉并缓存，业务完全无感。
 
 ---
 
-### 三、启用配置（`application.yml`）
+## 二、密钥数据模型与版本规范
+
+### 1. Key ID 命名规范
+系统以 `<keyAlias>:<version>` 格式唯一标识一个密钥版本，例如：
+* `pii-transport-key:1`
+* `pii-transport-key:2`
+
+客户端请求时在 Payload / Header 中携带 `keyId`，服务端根据 `keyId` 精确索引对应私钥。
+
+### 2. Vault KV v2 存储格式
+在 Vault 的 Secret 路径（默认 `secret/data/crypto/pii-transport-keys`）下存储：
+```json
+{
+  "data": {
+    "publicKey": "<Base64 X.509 编码公钥>",
+    "privateKey": "<Base64 PKCS#8 编码私钥>"
+  }
+}
+```
+* **版本与时间戳**：直接复用 Vault 原生 Metadata 中的 `version` 和 `created_time`（ISO-8601）。
+* **有效期计算**：`expiresAt = parse(created_time) + validityMillis`。无需人工写入冗余时间字段，保证权威一致性。
+
+---
+
+## 三、密钥生命周期全流程
+
+```text
+  [Bootstrap / 生成] 
+          │  (Auto-Bootstrap 生成 RSA-2048，CAS=0 写入 Vault)
+          ▼
+   [Active 活跃期]  ──────────────> 对外暴露公钥 (/crypto/server/public-key)
+          │                         支持本地快速解密
+          │ (达到有效时长 / 触发轮转)
+          ▼
+ [Transition 宽限期] ─────────────> 停止分发公钥；保留私钥在内存中
+          │                         支持历史在途请求回退解密 (Grace Period)
+          │ (超过 validity + gracePeriod)
+          ▼
+   [Purged 淘汰期]  ──────────────> 从 JVM 内存移除，拒绝该版本的解密请求
+```
+
+### 1. 自动引导（Auto-Bootstrap）
+Pod 启动初始化时（`VaultKeyRing.initialize()`）：
+1. 尝试从 Vault 读取最新版本密钥；
+2. 若 Vault 路径不存在（404）且开启了 `crypto.vault.auto-bootstrap=true`，Pod 调用 `rotationCoordinator.bootstrapInitialKey()`；
+3. 使用 `CAS=0` 原子写入初识密钥（v1），防止多 Pod 同时冷启动时重复初始化。
+
+### 2. 启动加载与多版本回溯（Startup Backtracking）
+当 Vault 中已有密钥时，Pod 启动会自适应回溯加载历史版本：
+1. **加载最新版本**：拉取最新版本作为当前的 `Active Key`；
+2. **向前回溯（currentVersion - 1 到 1）**：
+   * 依次加载历史密钥为 `Transition Key`（用于支持老密文解密）；
+   * **短路机制（Early Termination）**：当检测到某一历史版本已超过宽限期（`isExpiredBeyondGrace` 为 true），立即终止向前扫描，避免无效网络请求。
+
+### 3. 业务加解密阶段（Zero-RTT 本地解密）
+1. 客户端通过 `GET /crypto/server/public-key` 获取当前 `Active Key` 的公钥与 `keyId`；
+2. 客户端加密生成 Payload（携带 `keyId`、加密后的 `sessionKey`、AES-GCM 密文）；
+3. 服务端本地 `KeyRing.keyEntriesById` 毫秒级命中私钥，本地执行解密，全程无 Vault 交互。
+
+### 4. 缓存未命中按需补拉（Cache Miss On-Demand Fetching）
+在多 Pod 部署环境中，若 Pod A 执行了轮转并生成了 v2，客户端使用 v2 加密向 Pod B 发起请求，而 Pod B 尚未执行同步：
+1. Pod B 在本地 `KeyRing` 中未找到 `keyId`（Cache Miss）；
+2. 自动触发 `fetchAndCacheFromVault(keyId)`；
+3. 从 Vault 获取对应版本密钥，校验未超过宽限期后存入本地内存缓存；
+4. 若该版本未过期且版本号大于当前 Active 版本，自动晋升为 Pod B 的 Active Key；
+5. 正常解密密文，避免了因集群各节点缓存不一致导致的请求失败。
+
+### 5. 过期淘汰（Purge）
+在初始化与每次轮换后触发 `purgeExpiredKeys()`：
+* 凡是 `currentTime > expiresAt + gracePeriodMillis` 的过期密钥，一律从内存 `keyEntriesById` 清除，释放资源并收敛解密攻击面。
+
+---
+
+## 四、多 Pod 分布式密钥轮换机制
+
+为了解决多 Pod 环境下密钥轮换的脑裂、重复写入与流量断流问题，系统设计了 **Double-Checked Refresh + Vault KV v2 CAS + Backoff Retry** 协同机制。
+
+```text
+[触发轮换] -> [1. 双重检查 (Double-Checked Refresh)]
+                     │
+         Vault 是否已有未过期的新版本?
+             ├── 是 ──> [直接同步 Vault 最新版本至本地内存] ──> [结束 (无需写 Vault)]
+             └── 否 ──> [2. 尝试抢占分布式写 (Vault CAS)]
+                                   │
+                           CAS 是否匹配 (成功)?
+                               ├── 是 (获锁 Pod) ──> [生成 RSA 密钥对并写入 Vault]
+                               │                     [激活本地新密钥，清除过期版本]
+                               └── 否 (冲突 Pod) ──> [捕获 VaultCasMismatchException]
+                                                     [3. 避退等待 (Backoff 1~2s)]
+                                                     [4. 重试拉取获胜 Pod 写入的新版本并激活]
+```
+
+### 1. 双重检查刷新（Double-Checked Refresh）
+在触发轮换操作时：
+* 首先主动拉取 Vault 中最新的密钥元数据；
+* 若发现 Vault 中的密钥版本大于本地当前版本且尚未过期，说明其他 Pod 刚刚已成功完成轮换，当前 Pod **直接将 Vault 最新密钥同步至本地内存**，终止本次生成与写入。
+* 避免了 Pod 集群因定时任务或并发调用导致的版本频频暴增。
+
+### 2. Vault KV v2 Check-And-Set (CAS) 并发原子锁
+若双重检查确认需轮转，Pod 执行 CAS 写入：
+* 设当前已知最新版本为 $N$；
+* 调用 `writeSecret(path, data, cas=N)`（指定 Vault 校验前置版本）；
+* **获锁 Pod**：写入成功，Vault 分配递增版本 $N+1$，该 Pod 将其更新至本地 `Active Key`；
+* **竞态失败 Pod**：Vault 返回 412 / CAS Mismatch，客户端抛出 `VaultCasMismatchException`。
+
+### 3. 避退等待与自动同步（Backoff & Fetch Latest）
+竞态失败的 Pod 进入优雅容错处理：
+1. **退避等待**：休眠 `casBackoffMillis`（默认 1200ms），让获胜 Pod 完成写入；
+2. **重试轮询**：按照 `casRetryIntervalMillis` 最多重试 `casMaxRetries` 次向 Vault 查询最新版本；
+3. **自动同步**：拉取到新版本密钥后反序列化注入本地 KeyRing 并激活。
+
+### 4. 强制轮换（Force Rotate）
+支持在运维应急场景下指定 `force=true`：
+* 绕过双重检查刷新；
+* 直接基于 Vault 当前版本递增触发 CAS 轮转。
+
+---
+
+## 五、核心实现组件
+
+| 组件 | 类名 | 核心职责 |
+| :--- | :--- | :--- |
+| **密钥环管理** | `VaultKeyRing` | 继承自 `KeyRing`，负责本地内存密钥存储、启动回溯、Cache Miss 按需拉取与委托操作 |
+| **轮换协调器** | `VaultRotationCoordinator` | 实现双重检查、Vault CAS 并发写入、避退等待与冲突重试拉取 |
+| **数据访问层** | `VaultKeyRepository` | 负责与 Vault KV v2 交互，封装版本化读写、CAS 参数传递与路径解析 |
+| **编解码转换** | `VaultKeyCodec` | 负责 RSA 密钥与 X.509/PKCS#8 Base64 的双向序列化、时间戳与版本解析 |
+| **客户端通讯** | `VaultClient` | 基于 Java 11 `HttpClient` 实现的轻量级客户端，支持 K8s Auth 与 KV v2 API |
+| **身份认证器** | `VaultAuthenticator` | 支持 Kubernetes ServiceAccount Token 自动挂载登录与静态 Token 认证 |
+| **配置属性** | `VaultProperties` | 统一配置项（地址、认证方式、路径、有效时长、宽限期、CAS 参数等） |
+
+---
+
+## 六、配置与运维接口
+
+### 1. 配置参数说明（`application.yml`）
 
 ```yaml
 crypto:
   vault:
+    # 是否开启 Vault 托管 (开启后自动使用 VaultKeyRing)
     enabled: true
+    # Vault 服务地址
     addr: http://vault.vault.svc:8200
+    # 认证方式: KUBERNETES 或 TOKEN
     auth-method: KUBERNETES
+    # 静态 Token (auth-method 为 TOKEN 时有效，或用于本地调试)
+    token: root
+    # Vault KV v2 挂载与路径
+    secret-path: secret/data/crypto/pii-transport-keys
+    # 逻辑密钥别名 (keyId 格式为 <keyAlias>:<version>)
+    key-alias: pii-transport-key
+    # 是否在 Vault 为空时自动初始化初识密钥
+    auto-bootstrap: true
+    # 密钥有效期 (毫秒，默认 365 天)
+    validity-millis: 31536000000
+    # 宽限过渡期 (毫秒，默认 30 天)
+    grace-period-millis: 2592000000
+    # CAS 竞态失败时的避退等待时长 (毫秒，默认 1200ms)
+    cas-backoff-millis: 1200
+    # CAS 竞态失败后的最大轮询重试次数
+    cas-max-retries: 3
+    # 重试轮询间隔 (毫秒)
+    cas-retry-interval-millis: 500
     kubernetes:
+      # Vault 中配置的 Kubernetes 认证角色名
       role: crypto-server
+      # K8s 容器挂载的 ServiceAccount Token 路径
       token-path: /var/run/secrets/kubernetes.io/serviceaccount/token
-    secret-path: secret/data/crypto/pii-transport-key
 ```
 
+### 2. 运维控制 REST API
 
+#### (1) 获取当前服务端活跃公钥
+* **请求**：`GET /crypto/server/public-key`
+* **响应**：
+```json
+{
+  "keyId": "pii-transport-key:3",
+  "publicKeyBase64": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...",
+  "algorithm": "RSA"
+}
+```
 
-
-
-
-已将密钥生成、拉取、轮换及生命周期的核心逻辑**完全从本地磁盘文件迁移为 HashiCorp Vault 托管**：
+#### (2) 触发分布式平滑轮换
+* **请求**：`POST /crypto/server/rotate` 或 `POST /crypto/server/rotate-key`
+* **请求体**（可选）：
+```json
+{
+  "keyAlias": "pii-transport-key",
+  "force": false
+}
+```
+* **逻辑说明**：
+  * `force: false`（默认）：触发双重检查，若 Vault 已有更新可用版本则直接拉取同步，不产生多余版本；
+  * `force: true`：强制写入 Vault 生成全新版本。
 
 ---
 
-### 一、核心改造方案
+## 七、自动化测试与验证
 
-1. **`VaultKeyRing`（无文件依赖的密钥环）**：
-    * **密钥获取**：启动时通过 Vault API（支持 K8s Auth 与 Token Auth）直接拉取 KV v2 中的当前活动密钥及宽限期内的历史密钥，加载至 JVM 内存。
-    * **密钥生成（Auto-Bootstrap）**：若 Vault 中尚无密钥，自动生成 RSA-2048 密钥对并持久化写入 Vault KV，**绝不写入本地磁盘**。
-    * **集群轮换（Rotate）**：调用 `rotateKey()` 时生成新版本密钥并更新 Vault，旧版本自动转为过渡期密钥；历史过期密钥从 Vault 与内存同步清除。
-2. **`CryptoConfiguration`**：
-    * 优先注入并初始化 `VaultKeyRing`；各 Pod 变为完全无状态，多 Pod 共享 Vault 中的同一组版本化密钥。
-3. **配置升级（`application.yml`）**：
-    * 默认启用 `crypto.vault.enabled: true`，支持通过环境变量动态切换 K8s Auth 或 Token Auth。
+项目通过了针对 Vault 密钥生命周期全场景的单元与集成测试：
 
----
-
-### 二、已通过测试验证
-
-* **`VaultKeyRingTest`**：验证了 Vault 中初始密钥自动生成、多版本轮换写入、旧密钥宽限期解密回退、多 Pod 从 Vault 并发拉取的完整生命周期。
-* **`VaultIntegrationTest`**：涵盖 Kubernetes SA Token 认证模拟与本地纳秒级解密。
-* **全量单元与集成测试**：`./gradlew test` 100% 通过。
+1. **`VaultMultiVersionGracePeriodTest`**：
+   * 验证启动时多版本（v1/v2/v3）自动回溯加载；
+   * 验证处于宽限期内的历史密钥（v2）解密能力依然有效；
+   * 验证超出宽限期的废弃密钥（v1）被正确过滤丢弃并不予解密；
+   * 验证短路机制（未请求版本 0）。
+2. **`VaultKeyRingTest`**：
+   * **生命周期端到端**：初识自引导生成（v1）-> 业务加密 -> 轮换（v2）-> 老密钥宽限期解密 -> 新密钥正常加解密；
+   * **多 Pod 自动同步**：Pod 1 轮转后，Pod 2 通过双重检查刷新同步最新版本；
+   * **多 Pod 并发 CAS 争抢**：两 Pod 同时触发轮转，验证一个获锁、另一个避退拉取，Vault 版本平稳递增，无脑裂；
+   * **失效时懒轮转刷新**：密钥自然过期后，Pod 触发双重检查刷新复用已由他方轮换的新版本；
+   * **Cache-Miss 按需加载**：Pod 2 未感知 v2 时接收 v2 加密报文，触发按需拉取解密成功并自动升级活跃版本。
+3. **`VaultIntegrationTest`**：
+   * 验证真实 Vault 容器环境下的 Token Auth、Kubernetes Auth 模拟及全链路加解密。

@@ -4,6 +4,7 @@ import com.ikea.crypto.common.constant.CryptoConstants;
 import com.ikea.crypto.common.model.demo.PlainData;
 import com.ikea.crypto.common.model.demo.SensitiveData;
 import com.ikea.crypto.common.model.payload.PublicKeyResponse;
+import com.ikea.crypto.common.model.payload.RotateKeyRequest;
 import com.ikea.crypto.common.model.payload.SessionKeyTransport;
 import com.ikea.crypto.server.advice.DecryptRequest;
 import com.ikea.crypto.server.advice.EncryptResponse;
@@ -32,6 +33,27 @@ public class CryptoServerController {
     public PublicKeyResponse getPublicKey() {
         log.debug("【api called】start to retrieving RSA public key");
         return cryptoServer.getPublicKey();
+    }
+
+    @GetMapping("/public-key/{keyAlias}")
+    public PublicKeyResponse getPublicKey(@PathVariable("keyAlias") String keyAlias) {
+        log.debug("【api called】start to retrieving RSA public key for keyAlias: {}", keyAlias);
+        return cryptoServer.getPublicKey(keyAlias);
+    }
+
+    @PostMapping(value = {"/rotate", "/rotate-key"})
+    public PublicKeyResponse rotateKey(@RequestBody(required = false) RotateKeyRequest requestBody) {
+        String keyAlias = null;
+        boolean force = false;
+        if (requestBody != null) {
+            keyAlias = requestBody.keyAlias();
+            force = Boolean.TRUE.equals(requestBody.force());
+        }
+        log.info("【api called】start to rotating RSA key, resolved keyAlias: {}, force: {}", keyAlias, force);
+        if (force) {
+            return cryptoServer.forceRotateKey(keyAlias);
+        }
+        return cryptoServer.rotateKey(keyAlias);
     }
 
     @PostMapping("/bidirectional")

@@ -74,6 +74,8 @@ public class VaultClient {
 
     public record VaultSecretEntry(JsonNode data, int version, String createdTime) {}
 
+    public record VaultWriteResult(int version, String createdTime) {}
+
     /**
      * Reads a specific version of secret data from Vault KV v2 engine.
      * When version is null, the latest version is returned along with its metadata.
@@ -148,16 +150,51 @@ public class VaultClient {
      * @param vaultToken Vault client token
      * @param path       Secret path (e.g. secret/data/crypto/pii-transport-key)
      * @param data       Key-value pairs to store under "data"
+     * @return VaultWriteResult containing the version assigned by Vault and createdTime
      */
-    public void writeSecret(String vaultToken, String path, Map<String, Object> data) throws IOException, InterruptedException {
-        writeRaw(vaultToken, path, Map.of("data", data));
+    public VaultWriteResult writeSecret(String vaultToken, String path, Map<String, Object> data) throws IOException, InterruptedException {
+        return writeSecret(vaultToken, path, data, null);
+    }
+
+    /**
+     * Writes secret data to Vault KV v2 engine with optional Check-And-Set (CAS).
+     * Endpoint: POST /v1/{path}
+     *
+     * @param vaultToken Vault client token
+     * @param path       Secret path (e.g. secret/data/crypto/pii-transport-key)
+     * @param data       Key-value pairs to store under "data"
+     * @param cas        Optional expected current version for CAS validation. If 0, requires key to not exist.
+     * @return VaultWriteResult containing the version assigned by Vault and createdTime
+     * @throws VaultCasMismatchException if CAS parameter does not match current version
+     */
+    public VaultWriteResult writeSecret(String vaultToken, String path, Map<String, Object> data, Integer cas) throws IOException, InterruptedException {
+        Map<String, Object> payload;
+        if (cas != null) {
+            payload = Map.of(
+                    "data", data,
+                    "options", Map.of("cas", cas)
+            );
+        } else {
+            payload = Map.of("data", data);
+        }
+        return writeRaw(vaultToken, path, payload, cas);
     }
 
     /**
      * Writes raw JSON data to any Vault endpoint (such as sys or auth endpoints).
      * Endpoint: POST /v1/{path}
+     *
+     * @return VaultWriteResult containing the version assigned by Vault (if available) and createdTime
      */
-    public void writeRaw(String vaultToken, String path, Object payload) throws IOException, InterruptedException {
+    public VaultWriteResult writeRaw(String vaultToken, String path, Object payload) throws IOException, InterruptedException {
+        return writeRaw(vaultToken, path, payload, null);
+    }
+
+    /**
+     * Writes raw JSON data to any Vault endpoint with optional CAS check.
+     * Endpoint: POST /v1/{path}
+     */
+    public VaultWriteResult writeRaw(String vaultToken, String path, Object payload, Integer cas) throws IOException, InterruptedException {
         String cleanPath = path.startsWith("/") ? path.substring(1) : path;
         String endpoint = vaultAddr + "/v1/" + cleanPath;
 
@@ -173,11 +210,46 @@ public class VaultClient {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
+        if (response.statusCode() == 400 && (cas != null || (response.body() != null && response.body().contains("check-and-set")))) {
+            log.warn("Vault CAS check failed for path '{}' (expected cas={}): {}", cleanPath, cas, response.body());
+            throw new VaultCasMismatchException("Vault CAS check failed for path " + cleanPath + ": " + response.body(),
+                    cas != null ? cas : -1);
+        }
+
         if (response.statusCode() != 200 && response.statusCode() != 204) {
             throw new IllegalStateException("Vault write failed with HTTP status " + response.statusCode()
                     + ": " + response.body());
         }
 
-        log.info("Successfully wrote to Vault path: {}", cleanPath);
+        int version = -1;
+        String createdTime = null;
+        if (response.body() != null && !response.body().isBlank()) {
+            try {
+                JsonNode root = objectMapper.readTree(response.body());
+                JsonNode dataNode = root.path("data");
+                if (dataNode.has("version")) {
+                    version = dataNode.path("version").asInt(-1);
+                }
+                if (dataNode.has("created_time")) {
+                    createdTime = dataNode.path("created_time").asText(null);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to parse Vault write response body: {}", response.body(), e);
+            }
+        }
+
+        // If version could not be parsed from write response, query latest metadata from Vault KV v2
+        if (version <= 0) {
+            Optional<VaultSecretEntry> latest = readSecretVersion(vaultToken, cleanPath, null);
+            if (latest.isPresent()) {
+                version = latest.get().version();
+                if (createdTime == null) {
+                    createdTime = latest.get().createdTime();
+                }
+            }
+        }
+
+        log.info("Successfully wrote to Vault path: {}, version: {}", cleanPath, version);
+        return new VaultWriteResult(version, createdTime);
     }
 }

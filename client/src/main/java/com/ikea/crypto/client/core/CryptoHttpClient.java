@@ -4,8 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.common.constant.CryptoConstants;
 import com.ikea.crypto.common.model.demo.PlainData;
-import com.ikea.crypto.common.model.payload.CipherResponsePayload;
 import com.ikea.crypto.common.model.payload.CipherRequestPayload;
+import com.ikea.crypto.common.model.payload.CipherResponsePayload;
 import com.ikea.crypto.common.model.payload.PublicKeyResponse;
 import com.ikea.crypto.common.model.payload.SessionKeyTransport;
 import com.ikea.crypto.common.util.EncodingUtils;
@@ -66,9 +66,13 @@ public class CryptoHttpClient {
      */
     public ServerKeyInfo fetchServerKeyInfo() throws GeneralSecurityException {
         CachedPublicKey currentCache = this.cachedPublicKey;
-        if (currentCache != null && currentCache.isValid()) {
-            log.debug("use cached RSA public key which is still valid, keyId={}", currentCache.keyId());
-            return currentCache.toServerKeyInfo();
+        if (currentCache != null) {
+            if (currentCache.isValid()) {
+                log.debug("use cached RSA public key which is still valid, keyId={}", currentCache.keyId());
+                return currentCache.toServerKeyInfo();
+            } else {
+                log.warn("cached RSA public key is expired, keyId={}", currentCache.keyId());
+            }
         }
 
         log.debug("start to fetching RSA public key from server");
@@ -85,7 +89,7 @@ public class CryptoHttpClient {
                     new X509EncodedKeySpec(EncodingUtils.fromBase64(keyResponse.publicKeyBase64()))
             );
             this.cachedPublicKey = new CachedPublicKey(keyResponse.keyId(), parsedKey, keyResponse.expiresAtEpochMillis());
-            log.debug("fetched RSA public key from server, keyId={}, caching it for future use", keyResponse.keyId());
+            log.info("fetched RSA public key from server, keyId={}, caching it for future use", keyResponse.keyId());
             return this.cachedPublicKey.toServerKeyInfo();
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {

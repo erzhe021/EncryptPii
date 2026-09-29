@@ -37,6 +37,7 @@ class CryptoPayloadHandlerTest {
 
     @BeforeEach
     void setUp() throws Exception {
+        CryptoSessionContextAccessor.clearCryptoSessionContext();
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
         keyGen.initialize(2048);
         keyPair = keyGen.generateKeyPair();

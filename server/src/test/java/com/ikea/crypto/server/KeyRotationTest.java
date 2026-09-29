@@ -115,4 +115,36 @@ class KeyRotationTest {
         assertEquals("my-service-key:3", v3.metadata().keyId());
         assertEquals(3L, v3.metadata().version());
     }
+
+    @Test
+    void testRotateKeyWithSpecifiedKeyAlias() throws Exception {
+        long now = System.currentTimeMillis();
+        KeyRing keyRing = new KeyRing("default-app-key");
+        keyRing.initialize();
+        assertEquals("default-app-key:1", keyRing.getActiveKeyEntry().metadata().keyId());
+
+        // Rotate for a different keyAlias
+        KeyRing.KeyEntry orderV1 = keyRing.rotateKey("order-key");
+        assertEquals("order-key:1", orderV1.metadata().keyId());
+        assertEquals("order-key", orderV1.metadata().keyAlias());
+        assertEquals(1L, orderV1.metadata().version());
+        assertEquals("order-key:1", keyRing.getActiveKeyEntry().metadata().keyId());
+
+        // Rotate for order-key again -> version 2
+        KeyRing.KeyEntry orderV2 = keyRing.rotateKey("order-key");
+        assertEquals("order-key:2", orderV2.metadata().keyId());
+        assertEquals(2L, orderV2.metadata().version());
+
+        // Rotate back for default-app-key -> version 2
+        KeyRing.KeyEntry defaultV2 = keyRing.rotateKey("default-app-key");
+        assertEquals("default-app-key:2", defaultV2.metadata().keyId());
+        assertEquals(2L, defaultV2.metadata().version());
+
+        // Verify findActiveKeyEntry for both aliases
+        assertTrue(keyRing.findActiveKeyEntry("order-key").isPresent());
+        assertEquals("order-key:2", keyRing.findActiveKeyEntry("order-key").get().metadata().keyId());
+
+        assertTrue(keyRing.findActiveKeyEntry("default-app-key").isPresent());
+        assertEquals("default-app-key:2", keyRing.findActiveKeyEntry("default-app-key").get().metadata().keyId());
+    }
 }

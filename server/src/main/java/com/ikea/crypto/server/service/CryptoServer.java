@@ -7,10 +7,13 @@ import com.ikea.crypto.common.model.payload.KeyMetadata;
 import com.ikea.crypto.common.model.payload.PublicKeyResponse;
 import com.ikea.crypto.common.util.EncodingUtils;
 import com.ikea.crypto.server.context.CryptoSessionContextAccessor;
+import com.ikea.crypto.server.error.CryptoException;
+import com.ikea.crypto.server.vault.VaultKeyRing;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.SecretKey;
+import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
@@ -54,13 +57,84 @@ public record CryptoServer(KeyRing keyRing) {
     public PublicKeyResponse getPublicKey() {
         KeyRing.KeyEntry active = keyRing.getActiveKeyEntry();
         if (active == null) {
-            throw new IllegalStateException("No active RSA key in keyring");
+            log.error("No active key found in keyring");
+            throw new IllegalStateException("No active key in keyring");
         }
+
+        // Check if active key is absent or expired, rotate if needed
+        if (active.metadata().isExpired()) {
+            log.warn("Active key: keyId={} has expired, start to rotate to a new key version", active.metadata().keyId());
+            return rotateKey();
+        }
+
         return new PublicKeyResponse(
                 EncodingUtils.toBase64(active.publicKey().getEncoded()),
                 active.metadata().keyId(),
                 active.metadata().expiresAtEpochMillis()
         );
+    }
+
+    /**
+     * Returns the active RSA public key for the specified keyAlias.
+     */
+    public PublicKeyResponse getPublicKey(String keyAlias) {
+        if (keyAlias == null || keyAlias.isBlank()) {
+            return getPublicKey();
+        }
+        KeyRing.KeyEntry entry = keyRing.findActiveKeyEntry(keyAlias)
+                .orElseThrow(() -> new IllegalStateException("No active RSA key found for keyAlias: " + keyAlias));
+        return new PublicKeyResponse(
+                EncodingUtils.toBase64(entry.publicKey().getEncoded()),
+                entry.metadata().keyId(),
+                entry.metadata().expiresAtEpochMillis()
+        );
+    }
+
+    /**
+     * Rotates to a new RSA key version for the default key alias.
+     */
+    public PublicKeyResponse rotateKey() {
+        return rotateKey(null);
+    }
+
+    /**
+     * Rotates to a new RSA key version for the specified key alias.
+     * Generates a new key pair with incremented version and makes it the active key.
+     */
+    public PublicKeyResponse rotateKey(String keyAlias) {
+        try {
+            KeyRing.KeyEntry newEntry = keyRing.rotateKey(keyAlias);
+            return new PublicKeyResponse(
+                    EncodingUtils.toBase64(newEntry.publicKey().getEncoded()),
+                    newEntry.metadata().keyId(),
+                    newEntry.metadata().expiresAtEpochMillis()
+            );
+        } catch (GeneralSecurityException | IOException e) {
+            log.error("Failed to rotate RSA key for keyAlias: {}", keyAlias, e);
+            throw new CryptoException("Failed to rotate RSA key for keyAlias: " + keyAlias, e);
+        }
+    }
+
+    /**
+     * Forces rotation to a new RSA key version for the specified key alias, bypassing double-checked refresh.
+     */
+    public PublicKeyResponse forceRotateKey(String keyAlias) {
+        try {
+            KeyRing.KeyEntry newEntry;
+            if (keyRing instanceof VaultKeyRing vaultKeyRing) {
+                newEntry = vaultKeyRing.forceRotateKey(keyAlias);
+            } else {
+                newEntry = keyRing.rotateKey(keyAlias);
+            }
+            return new PublicKeyResponse(
+                    EncodingUtils.toBase64(newEntry.publicKey().getEncoded()),
+                    newEntry.metadata().keyId(),
+                    newEntry.metadata().expiresAtEpochMillis()
+            );
+        } catch (GeneralSecurityException | IOException e) {
+            log.error("Failed to force rotate RSA key for keyAlias: {}", keyAlias, e);
+            throw new CryptoException("Failed to force rotate RSA key for keyAlias: " + keyAlias, e);
+        }
     }
 
     /**
@@ -130,6 +204,23 @@ public record CryptoServer(KeyRing keyRing) {
                 return decrypted;
             } catch (GeneralSecurityException e) {
                 log.warn("Fallback decryption failed for keyId={}", entry.metadata().keyId(), e);
+            }
+        }
+
+        // 4. Fallback on-demand sync from Vault (in case another pod rotated without notifying this pod)
+        if (keyRing instanceof VaultKeyRing vaultKeyRing) {
+            try {
+                KeyRing.KeyEntry latestEntry = vaultKeyRing.syncLatestKeyFromVault();
+                if (latestEntry != null && (activeEntry == null || !latestEntry.metadata().keyId().equals(activeEntry.metadata().keyId()))) {
+                    try {
+                        SecretKey decrypted = SessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, latestEntry.privateKey());
+                        log.info("Successfully decrypted session key after on-demand Vault sync of latest key: {}", latestEntry.metadata().keyId());
+                        return decrypted;
+                    } catch (GeneralSecurityException ignored) {
+                    }
+                }
+            } catch (Exception e) {
+                log.warn("Failed on-demand sync from Vault during decryption fallback: {}", e.getMessage());
             }
         }
 

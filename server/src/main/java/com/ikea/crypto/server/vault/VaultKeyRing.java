@@ -1,58 +1,83 @@
 package com.ikea.crypto.server.vault;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.model.payload.KeyMetadata;
-import com.ikea.crypto.common.util.EncodingUtils;
 import com.ikea.crypto.server.service.KeyRing;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.*;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
-import java.util.*;
+import java.security.GeneralSecurityException;
+import java.security.KeyPair;
+import java.util.Optional;
 
 /**
- * VaultKeyRing manages RSA key generation, retrieval, rotation, and lifecycle
- * completely in HashiCorp Vault KV v2 without any local filesystem dependency.
+ * VaultKeyRing coordinates in-memory key storage with HashiCorp Vault KV v2.
+ * Delegates authentication, serialization, repository I/O, and rotation coordination
+ * to dedicated single-responsibility components.
  */
 @Slf4j
 public class VaultKeyRing extends KeyRing {
 
+    @Getter
     private final VaultProperties properties;
+    @Getter
     private final VaultClient vaultClient;
+    @Getter
+    private final VaultAuthenticator authenticator;
+    @Getter
+    private final VaultKeyCodec codec;
+    @Getter
+    private final VaultKeyRepository repository;
+    @Getter
+    private final VaultRotationCoordinator rotationCoordinator;
 
     public VaultKeyRing(VaultProperties properties, VaultClient vaultClient) {
         super(properties.getKeyAlias(), properties.getValidityMillis(), properties.getGracePeriodMillis());
         this.properties = properties;
         this.vaultClient = vaultClient;
+        this.authenticator = new VaultAuthenticator(properties, vaultClient);
+        this.codec = new VaultKeyCodec();
+        this.repository = new VaultKeyRepository(properties, vaultClient, this.authenticator, this.codec);
+        this.rotationCoordinator = new VaultRotationCoordinator(this.repository, properties, this.codec);
+    }
+
+    public VaultKeyRing(
+            VaultProperties properties,
+            VaultClient vaultClient,
+            VaultAuthenticator authenticator,
+            VaultKeyCodec codec,
+            VaultKeyRepository repository,
+            VaultRotationCoordinator rotationCoordinator
+    ) {
+        super(properties.getKeyAlias(), properties.getValidityMillis(), properties.getGracePeriodMillis());
+        this.properties = properties;
+        this.vaultClient = vaultClient;
+        this.authenticator = authenticator;
+        this.codec = codec;
+        this.repository = repository;
+        this.rotationCoordinator = rotationCoordinator;
     }
 
     /**
      * Initializes keys from Vault KV v2.
-     * If no keys exist, automatically generates the initial key pair and writes to Vault.
+     * Backtracks active and transition keys within grace period, auto-bootstrapping if none exist.
      */
     @Override
     public synchronized void initialize() throws GeneralSecurityException, IOException {
         try {
-            String vaultToken = authenticate();
-            loadKeysFromVault(vaultToken);
+            loadKeysFromVault();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while initializing VaultKeyRing", e);
         }
     }
 
-    private void loadKeysFromVault(String vaultToken) throws GeneralSecurityException, IOException, InterruptedException {
-        Optional<VaultClient.VaultSecretEntry> latestOpt = vaultClient.readSecretVersion(vaultToken, properties.getSecretPath(), null);
+    private void loadKeysFromVault() throws GeneralSecurityException, IOException, InterruptedException {
+        Optional<VaultClient.VaultSecretEntry> latestOpt = repository.readSecretVersionRaw(getKeyAlias(), null);
 
         if (latestOpt.isEmpty()) {
             if (properties.isAutoBootstrap()) {
-                log.info("No RSA keys found in Vault at path '{}'. Auto-generating initial key pair...", properties.getSecretPath());
-                rotateKey();
+                log.warn("No RSA keys found in Vault at path '{}'. Auto-generating initial key pair...", properties.getSecretPath());
+                rotationCoordinator.bootstrapInitialKey(this, getKeyAlias());
                 return;
             } else {
                 throw new IllegalStateException("No RSA keys found in Vault at path: " + properties.getSecretPath());
@@ -60,27 +85,42 @@ public class VaultKeyRing extends KeyRing {
         }
 
         VaultClient.VaultSecretEntry latestSecret = latestOpt.get();
-        JsonNode latestData = latestSecret.data();
-
-        // Vault KV 原生多版本模式：单 key 对象，按版本回溯加载过渡期密钥
-        KeyFactory keyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA);
         int currentVersion = latestSecret.version();
-        KeyEntry activeEntry = parseKeyEntryFromVersion(latestData, currentVersion, latestSecret.createdTime(), keyFactory);
-        registerKeyEntry(activeEntry, true);
-        log.info("Loaded active key from Vault KV v2: keyId={}, version={}",
-                activeEntry.metadata().keyId(), currentVersion);
+        KeyEntry activeEntry = codec.deserializeKeyEntry(
+                latestSecret.data(),
+                currentVersion,
+                latestSecret.createdTime(),
+                getKeyAlias(),
+                getValidityMillis()
+        );
 
-        // 自动向前回溯历史版本（version: currentVersion - 1 down to 1）
+        // Stop backtracking if active key itself has expired beyond grace period
+        if (isExpiredBeyondGrace(activeEntry.metadata())) {
+            log.info("Active key '{}' (version {}) has expired beyond grace period. Auto-rotating...",
+                    activeEntry.metadata().keyId(), currentVersion);
+            rotateKey();
+            return;
+        }
+
+        registerKeyEntry(activeEntry, true);
+        log.info("Loaded active key from Vault KV v2: keyId={}, version={}", activeEntry.metadata().keyId(), currentVersion);
+
+        // Backtrack historical versions within grace period
         for (int v = currentVersion - 1; v >= 1; v--) {
             try {
-                Optional<VaultClient.VaultSecretEntry> historicalOpt = vaultClient.readSecretVersion(vaultToken, properties.getSecretPath(), v);
+                Optional<VaultClient.VaultSecretEntry> historicalOpt = repository.readSecretVersionRaw(getKeyAlias(), v);
                 if (historicalOpt.isEmpty()) {
                     continue;
                 }
                 VaultClient.VaultSecretEntry historicalSecret = historicalOpt.get();
-                KeyEntry historicalEntry = parseKeyEntryFromVersion(historicalSecret.data(), v, historicalSecret.createdTime(), keyFactory);
+                KeyEntry historicalEntry = codec.deserializeKeyEntry(
+                        historicalSecret.data(),
+                        v,
+                        historicalSecret.createdTime(),
+                        getKeyAlias(),
+                        getValidityMillis()
+                );
 
-                // 核心过滤：若已超出过渡期，立即停止回溯（更早的版本必然更早过期）
                 if (isExpiredBeyondGrace(historicalEntry.metadata())) {
                     log.info("Historical key '{}' (version {}) has expired beyond grace period. Stopping backwards scan.",
                             historicalEntry.metadata().keyId(), v);
@@ -88,8 +128,7 @@ public class VaultKeyRing extends KeyRing {
                 }
 
                 registerKeyEntry(historicalEntry, false);
-                log.info("Loaded historical transition key from Vault: keyId={}, version={}",
-                        historicalEntry.metadata().keyId(), v);
+                log.info("Loaded historical key from Vault: keyId={}, version={}", historicalEntry.metadata().keyId(), v);
             } catch (Exception e) {
                 log.warn("Failed to load historical key version {} from Vault: {}", v, e.getMessage());
             }
@@ -103,98 +142,134 @@ public class VaultKeyRing extends KeyRing {
         purgeExpiredKeys();
     }
 
-    /**
-     * Rotates to a new RSA key pair, persisting the new key to Vault KV v2.
-     * Vault KV v2 automatically assigns an incremented version number.
-     */
     @Override
     public synchronized KeyEntry rotateKey() throws GeneralSecurityException, IOException {
+        return rotateKey(getKeyAlias(), false);
+    }
+
+    @Override
+    public synchronized KeyEntry rotateKey(String targetKeyAlias) throws GeneralSecurityException, IOException {
+        return rotateKey(targetKeyAlias, false);
+    }
+
+    public synchronized KeyEntry forceRotateKey(String targetKeyAlias) throws GeneralSecurityException, IOException {
+        return rotateKey(targetKeyAlias, true);
+    }
+
+    /**
+     * Finds a key entry by keyId.
+     * 1. Fast Path: Checks local in-memory KeyRing.
+     * 2. Cache Miss: If not found locally, performs on-demand fallback fetch from Vault
+     *    and caches the key in memory. This ensures multi-pod production environments
+     *    can decrypt newly rotated keys from other pods immediately with zero disruption.
+     */
+    @Override
+    public Optional<KeyEntry> findKeyEntry(String keyId) {
+        Optional<KeyEntry> localEntry = super.findKeyEntry(keyId);
+        if (localEntry.isPresent()) {
+            return localEntry;
+        }
+
+        if (keyId == null || keyId.isBlank() || !keyId.contains(":")) {
+            return Optional.empty();
+        }
+
+        return fetchAndCacheFromVault(keyId);
+    }
+
+    private synchronized Optional<KeyEntry> fetchAndCacheFromVault(String keyId) {
+        // Double check local memory under lock
+        Optional<KeyEntry> localEntry = super.findKeyEntry(keyId);
+        if (localEntry.isPresent()) {
+            return localEntry;
+        }
+
+        String alias = keyId.substring(0, keyId.indexOf(':'));
+        String versionStr = keyId.substring(keyId.indexOf(':') + 1);
+        int version;
         try {
-            KeyEntry newEntry = super.rotateKey();
-            saveKeyToVault(newEntry);
-            return newEntry;
+            version = Integer.parseInt(versionStr);
+        } catch (NumberFormatException e) {
+            log.warn("Invalid version in keyId '{}', cannot fetch from Vault", keyId);
+            return Optional.empty();
+        }
+
+        try {
+            log.info("Cache miss for keyId '{}' in local memory, performing on-demand fetch from Vault...", keyId);
+            Optional<KeyEntry> remoteOpt = repository.readKeyVersion(alias, version);
+            if (remoteOpt.isPresent()) {
+                KeyEntry remoteEntry = remoteOpt.get();
+                if (isExpiredBeyondGrace(remoteEntry.metadata())) {
+                    log.warn("Key '{}' fetched from Vault has expired beyond grace period and is rejected.", keyId);
+                    return Optional.empty();
+                }
+
+                // If remote key version is newer than local active key and is unexpired, promote to active
+                boolean makeActive = (getActiveKeyEntry() == null
+                        || (remoteEntry.metadata().version() != null
+                            && getActiveKeyEntry().metadata().version() != null
+                            && remoteEntry.metadata().version() > getActiveKeyEntry().metadata().version()
+                            && !remoteEntry.metadata().isExpired()));
+
+                registerKeyEntry(remoteEntry, makeActive);
+                log.info("Successfully fetched and cached keyId '{}' on-demand from Vault (makeActive={})", keyId, makeActive);
+                return Optional.of(remoteEntry);
+            } else {
+                log.warn("KeyId '{}' not found in Vault", keyId);
+            }
+        } catch (Exception e) {
+            log.error("Failed to fetch keyId '{}' on-demand from Vault: {}", keyId, e.getMessage(), e);
+        }
+
+        return Optional.empty();
+    }
+
+    public synchronized KeyEntry rotateKey(String targetKeyAlias, boolean force) throws GeneralSecurityException, IOException {
+        try {
+            return rotationCoordinator.rotate(this, targetKeyAlias, force);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while rotating key in Vault", e);
         }
     }
 
-    @Override
-    public synchronized int purgeExpiredKeys(long now) {
-        return super.purgeExpiredKeys(now);
+    /**
+     * Actively checks Vault for the latest key version. If Vault has a newer version than local memory,
+     * updates local memory.
+     */
+    public synchronized KeyEntry syncLatestKeyFromVault(String targetKeyAlias) throws GeneralSecurityException, IOException {
+        try {
+            String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : getKeyAlias();
+            Optional<KeyEntry> latestOpt = repository.readLatestKey(alias);
+            if (latestOpt.isPresent()) {
+                KeyEntry remoteEntry = latestOpt.get();
+                long currentLocal = getCurrentVersion(alias);
+                if (remoteEntry.metadata().version() != null && remoteEntry.metadata().version() > currentLocal) {
+                    registerKeyEntry(remoteEntry, true);
+                    log.info("Synced newer key version {} from Vault into local memory", remoteEntry.metadata().version());
+                    return remoteEntry;
+                }
+            }
+            return getActiveKeyEntry();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while syncing latest key from Vault", e);
+        }
+    }
+
+    public synchronized KeyEntry syncLatestKeyFromVault() throws GeneralSecurityException, IOException {
+        return syncLatestKeyFromVault(getKeyAlias());
     }
 
     public String authenticate() throws IOException, InterruptedException {
-        if (properties.getAuthMethod() == VaultProperties.AuthMethod.KUBERNETES) {
-            String jwt = resolveKubernetesJwt();
-            String role = properties.getKubernetes().getRole();
-            log.info("Authenticating to Vault via Kubernetes Auth (role: '{}')", role);
-            return vaultClient.loginWithKubernetes(role, jwt);
-        } else {
-            return properties.getToken();
-        }
+        return authenticator.authenticate();
     }
 
-    private void saveKeyToVault(KeyEntry entry) throws IOException, InterruptedException {
-        String vaultToken = authenticate();
-        Map<String, Object> payload = new HashMap<>();
-        payload.put("publicKey", EncodingUtils.toBase64(entry.publicKey().getEncoded()));
-        payload.put("privateKey", EncodingUtils.toBase64(entry.privateKey().getEncoded()));
-
-        vaultClient.writeSecret(vaultToken, properties.getSecretPath(), payload);
-        log.info("Saved key '{}' to Vault path '{}'", entry.metadata().keyId(), properties.getSecretPath());
+    public VaultClient.VaultWriteResult saveKeyPairToVault(String alias, KeyPair keyPair) throws IOException, InterruptedException {
+        return repository.writeKeyWithCas(alias, keyPair, null);
     }
 
-    private KeyEntry parseKeyEntryFromVersion(JsonNode node, int version, String createdTimeStr, KeyFactory keyFactory)
-            throws GeneralSecurityException {
-        long createdAt;
-        if (createdTimeStr != null && !createdTimeStr.isBlank()) {
-            try {
-                createdAt = java.time.Instant.parse(createdTimeStr).toEpochMilli();
-            } catch (Exception e) {
-                createdAt = System.currentTimeMillis();
-            }
-        } else {
-            createdAt = System.currentTimeMillis();
-        }
-
-        long expiresAt = createdAt + getValidityMillis();
-        String keyId = KeyMetadata.buildKeyId(getKeyAlias(), version);
-
-        String pubBase64 = node.path("publicKey").asText();
-        String privBase64 = node.path("privateKey").asText();
-        if (pubBase64.isBlank() || privBase64.isBlank()) {
-            throw new IllegalArgumentException("publicKey and privateKey must not be empty in Vault secret version " + version);
-        }
-
-        byte[] pubBytes = EncodingUtils.fromBase64(pubBase64);
-        byte[] privBytes = EncodingUtils.fromBase64(cleanPrivKeyBase64(privBase64));
-
-        PublicKey publicKey = keyFactory.generatePublic(new X509EncodedKeySpec(pubBytes));
-        PrivateKey privateKey = keyFactory.generatePrivate(new PKCS8EncodedKeySpec(privBytes));
-        KeyPair keyPair = new KeyPair(publicKey, privateKey);
-
-        KeyMetadata metadata = new KeyMetadata(keyId, createdAt, expiresAt);
-        return new KeyEntry(metadata, keyPair);
-    }
-
-    private String cleanPrivKeyBase64(String priv) {
-        return priv.replace("-----BEGIN PRIVATE KEY-----", "")
-                .replace("-----END PRIVATE KEY-----", "")
-                .replaceAll("\\s+", "");
-    }
-
-    private String resolveKubernetesJwt() throws IOException {
-        if (properties.getKubernetes().getJwt() != null && !properties.getKubernetes().getJwt().isBlank()) {
-            return properties.getKubernetes().getJwt().trim();
-        }
-
-        Path tokenFile = Path.of(properties.getKubernetes().getTokenPath());
-        if (Files.exists(tokenFile)) {
-            return Files.readString(tokenFile).trim();
-        }
-
-        throw new IllegalStateException("Kubernetes ServiceAccount token file not found at " + tokenFile
-                + ", and no explicit jwt was configured.");
+    public VaultClient.VaultWriteResult saveKeyPairToVault(String alias, KeyPair keyPair, Integer cas) throws IOException, InterruptedException {
+        return repository.writeKeyWithCas(alias, keyPair, cas);
     }
 }
