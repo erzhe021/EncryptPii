@@ -3,11 +3,11 @@ package com.ikea.crypto.client.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.client.core.CryptoClient;
 import com.ikea.crypto.client.core.CryptoHttpClient;
+import com.ikea.crypto.client.model.PlainData;
 import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.model.demo.PlainData;
-import com.ikea.crypto.common.model.payload.CipherRequestPayload;
-import com.ikea.crypto.common.model.payload.CipherResponsePayload;
-import com.ikea.crypto.common.model.payload.SessionKeyTransport;
+import com.ikea.crypto.common.model.CipherRequestPayload;
+import com.ikea.crypto.common.model.CipherResponsePayload;
+import com.ikea.crypto.common.model.SessionKeyTransport;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,7 +18,6 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.net.URI;
-import java.security.PublicKey;
 import java.util.Map;
 
 @RestController
@@ -122,4 +121,5 @@ public class CryptoClientController {
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
         return keyGenerator.generateKey();
     }
+
 }

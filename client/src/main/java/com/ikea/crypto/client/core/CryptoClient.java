@@ -4,8 +4,8 @@ import com.ikea.crypto.client.context.CryptoRequestContext;
 import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
-import com.ikea.crypto.common.model.payload.CipherRequestPayload;
-import com.ikea.crypto.common.model.payload.CipherResponsePayload;
+import com.ikea.crypto.common.model.CipherRequestPayload;
+import com.ikea.crypto.common.model.CipherResponsePayload;
 import com.ikea.crypto.common.util.EncodingUtils;
 import lombok.extern.slf4j.Slf4j;
 

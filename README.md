@@ -18,18 +18,22 @@
 
 ```text
 EncryptPii/
-├── common/       # 基础公共模块：核心加解密算法实现、数据传输载荷模型及工具类
-│   ├── crypto/   # AesGcmCryptoService, SessionKeyService, CryptoSessionMaterialFactory
-│   ├── model/    # 传输协议载荷 (payload: CipherRequestPayload, CipherResponsePayload, SessionKeyTransport) 与演示模型 (demo)
-│   ├── constant/ # 核心算法常量 CryptoConstants
-│   └── util/     # Base64 编码工具 EncodingUtils
-├── server/       # 服务端模块 (Spring Boot, Port: 9090)
+├── common/       # 核心加解密与 Spring Boot SDK / Starter 基础模块
 │   ├── advice/   # @DecryptRequest, @EncryptResponse 注解及全局切面处理器
-│   ├── api/      # CryptoServerController (服务端加解密示例接口)
 │   ├── codec/    # CryptoPayloadHandler (报文解析、上下文构建与加解密)
+│   ├── config/   # Spring Boot AutoConfiguration 自动装配、配置属性与 @EnableCryptoServer
+│   ├── constant/ # 核心算法常量 CryptoConstants
 │   ├── context/  # CryptoSessionContext & CryptoSessionContextAccessor (请求级上下文传递)
-│   └── service/  # CryptoServer (RSA 密钥管理与会话解密)
-└── client/       # 客户端模块 (Spring Boot, Port: 8080)
+│   ├── crypto/   # AesGcmCipher, SessionKeyService, CryptoSessionMaterialFactory
+│   ├── endpoint/ # CryptoKeyEndpoint (RSA 公钥查询与密钥轮换 REST 端点)
+│   ├── error/    # 全局异常捕获 CryptoExceptionHandler 与领域异常定义
+│   ├── model/    # 传输协议载荷 (payload: CipherRequestPayload, CipherResponsePayload, SessionKeyTransport) 与演示模型 (demo)
+│   ├── service/  # CryptoServer (RSA 密钥管理与会话解密), KeyRing (密钥环)
+│   ├── util/     # Base64 编码工具 EncodingUtils
+│   └── vault/    # HashiCorp Vault KV v2 集成、CAS 并发控制与多版本密钥平滑轮换
+├── server/       # 服务端演示与参考应用 (Spring Boot, Port: 9090)
+│   └── api/      # CryptoServerController (业务加解密示例接口，演示双向/单向加密)
+└── client/       # 客户端演示应用 (Spring Boot, Port: 8080)
     ├── api/      # CryptoClientController (调用演示接口)
     ├── core/     # CryptoClient (纯密码学加解密引擎), CryptoHttpClient (专职网络通信与公钥缓存)
     └── context/  # CryptoRequestContext (客户端本地会话解密上下文)
@@ -147,6 +151,79 @@ public class UserController {
         return userService.getProfile(query);
     }
 }
+```
+
+---
+
+## Spring Boot SDK / Starter 接入指南（其他团队使用）
+
+本工程的 `common` 模块已封装为开箱即用的 **Spring Boot Starter SDK**，任意团队的 Spring Boot 服务只需引入依赖，即可自动装配所有加解密切面、公钥拉取端点与密钥管理功能。
+
+### 1. 引入依赖
+
+**Gradle:**
+```groovy
+implementation 'com.ikea.crypto:common:1.0-SNAPSHOT'
+```
+
+**Maven:**
+```xml
+<dependency>
+    <groupId>com.ikea.crypto</groupId>
+    <artifactId>common</artifactId>
+    <version>1.0-SNAPSHOT</version>
+</dependency>
+```
+
+### 2. 自动装配特性说明
+
+引入 Starter 后，Spring Boot 会自动生效以下组件（无需手动配置）：
+- **自动切面**：`RequestDecryptAdvice` 与 `ResponseEncryptAdvice` 自动拦截标注了 `@DecryptRequest` / `@EncryptResponse` 的 Controller。
+- **公钥及轮换端点**：自动暴露 `GET /crypto/server/public-key`（及 `{keyAlias}`）与 `POST /crypto/server/rotate` 端点，供客户端自动拉取。
+- **密钥管理与降级机制**：
+  - 若开启 Vault（`crypto.vault.enabled=true`），自动连接 HashiCorp Vault 进行企业级多版本轮换管理；
+  - 若未配置 Vault（默认 `crypto.vault.enabled=false`），自动降级生成安全的本地内存 RSA-2048 密钥对，便于本地开发与单元测试。
+- **全局异常处理**：自动装配 `CryptoExceptionHandler`，将密码学验签及解密异常转换为统一格式。
+
+### 3. 分层异常体系（清晰区分客户端错误 vs 服务端故障）
+
+SDK 采用分层结构，统一继承自 `CryptoException`，便于业务方统一拦截或细粒度处理：
+
+```text
+CryptoException (RuntimeException)
+ ├── CryptoClientSideException (4xx 客户端传参/报文非法)
+ │    ├── InvalidCryptoPayloadException   # 密文格式非JSON/缺失字段/Base64非法
+ │    ├── SessionKeyDecryptionException    # 会话密钥解密失败 (公钥过期/keyId不匹配/RSA密文错误)
+ │    └── DataTamperedException            # GCM Tag 认证失败/数据被篡改
+ └── CryptoServerSideException (5xx 服务端故障)
+      ├── KeyNotAvailableException         # Vault 失联/找不到有效解密密钥/密钥未初始化
+      └── ResponseEncryptionException      # 响应序列化/加密失败
+```
+
+- **安全防信息泄露**：内置 `CryptoExceptionHandler` 默认对外响应安全错误提示（5xx 自动屏蔽底层细节并打详细日志，4xx 提示校验错误），且设置 `@Order(Ordered.LOWEST_PRECEDENCE)`，业务方自定义的 `@ExceptionHandler` 永远优先执行。
+
+### 4. 配置项速查表
+
+可在 `application.yml` 中按需定制：
+
+```yaml
+crypto:
+  server:
+    enabled: true                 # 是否启用 Server 端 SDK 自动装配（默认 true）
+    endpoint:
+      enabled: true               # 是否自动暴露公钥与轮换端点（默认 true）
+      base-path: /crypto/server   # 公钥与轮换端点基础路径（默认 /crypto/server）
+    exception-handler:
+      enabled: true               # 是否自动注册全局异常处理器（默认 true）
+  vault:
+    enabled: true                 # 是否启用 HashiCorp Vault 密钥管理（默认 false，为 false 时使用本地内存密钥）
+    addr: http://127.0.0.1:8200   # Vault 服务地址
+    auth-method: TOKEN            # TOKEN 或 KUBERNETES
+    token: root                   # 静态 Token（测试环境）
+    secret-path: secret/data/crypto/pii-transport-key # KV v2 路径
+    key-alias: pii-transport-key  # 密钥别名
+    validity-millis: 31536000000  # 密钥有效时长（毫秒）
+    grace-period-millis: 2592000000 # 过渡期时长（毫秒）
 ```
 
 ---

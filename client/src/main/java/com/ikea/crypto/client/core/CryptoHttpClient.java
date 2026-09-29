@@ -2,12 +2,12 @@ package com.ikea.crypto.client.core;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ikea.crypto.client.model.PlainData;
 import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.model.demo.PlainData;
-import com.ikea.crypto.common.model.payload.CipherRequestPayload;
-import com.ikea.crypto.common.model.payload.CipherResponsePayload;
-import com.ikea.crypto.common.model.payload.PublicKeyResponse;
-import com.ikea.crypto.common.model.payload.SessionKeyTransport;
+import com.ikea.crypto.common.model.CipherRequestPayload;
+import com.ikea.crypto.common.model.CipherResponsePayload;
+import com.ikea.crypto.common.model.PublicKeyResponse;
+import com.ikea.crypto.common.model.SessionKeyTransport;
 import com.ikea.crypto.common.util.EncodingUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;

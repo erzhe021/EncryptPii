@@ -5,13 +5,14 @@ import com.ikea.crypto.common.constant.CryptoConstants;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.security.GeneralSecurityException;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 
 public final class CryptoSessionMaterialFactory {
     private CryptoSessionMaterialFactory() {
     }
 
-    public static SecretKey generateAesSessionKey(SecureRandom secureRandom) throws GeneralSecurityException {
+    public static SecretKey generateAesSessionKey(SecureRandom secureRandom) throws NoSuchAlgorithmException {
         KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS, secureRandom);
         return keyGenerator.generateKey();
