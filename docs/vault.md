@@ -2,6 +2,8 @@
 
 本项目实现了基于 **HashiCorp Vault KV v2** 的端到端传输密钥生命周期管理与多 Pod 分布式平滑轮换。通过将密钥管理下沉至 Vault 并结合本地内存密钥环（`VaultKeyRing`），在保证**私钥不落地、统一集中治理**的前提下，实现了**纳秒级本地加解密（0 网络 RTT）**与**零停机平滑轮转**。
 
+> 说明：本文中的“轮换”指 Vault/DevOps 的密钥生命周期操作；应用侧仅暴露 `GET /crypto/server/public-key` 供客户端取公钥，不再提供 HTTP rotate 接口。
+
 ---
 
 ## 一、架构设计与核心价值
@@ -39,13 +41,13 @@
 
 ### 1. Key ID 命名规范
 系统以 `<keyAlias>:<version>` 格式唯一标识一个密钥版本，例如：
-* `pii-transport-key:1`
-* `pii-transport-key:2`
+* `ciam:1`
+* `ciam:2`
 
 客户端请求时在 Payload / Header 中携带 `keyId`，服务端根据 `keyId` 精确索引对应私钥。
 
 ### 2. Vault KV v2 存储格式
-在 Vault 的 Secret 路径（默认 `secret/data/crypto/pii-transport-keys`）下存储：
+在 Vault 的 Secret 路径（默认 `secret/data/sensitive-transport-crypto/ciam`）下存储：
 ```json
 {
   "data": {
@@ -147,13 +149,53 @@ Pod 启动初始化时（`VaultKeyRing.initialize()`）：
 3. **自动同步**：拉取到新版本密钥后反序列化注入本地 KeyRing 并激活。
 
 ### 4. 强制轮换（Force Rotate）
-支持在运维应急场景下指定 `force=true`：
-* 绕过双重检查刷新；
+支持在运维应急场景下由 Vault/DevOps 脚本直接执行：
+* 绕过应用 HTTP 层；
 * 直接基于 Vault 当前版本递增触发 CAS 轮转。
 
 ---
 
-## 五、核心实现组件
+## 五、多团队接入最佳实践
+
+当 starter 分发给多个团队时，建议采用“**统一协议、独立密钥域**”模型：
+
+### 1. 推荐原则
+
+- Starter / Client 协议统一，避免每个团队维护不同加解密实现。
+- 每个服务或团队使用自己独立的 `keyAlias`、Vault path 和 rotation 生命周期。
+- Vault 权限按服务隔离，一个服务只能访问自己的密钥路径。
+- 不同环境（dev / stage / prod）使用不同 Vault 配置，不共享生产密钥。
+
+### 2. 推荐配置拆分
+
+#### 共享部分
+
+- 请求/响应报文结构
+- 公钥获取流程
+- 加解密算法和 payload 规范
+
+#### 独立部分
+
+- `sensitive.transport.crypto.vault.key-alias`
+- `sensitive.transport.crypto.vault.secret-path`
+- Vault 地址、认证方式、角色、token
+- 轮换周期、宽限期、CAS 参数
+
+### 3. Vault 路径示例
+
+```text
+secret/data/crypto/service-a
+secret/data/crypto/service-b
+secret/data/crypto/service-c
+```
+
+### 4. 何时可以共享密钥
+
+只有在多个服务明确属于同一个安全边界、并且可以接受共享密钥的风险时，才考虑共用同一把 key。一般情况下不建议这么做。
+
+---
+
+## 六、核心实现组件
 
 | 组件 | 类名 | 核心职责 |
 | :--- | :--- | :--- |
@@ -167,7 +209,7 @@ Pod 启动初始化时（`VaultKeyRing.initialize()`）：
 
 ---
 
-## 六、配置与运维接口
+## 七、配置与运维接口
 
 ### 1. 配置参数说明（`application.yml`）
 
@@ -183,9 +225,9 @@ crypto:
     # 静态 Token (auth-method 为 TOKEN 时有效，或用于本地调试)
     token: root
     # Vault KV v2 挂载与路径
-    secret-path: secret/data/crypto/pii-transport-keys
+    secret-path: secret/data/sensitive-transport-crypto/ciam
     # 逻辑密钥别名 (keyId 格式为 <keyAlias>:<version>)
-    key-alias: pii-transport-key
+    key-alias: ciam
     # 是否在 Vault 为空时自动初始化初识密钥
     auto-bootstrap: true
     # 密钥有效期 (毫秒，默认 365 天)
@@ -205,35 +247,20 @@ crypto:
       token-path: /var/run/secrets/kubernetes.io/serviceaccount/token
 ```
 
-### 2. 运维控制 REST API
-
-#### (1) 获取当前服务端活跃公钥
+### 2. 获取当前服务端活跃公钥
 * **请求**：`GET /crypto/server/public-key`
 * **响应**：
 ```json
 {
-  "keyId": "pii-transport-key:3",
+  "keyId": "ciam:3",
   "publicKeyBase64": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A...",
   "algorithm": "RSA"
 }
 ```
 
-#### (2) 触发分布式平滑轮换
-* **请求**：`POST /crypto/server/rotate` 或 `POST /crypto/server/rotate-key`
-* **请求体**（可选）：
-```json
-{
-  "keyAlias": "pii-transport-key",
-  "force": false
-}
-```
-* **逻辑说明**：
-  * `force: false`（默认）：触发双重检查，若 Vault 已有更新可用版本则直接拉取同步，不产生多余版本；
-  * `force: true`：强制写入 Vault 生成全新版本。
-
 ---
 
-## 七、自动化测试与验证
+## 八、自动化测试与验证
 
 项目通过了针对 Vault 密钥生命周期全场景的单元与集成测试：
 

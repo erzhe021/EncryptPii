@@ -40,14 +40,14 @@ public class VaultProperties {
     private String authPath = "auth/kubernetes";
 
     /**
-     * Vault KV v2 secret path (relative to /v1/), e.g. secret/data/crypto/pii-transport-key
+     * Vault KV v2 secret path (relative to /v1/), e.g. secret/data/sensitive-transport-crypto/ciam
      */
-    private String secretPath = "secret/data/crypto/pii-transport-keys";
+    private String secretPath = "secret/data/sensitive-transport-crypto/ciam";
 
     /**
      * Logical key alias used in keyId format <keyAlias>:<version>.
      */
-    private String keyAlias = "pii-transport-key";
+    private String keyAlias = "ciam";
 
     /**
      * Automatically bootstrap and initialize keys in Vault if none exist.

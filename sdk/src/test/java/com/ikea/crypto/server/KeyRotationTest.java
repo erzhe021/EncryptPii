@@ -34,7 +34,7 @@ class KeyRotationTest {
         PublicKeyResponse response = server.getPublicKey();
         assertNotNull(response);
         assertNotNull(response.keyId());
-        assertEquals("pii-transport-key:1", response.keyId());
+        assertEquals("ciam:1", response.keyId());
         assertTrue(response.keyId().matches("^[a-zA-Z0-9_-]+:\\d+$"));
         assertTrue(response.expiresAtEpochMillis() > System.currentTimeMillis());
     }
@@ -44,7 +44,7 @@ class KeyRotationTest {
         // 1. Client fetches active Key 1 (old key)
         PublicKeyResponse oldKeyResponse = server.getPublicKey();
         String oldKeyId = oldKeyResponse.keyId();
-        assertEquals("pii-transport-key:1", oldKeyId);
+        assertEquals("ciam:1", oldKeyId);
         PublicKey oldPublicKey = server.publicKey();
 
         // 2. Client prepares request encrypted with old key (simulate client caching old key)
@@ -58,7 +58,7 @@ class KeyRotationTest {
         // 3. Server rotates to new Key 2 (simulating 1-year periodic rotation)
         KeyRing.KeyEntry newKeyEntry = server.keyRing().rotateKey();
         String newKeyId = newKeyEntry.metadata().keyId();
-        assertEquals("pii-transport-key:2", newKeyId);
+        assertEquals("ciam:2", newKeyId);
         assertNotEquals(oldKeyId, newKeyId);
         assertEquals(newKeyId, server.getPublicKey().keyId());
 

@@ -1,312 +1,217 @@
-# EncryptPii - 个人敏感信息应用层混合加密框架
+# EncryptPii
 
-本项目是一套针对敏感数据（PII，如手机号、身份证等）在客户端与服务端之间安全传输的**应用层混合加密方案**。基于 **RSA-2048 (OAEP) + AES-256 (GCM)**，通过“一次一密”的会话密钥机制，在 HTTPS/TLS 传输层之上提供纵深防御，有效防御中间人攻击、网络嗅探及数据篡改。
+EncryptPii is a Spring Boot based sensitive transport crypto framework for protecting PII and other sensitive data in transit between clients and servers.
 
----
+It uses a layered design:
 
-## 核心设计理念
+- RSA-2048 with OAEP for client-to-server session-key transport
+- AES-256-GCM for payload encryption
+- per-request session keys generated at runtime
+- automatic request/response encryption via Spring MVC advices
+- optional HashiCorp Vault integration for key lifecycle and rotation
 
-1. **绝对禁止硬编码**：禁止在客户端硬编码对称密钥，禁止明文下发或明文传输对称密钥。
-2. **一次一密（One-Time Session Key）**：客户端每次请求随机生成高强度 AES-256 会话密钥及 12 字节随机 IV。
-3. **非对称密钥封装（KEM）**：使用服务端 RSA 公钥（OAEP 填充模式）加密 AES 会话密钥，随密文或 Header 安全传输给服务端。
-4. **认证加密（AEAD）**：业务数据采用 AES-256-GCM 加密，自带 128 位认证标签（Tag），防窃听与防篡改。
-5. **无侵入设计**：服务端采用 Spring MVC `RequestBodyAdvice` 与 `ResponseBodyAdvice` 机制，业务代码无需手动处理加解密。
+This project is designed to be used as a reusable starter library (`sdk`), together with demo server/client applications to show end-to-end behavior.
 
----
-
-## 模块结构
+## Project structure
 
 ```text
 EncryptPii/
-├── common/       # 核心加解密与 Spring Boot SDK / Starter 基础模块
-│   ├── advice/   # @DecryptRequest, @EncryptResponse 注解及全局切面处理器
-│   ├── codec/    # CryptoPayloadHandler (报文解析、上下文构建与加解密)
-│   ├── config/   # Spring Boot AutoConfiguration 自动装配、配置属性与 @EnableCryptoServer
-│   ├── constant/ # 核心算法常量 CryptoConstants
-│   ├── context/  # CryptoSessionContext & CryptoSessionContextAccessor (请求级上下文传递)
-│   ├── crypto/   # AesGcmCipher, SessionKeyService, CryptoSessionMaterialFactory
-│   ├── endpoint/ # CryptoKeyEndpoint (RSA 公钥查询与密钥轮换 REST 端点)
-│   ├── error/    # 全局异常捕获 CryptoExceptionHandler 与领域异常定义
-│   ├── model/    # 传输协议载荷 (payload: CipherRequestPayload, CipherResponsePayload, SessionKeyTransport) 与演示模型 (demo)
-│   ├── service/  # CryptoServer (RSA 密钥管理与会话解密), KeyRing (密钥环)
-│   ├── util/     # Base64 编码工具 EncodingUtils
-│   └── vault/    # HashiCorp Vault KV v2 集成、CAS 并发控制与多版本密钥平滑轮换
-├── server/       # 服务端演示与参考应用 (Spring Boot, Port: 9090)
-│   └── api/      # CryptoServerController (业务加解密示例接口，演示双向/单向加密)
-└── client/       # 客户端演示应用 (Spring Boot, Port: 8080)
-    ├── api/      # CryptoClientController (调用演示接口)
-    ├── core/     # CryptoClient (纯密码学加解密引擎), CryptoHttpClient (专职网络通信与公钥缓存)
-    └── context/  # CryptoRequestContext (客户端本地会话解密上下文)
+├── sdk/                             # reusable Spring Boot starter / core library
+│   ├── src/main/java/com/ikea/crypto/stc/
+│   │   ├── annotation/              # @DecryptRequest, @EncryptResponse
+│   │   ├── config/                  # auto-config and properties
+│   │   ├── crypto/                  # AES / session key logic
+│   │   ├── exception/               # crypto error model
+│   │   ├── key/                     # key ring and server logic
+│   │   ├── model/                   # payload and protocol models
+│   │   ├── session/                 # request-scoped crypto context
+│   │   ├── vault/                   # Vault integration
+│   │   ├── web/advice/              # RequestDecryptAdvice / ResponseEncryptAdvice
+│   │   └── web/endpoint/            # public key endpoint
+│   └── build.gradle
+├── server/                          # demo server application
+│   ├── src/main/java/com/ikea/crypto/server/
+│   └── src/main/resources/application.yml
+├── client/                          # demo client application
+│   ├── src/main/java/com/ikea/crypto/client/
+│   └── src/main/resources/application.yml
+├── docs/                           # design and operational references
+│   ├── sensitive-transport-crypto-multi-team-guidelines.md
+│   └── vault.md
+├── build.gradle
+├── settings.gradle
+├── gradlew
+├── gradlew.bat
+├── .gitignore
+└── README.md
 ```
 
----
+## Core design
 
-## 密码学选型规范
+1. No hardcoded symmetric keys.
+2. A new AES-256 session key is generated for each request.
+3. The session key is encrypted with the server RSA public key before transport.
+4. The request payload is encrypted with AES-GCM and includes an auth tag.
+5. The server decrypts the payload automatically based on annotations and request-scoped context.
+6. Response encryption is handled similarly when `@EncryptResponse` is used.
 
-| 类别 | 算法 / 规范 | 参数与说明 |
-|---|---|---|
-| **非对称算法** | RSA | 2048 位密钥对，PKCS#8 私钥 / X.509 公钥格式 |
-| **RSA 填充模式** | `RSA/ECB/OAEPWithSHA-256AndMGF1Padding` | 抗选择密文攻击（IND-CCA2），禁止弱填充（如 PKCS1Padding） |
-| **对称算法** | `AES/GCM/NoPadding` | 256 位密钥，带认证的 AEAD 模式 |
-| **随机向量 (IV)** | 12 字节 (96-bit) | 每次加密使用 `SecureRandom` 独立生成，严禁复用 |
-| **认证标签** | 128 位 (16 字节) | GCM 完整性校验标签，密文遭篡改时直接校验失败 |
+## Supported security patterns
 
----
+The demo application shows three common modes:
 
-## 交互流程与通信规范
+- Bidirectional encryption: both request and response are encrypted.
+- Request-only encryption: the client encrypts the request body, while the server responds in plaintext.
+- Response-only encryption: the server encrypts its response using the session key sent by the client.
 
-### 1. 架构总览流程
+## Encryption flow
 
-```
-┌─────────────┐                                  ┌─────────────┐
-│   客户端     │                                  │   服务端     │
-│             │          1. 获取服务端公钥         │             │
-│             │◄─────────────────────────────────│  公钥(RSA)   │
-│             │                                  │             │
-│  2. 随机生成 AES 密钥及 IV                       │             │
-│  3. RSA 公钥加密 AES 密钥                        │             │
-│  4. AES-GCM 加密业务明文                         │             │
-│             │   5. 发送密文 + 加密后AES密钥 + IV  │             │
-│             │─────────────────────────────────►│             │
-│             │                                  │ 6. RSA私钥解密出 AES 密钥 │
-│             │                                  │ 7. AES-GCM 解密业务明文 │
-│             │                                  │ 8. 处理业务并加密响应  │
-│             │◄─────────────────────────────────│             │
-└─────────────┘                                  └─────────────┘
-```
-
-### 2. 通信场景与传输字段速查表
-
-网络上传输的核心字段按“请求/响应”维度总结如下：
-
-| 方向 | 场景 | 传输位置 | 核心传输字段 | 说明 |
-|---|---|---|---|---|
-| **Server -> Client** | RSA 公钥获取 | 响应体 `PublicKeyResponse` | `publicKeyBase64`<br/>`keyId`<br/>`expiresAtEpochMillis` | 客户端启动或缓存失效时拉取，动态获取最新 RSA 公钥及轮换标识 |
-| **Client -> Server** | RSA 双向加密<br/>(Bidirectional) | 请求体 `CipherRequestPayload` | `keyId` (可选)<br/>`encryptedSessionKeyBase64`<br/>`ivBase64`<br/>`encryptedDataBase64` | 客户端生成单次 AES 密钥并封装，随业务密文及使用的 keyId 一同上传 |
-| **Server -> Client** | RSA 双向加密<br/>(Bidirectional) | 响应体 `CipherResponsePayload` | `ivBase64`<br/>`encryptedDataBase64` | 服务端复用该请求已解密的 AES 密钥，配合全新 IV 加密响应内容 |
-| **Client -> Server** | RSA 仅请求加密<br/>(Request-Only) | 请求体 `CipherRequestPayload` | `keyId` (可选)<br/>`encryptedSessionKeyBase64`<br/>`ivBase64`<br/>`encryptedDataBase64` | 敏感入参加密上报，服务端精准/多版本回退解密后执行业务逻辑 |
-| **Server -> Client** | RSA 仅请求加密<br/>(Request-Only) | 响应体 `DemoPlainRequest` | `data` | 服务端直接返回明文业务响应体 |
-| **Client -> Server** | RSA 仅响应加密<br/>(Response-Only) | 请求头 (Header)<br/>请求体 (Body) | Header: `X-STC-SESSION-KEY`<br/>Header: `X-STC-KEY-ID` (可选)<br/>Body: `DemoPlainRequest` (`data`) | 请求入参明文，客户端将 RSA 公钥加密后的 AES 密钥置于 Header 中 |
-| **Server -> Client** | RSA 仅响应加密<br/>(Response-Only) | 响应体 `CipherResponsePayload` | `ivBase64`<br/>`encryptedDataBase64` | 服务端解密 Header 获取 AES 密钥，对敏感出参进行加密传输 |
-
-### 3. 核心传输字段说明
-
-- **`publicKeyBase64`**：服务端导出的 RSA 公钥 X.509 编码 Base64 字符串。
-- **`keyId`**：服务端密钥版本标识（如 `in-memory-test-key`），客户端请求可携带该值，服务端据此精准定位解密私钥，支持平滑轮换过渡。
-- **`expiresAtEpochMillis`**：公钥有效截止时间戳（毫秒），驱动客户端本地缓存更新与定期拉取。
-- **`encryptedSessionKeyBase64`**：客户端随机生成的 AES-256 会话密钥，经服务端 RSA 公钥（OAEP 填充模式）加密封装后的 Base64 字符串。
-- **`ivBase64`**：AES-GCM 使用的 12 字节随机初始化向量（IV）Base64 字符串，严禁复用。
-- **`encryptedDataBase64`**：业务明文使用 AES 会话密钥和对应 IV 加密后的 Base64 字符串（含 128 位 GCM 认证标签 Tag）。
-
-### 4. 密钥平滑轮换（Key Rotation）机制
-
-- **主动按期轮换**：服务端密钥默认以年为周期生成全新 `keyId` 与密钥对，并将新密钥标记为当前唯一活跃的下发密钥（Active Key）。
-- **多版本密钥环（KeyRing）**：历史私钥持久化保留在服务端的密钥环中，过渡期（Grace Period）内仍可解密由旧密钥加密的数据。
-- **精准路由与全量容错回退**：
-  1. 客户端请求携带 `keyId` 时，服务端 O(1) 快速定位对应私钥解密；
-  2. 若客户端未携带 `keyId` 或使用了过渡期旧公钥，服务端会先用活跃密钥尝试，失败后自动回退遍历密钥环中的历史过渡密钥，确保旧客户端请求零报错、平滑无感知升级。
-
-### 4. 关键本地字段与安全边界（严禁明文传输）
-
-- **`sessionKey` 明文**：客户端与服务端的 AES 对称密钥明文绝对禁止在网络中直接传输；在网络传输边界上，始终以 **RSA 公钥加密后的密文**（即 `encryptedSessionKeyBase64`）形式安全流转。
-- **`CryptoRequestContext`**：仅存于客户端内存，用于在请求阶段保存生成的会话密钥与 IV，以便在收到服务端响应后进行局部对称解密。
-- **`CryptoSessionContext`**：仅存于服务端线程/请求作用域（`ThreadLocal` / `RequestAttributes`），在拦截到加密请求时暂存解密后的会话密钥，并在响应切面加密完成后自动清理，实现请求隔离与用后即焚。
-
----
-
-## 服务端注解无侵入使用
-
-服务端开发仅需在 Controller 方法上标注注解，框架切面自动完成加解密及反序列化：
-
-```java
-@RestController
-@RequestMapping("/api/user")
-public class UserController {
-
-    // 1. 双向加密接口
-    @PostMapping("/update-phone")
-    @DecryptRequest
-    @EncryptResponse
-    public UserProfileResponse updatePhone(@Valid @RequestBody UpdatePhoneRequest request) {
-        // 入参已自动解密为明文对象；返回值将自动加密为 AesCipherPayload
-        return userService.update(request);
-    }
-
-    // 2. 仅请求加密接口
-    @PostMapping("/submit-idcard")
-    @DecryptRequest
-    public PlainResult submitIdCard(@Valid @RequestBody IdCardRequest request) {
-        return userService.save(request);
-    }
-
-    // 3. 仅响应加密接口
-    @PostMapping("/get-secret-profile")
-    @EncryptResponse
-    public UserProfileResponse getSecretProfile(
-            @RequestBody PlainQuery query,
-            @RequestHeader(CryptoConstants.HEADER_ENCRYPTED_SESSION_KEY) String sessionKeyBase64) {
-        // 请求头中解析会话密钥并缓存到上下文，返回对象自动使用该会话密钥加密
-        SessionKeyTransport transport = new SessionKeyTransport(sessionKeyBase64);
-        CryptoSessionContextAccessor.setCryptoSessionContext(CryptoSessionContext.rsaResponseOnly(transport));
-        return userService.getProfile(query);
-    }
-}
+```text
+Client                               Server
+  |                                    |
+  |-- GET /crypto/server/public-key -->|
+  |<-- RSA public key + keyId ---------|
+  |                                    |
+  | generate AES session key + IV      |
+  | encrypt session key with RSA        |
+  | encrypt payload with AES-GCM        |
+  |-- POST encrypted payload ---------->|
+  |                                    |-- decrypt with RSA private key
+  |                                    |-- decrypt AES payload
+  |                                    |-- run business logic
+  |                                    |-- encrypt response if required
+  |<-- encrypted response --------------|
+  | decrypt response with session key   |
 ```
 
----
+## Endpoints in the demo project
 
-## Spring Boot SDK / Starter 接入指南（其他团队使用）
+The server-side SDK automatically exposes the public key endpoint under the configured base path.
 
-本工程的 `common` 模块已封装为开箱即用的 **Spring Boot Starter SDK**，任意团队的 Spring Boot 服务只需引入依赖，即可自动装配所有加解密切面、公钥拉取端点与密钥管理功能。
+```text
+GET  /crypto/server/public-key
+GET  /crypto/server/public-key/{keyAlias}
+POST /crypto/server/bidirectional
+POST /crypto/server/request-only
+POST /crypto/server/response-only
+```
 
-### 1. 引入依赖
+The default server configuration uses port 9090. The client sample points to `http://localhost:9090` and runs on port 8080.
 
-**Gradle:**
+## Dependency usage
+
+For local development, the demo apps depend on the project module directly:
+
 ```groovy
-implementation 'com.ikea.crypto:common:1.0-SNAPSHOT'
+implementation project(':sdk')
 ```
 
-**Maven:**
+For external usage, the SDK is published as a starter artifact:
+
+```groovy
+implementation 'com.ikea.crypto:sensitive-transport-crypto-spring-boot-starter:1.0-SNAPSHOT'
+```
+
+Maven:
+
 ```xml
 <dependency>
     <groupId>com.ikea.crypto</groupId>
-    <artifactId>common</artifactId>
+    <artifactId>sensitive-transport-crypto-spring-boot-starter</artifactId>
     <version>1.0-SNAPSHOT</version>
 </dependency>
 ```
 
-### 2. 自动装配特性说明
+## Main configuration
 
-引入 Starter 后，Spring Boot 会自动生效以下组件（无需手动配置）：
-- **自动切面**：`RequestDecryptAdvice` 与 `ResponseEncryptAdvice` 自动拦截标注了 `@DecryptRequest` / `@EncryptResponse` 的 Controller。
-- **公钥及轮换端点**：自动暴露 `GET /crypto/server/public-key`（及 `{keyAlias}`）与 `POST /crypto/server/rotate` 端点，供客户端自动拉取。
-- **密钥管理与降级机制**：
-  - 若开启 Vault（`crypto.vault.enabled=true`），自动连接 HashiCorp Vault 进行企业级多版本轮换管理；
-  - 若未配置 Vault（默认 `crypto.vault.enabled=false`），自动降级生成安全的本地内存 RSA-2048 密钥对，便于本地开发与单元测试。
-- **全局异常处理**：自动装配 `CryptoExceptionHandler`，将密码学验签及解密异常转换为统一格式。
-
-### 3. 分层异常体系（清晰区分客户端错误 vs 服务端故障）
-
-SDK 采用分层结构，统一继承自 `CryptoException`，便于业务方统一拦截或细粒度处理：
-
-```text
-CryptoException (RuntimeException)
- ├── CryptoClientSideException (4xx 客户端传参/报文非法)
- │    ├── InvalidCryptoPayloadException   # 密文格式非JSON/缺失字段/Base64非法
- │    ├── SessionKeyDecryptionException    # 会话密钥解密失败 (公钥过期/keyId不匹配/RSA密文错误)
- │    └── DataTamperedException            # GCM Tag 认证失败/数据被篡改
- └── CryptoServerSideException (5xx 服务端故障)
-      ├── KeyNotAvailableException         # Vault 失联/找不到有效解密密钥/密钥未初始化
-      └── ResponseEncryptionException      # 响应序列化/加密失败
-```
-
-- **安全防信息泄露**：内置 `CryptoExceptionHandler` 默认对外响应安全错误提示（5xx 自动屏蔽底层细节并打详细日志，4xx 提示校验错误），且设置 `@Order(Ordered.LOWEST_PRECEDENCE)`，业务方自定义的 `@ExceptionHandler` 永远优先执行。
-
-### 4. 配置项速查表
-
-可在 `application.yml` 中按需定制：
+Server example (`server/src/main/resources/application.yml`):
 
 ```yaml
-crypto:
-  server:
-    enabled: true                 # 是否启用 Server 端 SDK 自动装配（默认 true）
-    endpoint:
-      enabled: true               # 是否自动暴露公钥与轮换端点（默认 true）
-      base-path: /crypto/server   # 公钥与轮换端点基础路径（默认 /crypto/server）
-    exception-handler:
-      enabled: true               # 是否自动注册全局异常处理器（默认 true）
-  vault:
-    enabled: true                 # 是否启用 HashiCorp Vault 密钥管理（默认 false，为 false 时使用本地内存密钥）
-    addr: http://127.0.0.1:8200   # Vault 服务地址
-    auth-method: TOKEN            # TOKEN 或 KUBERNETES
-    token: root                   # 静态 Token（测试环境）
-    secret-path: secret/data/crypto/pii-transport-key # KV v2 路径
-    key-alias: pii-transport-key  # 密钥别名
-    validity-millis: 31536000000  # 密钥有效时长（毫秒）
-    grace-period-millis: 2592000000 # 过渡期时长（毫秒）
+server:
+  port: 9090
+
+sensitive:
+  transport:
+    crypto:
+      enabled: true
+      endpoint:
+        enabled: true
+        base-path: /crypto/server
+      exception-handler:
+        enabled: true
+      vault:
+        enabled: true
+        addr: ${VAULT_ADDR:http://127.0.0.1:8200}
+        auth-method: ${VAULT_AUTH_METHOD:TOKEN}
+        token: ${VAULT_TOKEN:root}
+        secret-path: ${VAULT_SECRET_PATH:secret/data/sensitive-transport-crypto/ciam}
+        key-alias: ${VAULT_KEY_ALIAS:ciam}
+        validity-millis: ${VAULT_VALIDITY_MILLIS:60000}
+        grace-period-millis: ${VAULT_GRACE_PERIOD_MILLIS:30000}
 ```
 
----
+Client example (`client/src/main/resources/application.yml`):
 
-## 快速上手与运行
+```yaml
+server:
+  port: 8080
 
-### 1. 环境准备
-- JDK 17 或 JDK 21+
-- Gradle (建议使用项目内置 `./gradlew`)
+crypto:
+  server:
+    base-url: http://localhost:9090
+    endpoints:
+      public-key: /crypto/server/public-key
+      bidirectional: /crypto/server/bidirectional
+      request-only: /crypto/server/request-only
+      response-only: /crypto/server/response-only
+```
 
-### 2. 构建与运行测试
+## Vault integration
+
+The SDK can integrate with HashiCorp Vault for key storage, rotation, and multi-version grace periods. Key material is managed as versioned secrets, while the local JVM keeps an in-memory key ring for fast decryption.
+
+Relevant notes:
+
+- `sensitive.transport.crypto.vault.enabled` switches Vault integration on/off.
+- `keyAlias` and `secretPath` should be isolated per service or team.
+- Key versions are tracked by `keyId` (for example, `ciam:1`, `ciam:2`).
+- Old keys remain valid during a configured grace period to handle rolling deployments.
+
+This behavior is described in more depth in `docs/vault.md` and `docs/sensitive-transport-crypto-multi-team-guidelines.md`.
+
+## Quick start
+
+Prerequisites:
+
+- JDK 17+
+- Gradle wrapper included in the repo
+
+Run tests:
+
 ```bash
 ./gradlew test
 ```
 
-### 3. 启动服务端与客户端
-```bash
-# 启动服务端 (Port 9090)
-./gradlew server:bootRun
+Start the server demo:
 
-# 新开终端启动客户端 (Port 8080)
+```bash
+./gradlew server:bootRun
+```
+
+Start the client demo in another shell:
+
+```bash
 ./gradlew client:bootRun
 ```
 
-### 4. 验证接口调用
+Then call the client APIs, which are exposed under `/crypto/client`.
 
-客户端提供了一组测试端点，发起请求后会自动获取服务端公钥、执行客户端加密、请求服务端接口、接收密文并解密：
+## Notes
 
-#### 场景 1：双向加解密（Bidirectional）
-```bash
-curl -X POST http://localhost:8080/crypto/client/bidirectional \
-  -H "Content-Type: application/json" \
-  -d '{"data":"13800138000"}'
-```
-**响应示例：**
-```json
-{
-  "request": {
-    "data": "13800138000",
-    "encrypted": {
-      "encryptedSessionKeyBase64": "...",
-      "ivBase64": "...",
-      "encryptedDataBase64": "..."
-    }
-  },
-  "response": {
-    "data": "mock rsa response for request - 13800138000",
-    "encrypted": {
-      "ivBase64": "...",
-      "encryptedDataBase64": "..."
-    }
-  }
-}
-```
+- The SDK is intentionally designed to be transparent to application code: `@DecryptRequest` and `@EncryptResponse` manage the crypto flow.
+- Failed decryption or tampering leads to typed crypto exceptions instead of exposing raw security details.
+- In production, prefer isolating Vault paths and key aliases by application/service identity instead of sharing a single key across teams.
 
-#### 场景 2：仅请求加密（Request-Only）
-```bash
-curl -X POST http://localhost:8080/crypto/client/request-only \
-  -H "Content-Type: application/json" \
-  -d '{"data":"13800138000"}'
-```
+## Related docs
 
-#### 场景 3：仅响应加密（Response-Only）
-```bash
-curl -X POST http://localhost:8080/crypto/client/response-only \
-  -H "Content-Type: application/json" \
-  -d '{"data":"user-id-10001"}'
-```
-
-#### 直接调用服务端公钥接口
-```bash
-curl -X GET http://localhost:9090/crypto/server/public-key
-```
-
----
-
-## 常见安全误区与最佳实践
-
-| 常见误区 | 潜在安全风险 | 解决方案 |
-|---|---|---|
-| 对称密钥硬编码在 App 包中 | 反编译 APK/IPA 即可直接提取密钥，安全机制形同虚设 | 强制一次一密，会话密钥每次请求随机生成 |
-| 对称密钥通过明文接口下发 | 抓包工具或中间人即可直接获取明文密钥 | 严禁明文传输，使用非对称 RSA 公钥加密封装 |
-| 使用 Base64 或 URL 编码伪装加密 | 仅仅是可逆编码，不具备任何保密性，监管不认可 | 采用合规的 AES-256-GCM 强密码算法 |
-| 所有请求复用同一个对称密钥 | 任意一次泄露会导致历史所有会话被解密 | 每次请求生成独立会话密钥（Key Isolation） |
-| RSA 使用 PKCS#1 v1.5 填充 | 易遭受 Bleichenbacher 填充预言机攻击 | 统一采用 `OAEPWithSHA-256AndMGF1Padding` |
-| 服务端私钥硬编码在源码中 | 代码泄露（如代码库权限扩散）导致私钥失窃 | 私钥放入环境变量/文件管理，生产环境建议对接 KMS / HSM |
+- `docs/vault.md` — Vault key lifecycle and rotation design
+- `docs/sensitive-transport-crypto-multi-team-guidelines.md` — ownership and multi-team guidance
