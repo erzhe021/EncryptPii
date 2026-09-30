@@ -1,5 +1,6 @@
 package com.ikea.crypto.server;
 
+import com.ikea.crypto.common.constant.CryptoConstants;
 import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
@@ -103,8 +104,8 @@ public class VaultIntegrationTest {
         String mockVaultAddr = "http://127.0.0.1:" + vaultPort;
 
         // Generate RSA key pair for the test
-        java.security.KeyPairGenerator kpg = java.security.KeyPairGenerator.getInstance("RSA");
-        kpg.initialize(2048);
+        java.security.KeyPairGenerator kpg = java.security.KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
+        kpg.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
         java.security.KeyPair keyPair = kpg.generateKeyPair();
         String pubBase64 = EncodingUtils.toBase64(keyPair.getPublic().getEncoded());
         String privBase64 = EncodingUtils.toBase64(keyPair.getPrivate().getEncoded());

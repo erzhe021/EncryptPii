@@ -9,10 +9,6 @@ allprojects {
 
 rootProject.buildDir = file("${rootProject.projectDir}/.gradle-build")
 
-ext {
-    springVaultVersion = '3.0.0'
-}
-
 subprojects {
     apply plugin: 'java'
     layout.buildDirectory = file("${projectDir}/build")

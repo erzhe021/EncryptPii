@@ -1,5 +1,6 @@
 package com.ikea.crypto.server;
 
+import com.ikea.crypto.common.constant.CryptoConstants;
 import com.ikea.crypto.common.crypto.AesGcmCipher;
 import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.common.crypto.SessionKeyService;
@@ -42,8 +43,8 @@ class VaultMultiVersionGracePeriodTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-        kpg.initialize(2048);
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
+        kpg.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
         keyPairV1 = kpg.generateKeyPair();
         keyPairV2 = kpg.generateKeyPair();
         keyPairV3 = kpg.generateKeyPair();

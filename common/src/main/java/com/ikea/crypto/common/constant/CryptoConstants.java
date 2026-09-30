@@ -16,6 +16,7 @@ public final class CryptoConstants {
     public static final int AES_KEY_SIZE_BITS = 256;
     public static final int GCM_TAG_LENGTH_BITS = 128;
     public static final int GCM_IV_LENGTH_BYTES = 12;
+    public static final int RSA_KEY_SIZE_BITS = 2048;
 
     // --- Header Names for Crypto Session Key Transport ---
     public static final String HEADER_CRYPTO_SESSION_KEY = "X-Crypto-Session-Key";

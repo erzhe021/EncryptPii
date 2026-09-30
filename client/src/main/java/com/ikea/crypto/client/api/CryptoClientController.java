@@ -3,7 +3,7 @@ package com.ikea.crypto.client.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.client.core.CryptoClient;
 import com.ikea.crypto.client.core.CryptoHttpClient;
-import com.ikea.crypto.client.model.PlainData;
+import com.ikea.crypto.client.model.*;
 import com.ikea.crypto.common.constant.CryptoConstants;
 import com.ikea.crypto.common.model.CipherRequestPayload;
 import com.ikea.crypto.common.model.CipherResponsePayload;
@@ -48,70 +48,117 @@ public class CryptoClientController {
     }
 
     @PostMapping("/bidirectional")
-    public Map<String, Object> bidirectionalEncrypt(@RequestBody PlainData plainData) throws Exception {
-        log.debug("starting bidirectional RSA encryption with request data: {}", plainData.data());
+    public Map<String, Object> bidirectionalEncrypt(@RequestBody DemoSensitiveRequest demoSensitiveRequest)
+            throws Exception {
+
+        long startTime = System.currentTimeMillis();
+        log.debug("starting bidirectional RSA encryption");
+
         CryptoHttpClient.ServerKeyInfo serverKeyInfo = cryptoHttpClient.fetchServerKeyInfo();
-        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(toJsonString(plainData), serverKeyInfo.keyId(), serverKeyInfo.publicKey());
+        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(
+                toJsonString(demoSensitiveRequest), serverKeyInfo.keyId(), serverKeyInfo.publicKey());
         CipherRequestPayload requestPayload = encrypted.payload();
 
+        long encryptedTime = System.currentTimeMillis();
+        log.debug("request encryption time: {} ms", encryptedTime - startTime);
+
         CipherResponsePayload responsePayload = cryptoHttpClient.postBidirectional(bidirectionalPath, requestPayload);
+
+        long httpTime = System.currentTimeMillis();
+        log.debug("http request-response time: {} ms", httpTime - encryptedTime);
+
         String decryptedServerResponse = cryptoClient.decrypt(responsePayload, encrypted.context());
-        PlainData responsePlainData = objectMapper.readValue(decryptedServerResponse, PlainData.class);
-        log.debug("response plain data after decryption: {}", responsePlainData.data());
+        DemoSensitiveResponse demoSensitiveResponse =
+                objectMapper.readValue(decryptedServerResponse, DemoSensitiveResponse.class);
+
+        long finish = System.currentTimeMillis();
+        log.debug("response decryption time: {} ms", finish - httpTime);
 
         return Map.of(
-                "request", Map.of("data", plainData.data(), "encrypted", requestPayload),
-                "response", Map.of("data", responsePlainData.data(), "encrypted", responsePayload)
+                "request", Map.of("plain", demoSensitiveRequest, "cipher", requestPayload),
+                "response", Map.of("plain", demoSensitiveResponse, "cipher", responsePayload),
+                "latency", new LatencyInMs(
+                        (finish - startTime),
+                        (encryptedTime - startTime),
+                        (httpTime - encryptedTime),
+                        (finish - httpTime)
+                )
         );
     }
 
     @PostMapping("/request-only")
-    public Map<String, Object> requestOnlyEncrypt(@RequestBody PlainData plainData) throws Exception {
-        log.debug("starting request-only RSA encryption with request data: {}", plainData.data());
+    public Map<String, Object> requestOnlyEncrypt(@RequestBody DemoSensitiveRequest demoSensitiveRequest)
+            throws Exception {
+        long startTime = System.currentTimeMillis();
+        log.debug("starting request-only RSA encryption");
         CryptoHttpClient.ServerKeyInfo serverKeyInfo = cryptoHttpClient.fetchServerKeyInfo();
-        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(toJsonString(plainData), serverKeyInfo.keyId(), serverKeyInfo.publicKey());
+        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(
+                toJsonString(demoSensitiveRequest), serverKeyInfo.keyId(), serverKeyInfo.publicKey());
         CipherRequestPayload requestPayload = encrypted.payload();
 
-        PlainData responseData = cryptoHttpClient.postRequestOnly(requestOnlyPath, requestPayload);
-        log.debug("response plain data: {}", responseData.data());
+        long encryptedTime = System.currentTimeMillis();
+        log.debug("request encryption time: {} ms", encryptedTime - startTime);
+
+        DemoPlainResponse demoPlainResponse = cryptoHttpClient.postRequestOnly(requestOnlyPath, requestPayload);
+
+        long httpTime = System.currentTimeMillis();
+        log.debug("http request-response time: {} ms", httpTime - encryptedTime);
 
         return Map.of(
-                "request", Map.of("data", plainData.data(), "encrypted", requestPayload),
-                "response", Map.of("data", responseData.data())
+                "request", Map.of("plain", demoSensitiveRequest, "cipher", requestPayload),
+                "response", demoPlainResponse,
+                "latency", new LatencyInMs(
+                        (System.currentTimeMillis() - startTime),
+                        (encryptedTime - startTime),
+                        (httpTime - encryptedTime),
+                        (System.currentTimeMillis() - httpTime)
+                )
         );
     }
 
     @PostMapping("/response-only")
-    public Map<String, Object> responseOnlyEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
-        String data = plainData == null ? null : plainData.data();
+    public Map<String, Object> responseOnlyEncrypt(@RequestBody(required = false) DemoPlainRequest demoPlainRequest)
+            throws Exception {
+        long startTime = System.currentTimeMillis();
+        String data = demoPlainRequest == null ? null : demoPlainRequest.data();
         log.debug("starting response-only RSA encryption with request data: {}", data);
 
         // Generate a new session key for AES encryption
         SecretKey sessionKey = generateSessionKey();
         CryptoHttpClient.ServerKeyInfo serverKeyInfo = cryptoHttpClient.fetchServerKeyInfo();
-        SessionKeyTransport sessionTransport = SessionKeyTransport.fromGeneratedKey(serverKeyInfo.keyId(), sessionKey, serverKeyInfo.publicKey());
+        SessionKeyTransport sessionTransport =
+                SessionKeyTransport.fromGeneratedKey(serverKeyInfo.keyId(), sessionKey, serverKeyInfo.publicKey());
 
-        CipherResponsePayload responsePayload = cryptoHttpClient.postResponseOnly(responseOnlyPath, data, sessionTransport);
+        long requestPrepared = System.currentTimeMillis();
+        log.debug("request preparation time: {} ms", requestPrepared - startTime);
+
+        CipherResponsePayload responsePayload =
+                cryptoHttpClient.postResponseOnly(responseOnlyPath, demoPlainRequest, sessionTransport);
+        long httpTime = System.currentTimeMillis();
+        log.debug("http request-response time: {} ms", httpTime - requestPrepared);
 
         // Decrypt the response data using the session key and IV
         String decryptedResponseData = cryptoClient.decrypt(responsePayload, sessionKey);
-        PlainData responsePlainData = objectMapper.readValue(decryptedResponseData, PlainData.class);
-        log.debug("response plain data after decryption: {}", responsePlainData.data());
+        DemoSensitiveResponse demoSensitiveResponse =
+                objectMapper.readValue(decryptedResponseData, DemoSensitiveResponse.class);
+        log.debug("response plain data after decryption: {}", demoSensitiveResponse);
 
         return Map.of(
-                "request", Map.of("data", data == null ? "null" : data),
-                "response", Map.of("data", responsePlainData.data(), "encrypted", responsePayload)
+                "request", demoPlainRequest == null ? "no data" : demoPlainRequest,
+                "response", Map.of("plain", demoSensitiveResponse, "cipher", responsePayload),
+                "latency", new LatencyInMs(
+                        (System.currentTimeMillis() - startTime),
+                        (requestPrepared - startTime),
+                        (httpTime - requestPrepared),
+                        (System.currentTimeMillis() - httpTime)
+                )
         );
     }
 
-    private void validatePlainData(PlainData data) {
-        if (data == null || data.data() == null || data.data().isEmpty()) {
-            throw new IllegalArgumentException("PlainData cannot be null or empty");
+    private String toJsonString(DemoSensitiveRequest data) throws Exception {
+        if (data == null) {
+            throw new IllegalArgumentException("UserRequest cannot be null or empty");
         }
-    }
-
-    private String toJsonString(PlainData data) throws Exception {
-        validatePlainData(data);
         return objectMapper.writeValueAsString(data);
     }
 

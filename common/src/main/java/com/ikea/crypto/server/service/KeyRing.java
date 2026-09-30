@@ -201,7 +201,7 @@ public class KeyRing {
 
     public KeyPair generateKeyPair() throws GeneralSecurityException {
         KeyPairGenerator generator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
-        generator.initialize(2048);
+        generator.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
         return generator.generateKeyPair();
     }
 

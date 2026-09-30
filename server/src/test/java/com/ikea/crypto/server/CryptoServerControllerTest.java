@@ -10,8 +10,9 @@ import com.ikea.crypto.common.model.PublicKeyResponse;
 import com.ikea.crypto.common.model.RotateKeyRequest;
 import com.ikea.crypto.common.model.SessionKeyTransport;
 import com.ikea.crypto.common.util.EncodingUtils;
-import com.ikea.crypto.server.model.PlainData;
-import com.ikea.crypto.server.model.SensitiveData;
+import com.ikea.crypto.server.model.DemoPlainRequest;
+import com.ikea.crypto.server.model.DemoSensitiveRequest;
+import com.ikea.crypto.server.model.DemoSensitiveResponse;
 import com.ikea.crypto.server.service.CryptoServer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -62,7 +63,8 @@ class CryptoServerControllerTest {
         SecretKey sessionKey = keyGenerator.generateKey();
 
         byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
-        String requestJson = objectMapper.writeValueAsString(new SensitiveData("secret message"));
+        String requestJson = objectMapper.writeValueAsString(
+                new DemoSensitiveRequest("name", "1234567890", "demo@example.com", "Shanghai 123 Main St"));
 
         String encryptedData = AesGcmCipher.encryptAsBase64(requestJson, sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, cryptoServer.publicKey());
@@ -88,7 +90,8 @@ class CryptoServerControllerTest {
         SecretKey sessionKey = keyGenerator.generateKey();
 
         byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
-        String requestJson = objectMapper.writeValueAsString(new SensitiveData("plain response needed"));
+        String requestJson = objectMapper.writeValueAsString(
+                new DemoSensitiveResponse("name", "1234567890", "demo@example.com", "Shanghai 123 Main St", "extra info"));
 
         String encryptedData = AesGcmCipher.encryptAsBase64(requestJson, sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, cryptoServer.publicKey());
@@ -114,12 +117,12 @@ class CryptoServerControllerTest {
 
         SessionKeyTransport sessionTransport = SessionKeyTransport.fromGeneratedKey(sessionKey, cryptoServer.publicKey());
 
-        PlainData plainRequest = new PlainData("ping");
+        DemoPlainRequest demoPlainRequest = new DemoPlainRequest("ping");
 
         mockMvc.perform(post("/crypto/server/response-only")
                         .header(CryptoConstants.HEADER_CRYPTO_SESSION_KEY, sessionTransport.encryptedSessionKeyBase64())
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(objectMapper.writeValueAsString(plainRequest)))
+                        .content(objectMapper.writeValueAsString(demoPlainRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.encryptedDataBase64").isNotEmpty())
                 .andExpect(jsonPath("$.ivBase64").isNotEmpty());
@@ -207,7 +210,7 @@ class CryptoServerControllerTest {
         PublicKeyResponse v1Key = objectMapper.readValue(v1Response, PublicKeyResponse.class);
         long v1 = Long.parseLong(v1Key.keyId().substring(keyAlias.length() + 1));
 
-        KeyFactory kf = KeyFactory.getInstance("RSA");
+        KeyFactory kf = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA);
         PublicKey pubKeyV1 = kf.generatePublic(new X509EncodedKeySpec(EncodingUtils.fromBase64(v1Key.publicKeyBase64())));
 
         // 2. Client prepares encrypted message using v1 key

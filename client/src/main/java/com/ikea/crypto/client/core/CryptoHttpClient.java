@@ -2,7 +2,8 @@ package com.ikea.crypto.client.core;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ikea.crypto.client.model.PlainData;
+import com.ikea.crypto.client.model.DemoPlainRequest;
+import com.ikea.crypto.client.model.DemoPlainResponse;
 import com.ikea.crypto.common.constant.CryptoConstants;
 import com.ikea.crypto.common.model.CipherRequestPayload;
 import com.ikea.crypto.common.model.CipherResponsePayload;
@@ -115,19 +116,20 @@ public class CryptoHttpClient {
     }
 
     /**
-     * Sends request-only encrypted payload to the server, expecting a plaintext PlainData response.
+     * Sends request-only encrypted payload to the server, expecting a plaintext PlainResponse response.
      */
-    public PlainData postRequestOnly(String path, CipherRequestPayload requestPayload) throws Exception {
+    public DemoPlainResponse postRequestOnly(String path, CipherRequestPayload requestPayload) throws Exception {
         HttpResponse<String> response = sendJsonRequest(path, requestPayload);
-        return objectMapper.readValue(response.body(), PlainData.class);
+        return objectMapper.readValue(response.body(), DemoPlainResponse.class);
     }
 
     /**
      * Sends response-only request to the server with encrypted session key in header,
      * expecting an AesCipherPayload response.
      */
-    public CipherResponsePayload postResponseOnly(String path, String data, SessionKeyTransport sessionTransport) throws Exception {
-        HttpRequest httpRequest = buildSessionKeyRequest(serverBaseUri.resolve(path), data, sessionTransport);
+    public CipherResponsePayload postResponseOnly(
+            String path, DemoPlainRequest request, SessionKeyTransport sessionTransport) throws Exception {
+        HttpRequest httpRequest = buildSessionKeyRequest(serverBaseUri.resolve(path), request, sessionTransport);
         HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
         ensureSuccess(response, path);
         return objectMapper.readValue(response.body(), CipherResponsePayload.class);
@@ -151,12 +153,18 @@ public class CryptoHttpClient {
         }
     }
 
-    private HttpRequest buildSessionKeyRequest(URI endpoint, String data, SessionKeyTransport sessionKeyTransport) throws JsonProcessingException {
+    private HttpRequest buildSessionKeyRequest(
+            URI endpoint, DemoPlainRequest request, SessionKeyTransport sessionKeyTransport)
+            throws JsonProcessingException {
+
         HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint)
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+
         HttpRequest.Builder transportBuilder = sessionKeyTransport.apply(builder);
-        if (data != null) {
-            return transportBuilder.POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(new PlainData(data)))).build();
+
+        if (request != null) {
+            return transportBuilder.POST(HttpRequest.BodyPublishers.ofString(
+                    objectMapper.writeValueAsString(request))).build();
         } else {
             return transportBuilder.POST(HttpRequest.BodyPublishers.noBody()).build();
         }
@@ -164,7 +172,8 @@ public class CryptoHttpClient {
 
     private void ensureSuccess(HttpResponse<String> response, String path) {
         if (response.statusCode() != 200) {
-            throw new IllegalStateException("request path: " + path + " failed: status=" + response.statusCode() + ", body=" + response.body());
+            throw new IllegalStateException("request path: " + path + " failed: status="
+                    + response.statusCode() + ", body=" + response.body());
         }
     }
 }

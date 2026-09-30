@@ -10,6 +10,7 @@ import com.ikea.crypto.common.util.EncodingUtils;
 import com.ikea.crypto.server.context.CryptoSessionContextAccessor;
 import com.ikea.crypto.server.error.InvalidCryptoPayloadException;
 import com.ikea.crypto.server.error.SessionKeyDecryptionException;
+import com.ikea.crypto.server.service.KeyRing;
 import com.ikea.crypto.server.service.CryptoServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -20,7 +21,10 @@ import javax.crypto.SecretKey;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.KeyFactory;
+import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.spec.X509EncodedKeySpec;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -32,7 +36,7 @@ class CryptoServerTest {
     @BeforeEach
     void setUp() throws Exception {
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
-        keyGen.initialize(2048);
+        keyGen.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
         keyPair = keyGen.generateKeyPair();
 
         server = new CryptoServer(keyPair.getPrivate(), keyPair.getPublic());
@@ -102,5 +106,21 @@ class CryptoServerTest {
         );
 
         assertThrows(SessionKeyDecryptionException.class, () -> server.decrypt(payload));
+    }
+
+    @Test
+    void testReturnedPublicKeyMatchesKeyIdPrivateKey() throws Exception {
+        PublicKeyResponse response = server.getPublicKey();
+        PublicKey publicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA)
+                .generatePublic(new X509EncodedKeySpec(EncodingUtils.fromBase64(response.publicKeyBase64())));
+
+        KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
+        keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
+        SecretKey sessionKey = keyGenerator.generateKey();
+        String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, publicKey);
+
+        KeyRing.KeyEntry keyEntry = server.keyRing().findKeyEntry(response.keyId()).orElseThrow();
+        SecretKey decrypted = SessionKeyService.decryptSessionKeyBase64(encryptedSessionKey, keyEntry.privateKey());
+        assertArrayEquals(sessionKey.getEncoded(), decrypted.getEncoded());
     }
 }

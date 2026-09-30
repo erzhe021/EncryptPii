@@ -30,7 +30,7 @@ class CryptoClientTest {
         cryptoClient = new CryptoClient();
 
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
-        keyGen.initialize(2048);
+        keyGen.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
         serverKeyPair = keyGen.generateKeyPair();
     }
 

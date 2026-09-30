@@ -85,8 +85,8 @@ EncryptPii/
 | **Client -> Server** | RSA 双向加密<br/>(Bidirectional) | 请求体 `CipherRequestPayload` | `keyId` (可选)<br/>`encryptedSessionKeyBase64`<br/>`ivBase64`<br/>`encryptedDataBase64` | 客户端生成单次 AES 密钥并封装，随业务密文及使用的 keyId 一同上传 |
 | **Server -> Client** | RSA 双向加密<br/>(Bidirectional) | 响应体 `CipherResponsePayload` | `ivBase64`<br/>`encryptedDataBase64` | 服务端复用该请求已解密的 AES 密钥，配合全新 IV 加密响应内容 |
 | **Client -> Server** | RSA 仅请求加密<br/>(Request-Only) | 请求体 `CipherRequestPayload` | `keyId` (可选)<br/>`encryptedSessionKeyBase64`<br/>`ivBase64`<br/>`encryptedDataBase64` | 敏感入参加密上报，服务端精准/多版本回退解密后执行业务逻辑 |
-| **Server -> Client** | RSA 仅请求加密<br/>(Request-Only) | 响应体 `PlainData` | `data` | 服务端直接返回明文业务响应体 |
-| **Client -> Server** | RSA 仅响应加密<br/>(Response-Only) | 请求头 (Header)<br/>请求体 (Body) | Header: `X-Crypto-Session-Key`<br/>Header: `X-Crypto-Key-Id` (可选)<br/>Body: `PlainData` (`data`) | 请求入参明文，客户端将 RSA 公钥加密后的 AES 密钥置于 Header 中 |
+| **Server -> Client** | RSA 仅请求加密<br/>(Request-Only) | 响应体 `DemoPlainRequest` | `data` | 服务端直接返回明文业务响应体 |
+| **Client -> Server** | RSA 仅响应加密<br/>(Response-Only) | 请求头 (Header)<br/>请求体 (Body) | Header: `X-Crypto-Session-Key`<br/>Header: `X-Crypto-Key-Id` (可选)<br/>Body: `DemoPlainRequest` (`data`) | 请求入参明文，客户端将 RSA 公钥加密后的 AES 密钥置于 Header 中 |
 | **Server -> Client** | RSA 仅响应加密<br/>(Response-Only) | 响应体 `CipherResponsePayload` | `ivBase64`<br/>`encryptedDataBase64` | 服务端解密 Header 获取 AES 密钥，对敏感出参进行加密传输 |
 
 ### 3. 核心传输字段说明

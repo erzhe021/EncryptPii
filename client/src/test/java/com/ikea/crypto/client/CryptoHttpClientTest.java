@@ -1,6 +1,7 @@
 package com.ikea.crypto.client;
 
 import com.ikea.crypto.client.core.CryptoHttpClient;
+import com.ikea.crypto.common.constant.CryptoConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,8 +18,8 @@ class CryptoHttpClientTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
-        keyGen.initialize(2048);
+        KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
+        keyGen.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
         keyPair = keyGen.generateKeyPair();
     }
 

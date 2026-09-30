@@ -50,7 +50,7 @@ public class CryptoServerAutoConfiguration {
 
         log.warn("Vault key management is disabled (crypto.vault.enabled=false). Initializing CryptoServer with an in-memory RSA keypair for local/testing environment.");
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
-        keyGen.initialize(2048);
+        keyGen.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
         KeyPair keyPair = keyGen.generateKeyPair();
         return new CryptoServer(keyPair.getPrivate(), keyPair.getPublic());
     }

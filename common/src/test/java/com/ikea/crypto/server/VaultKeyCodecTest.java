@@ -2,6 +2,7 @@ package com.ikea.crypto.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.ikea.crypto.common.constant.CryptoConstants;
 import com.ikea.crypto.common.util.EncodingUtils;
 import com.ikea.crypto.server.service.KeyRing;
 import com.ikea.crypto.server.vault.VaultKeyCodec;
@@ -20,8 +21,8 @@ class VaultKeyCodecTest {
 
     @Test
     void testSerializeAndDeserializeKeyPair() throws Exception {
-        KeyPairGenerator kpg = KeyPairGenerator.getInstance("RSA");
-        kpg.initialize(2048);
+        KeyPairGenerator kpg = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
+        kpg.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
         KeyPair keyPair = kpg.generateKeyPair();
 
         Map<String, Object> map = codec.serializeKeyPair(keyPair);
