@@ -1,12 +1,12 @@
 package com.ikea.crypto.client.core;
 
 import com.ikea.crypto.client.context.CryptoRequestContext;
-import com.ikea.crypto.common.crypto.AesGcmCipher;
-import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
-import com.ikea.crypto.common.crypto.SessionKeyService;
-import com.ikea.crypto.common.model.CipherRequestPayload;
-import com.ikea.crypto.common.model.CipherResponsePayload;
-import com.ikea.crypto.common.util.EncodingUtils;
+import com.ikea.crypto.stc.crypto.AesGcmCipher;
+import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.stc.crypto.SessionKeyService;
+import com.ikea.crypto.stc.model.CipherRequestPayload;
+import com.ikea.crypto.stc.model.CipherResponsePayload;
+import com.ikea.crypto.stc.util.EncodingUtils;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.SecretKey;

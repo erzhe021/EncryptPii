@@ -1,22 +1,30 @@
 server:
   port: 9090
 
-crypto:
-  vault:
-    enabled: true
-    addr: ${VAULT_ADDR:http://127.0.0.1:8200}
-    auth-method: ${VAULT_AUTH_METHOD:TOKEN}
-    auth-path: ${VAULT_AUTH_PATH:auth/kubernetes}
-    token: ${VAULT_TOKEN:root}
-    secret-path: ${VAULT_SECRET_PATH:secret/data/crypto/pii-transport-key}
-    auto-bootstrap: true
-    keyAlias: ${VAULT_KEY_ALIAS:pii-transport-key}
-    validityMillis: ${VAULT_VALIDITY_MILLIS:60000} # 60s
-    gracePeriodMillis: ${VAULT_GRACE_PERIOD_MILLIS:30000} # 30s
-    kubernetes:
-      role: ${VAULT_K8S_ROLE:crypto-server}
-      token-path: ${VAULT_K8S_TOKEN_PATH:/var/run/secrets/kubernetes.io/serviceaccount/token}
+sensitive:
+  transport:
+    crypto:
+      enabled: true #default is true, if set to false, the crypto server will not be started
+      endpoint:
+        enabled: true #default is true, if set to false, the crypto server will not expose any endpoints
+        base-path: /crypto/server # default is /crypto/server, you can change it to any other path, but make sure to update the client configuration accordingly
+      exception-handler:
+        enabled: true #default is true, if set to false, the crypto server will not handle exceptions and will return raw exceptions to the client
+      vault:
+        enabled: true #default is false, if set to true, the crypto server will use vault to store the transport key
+        addr: ${VAULT_ADDR:http://127.0.0.1:8200}
+        auth-method: ${VAULT_AUTH_METHOD:TOKEN} #default is TOKEN, other option is KUBERNETES
+        auth-path: ${VAULT_AUTH_PATH:auth/kubernetes}
+        token: ${VAULT_TOKEN:root} #default is root, only used when auth-method is TOKEN
+        secret-path: ${VAULT_SECRET_PATH:secret/data/crypto/pii-transport-key}
+        auto-bootstrap: true # default is true, if set to false, the key must be created manually in vault
+        key-alias: ${VAULT_KEY_ALIAS:pii-transport-key} #default is pii-transport-key, you can change it to any other alias, but make sure to update the client configuration accordingly
+        validity-millis: ${VAULT_VALIDITY_MILLIS:60000} # 60s only for testing, in production it should be set to a higher value
+        grace-period-millis: ${VAULT_GRACE_PERIOD_MILLIS:30000} # 30s only for testing, in production it should be set to a higher value
+        kubernetes:
+          role: ${VAULT_K8S_ROLE:crypto-server}
+          token-path: ${VAULT_K8S_TOKEN_PATH:/var/run/secrets/kubernetes.io/serviceaccount/token}
 
 logging:
   level:
-    com.ikea.crypto: DEBUG
+    com.ikea.crypto: DEBUG # default is INFO, you can change it to DEBUG for more detailed logs

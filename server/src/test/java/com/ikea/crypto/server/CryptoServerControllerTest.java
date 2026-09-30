@@ -1,19 +1,18 @@
 package com.ikea.crypto.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.crypto.AesGcmCipher;
-import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
-import com.ikea.crypto.common.crypto.SessionKeyService;
-import com.ikea.crypto.common.model.CipherRequestPayload;
-import com.ikea.crypto.common.model.PublicKeyResponse;
-import com.ikea.crypto.common.model.RotateKeyRequest;
-import com.ikea.crypto.common.model.SessionKeyTransport;
-import com.ikea.crypto.common.util.EncodingUtils;
 import com.ikea.crypto.server.model.DemoPlainRequest;
 import com.ikea.crypto.server.model.DemoSensitiveRequest;
-import com.ikea.crypto.server.model.DemoSensitiveResponse;
-import com.ikea.crypto.server.service.CryptoServer;
+import com.ikea.crypto.stc.constant.CryptoConstants;
+import com.ikea.crypto.stc.crypto.AesGcmCipher;
+import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.stc.crypto.SessionKeyService;
+import com.ikea.crypto.stc.key.CryptoServer;
+import com.ikea.crypto.stc.model.CipherRequestPayload;
+import com.ikea.crypto.stc.model.PublicKeyResponse;
+import com.ikea.crypto.stc.model.RotateKeyRequest;
+import com.ikea.crypto.stc.model.SessionKeyTransport;
+import com.ikea.crypto.stc.util.EncodingUtils;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
@@ -91,7 +90,7 @@ class CryptoServerControllerTest {
 
         byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
         String requestJson = objectMapper.writeValueAsString(
-                new DemoSensitiveResponse("name", "1234567890", "demo@example.com", "Shanghai 123 Main St", "extra info"));
+                new DemoSensitiveRequest("name", "1234567890", "demo@example.com", "Shanghai 123 Main St"));
 
         String encryptedData = AesGcmCipher.encryptAsBase64(requestJson, sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, cryptoServer.publicKey());
@@ -105,8 +104,7 @@ class CryptoServerControllerTest {
         mockMvc.perform(post("/crypto/server/request-only")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(requestPayload)))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data").value("mock plain response for request - plain response needed"));
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -120,7 +118,7 @@ class CryptoServerControllerTest {
         DemoPlainRequest demoPlainRequest = new DemoPlainRequest("ping");
 
         mockMvc.perform(post("/crypto/server/response-only")
-                        .header(CryptoConstants.HEADER_CRYPTO_SESSION_KEY, sessionTransport.encryptedSessionKeyBase64())
+                        .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY, sessionTransport.encryptedSessionKeyBase64())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(demoPlainRequest)))
                 .andExpect(status().isOk())

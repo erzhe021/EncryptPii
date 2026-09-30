@@ -1,0 +1,125 @@
+package com.ikea.crypto.server;
+
+import com.ikea.crypto.stc.constant.CryptoConstants;
+import com.ikea.crypto.stc.crypto.AesGcmCipher;
+import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.stc.crypto.SessionKeyService;
+import com.ikea.crypto.stc.model.CipherRequestPayload;
+import com.ikea.crypto.stc.model.PublicKeyResponse;
+import com.ikea.crypto.stc.util.EncodingUtils;
+import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
+import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
+import com.ikea.crypto.stc.exception.SessionKeyDecryptionException;
+import com.ikea.crypto.stc.key.KeyRing;
+import com.ikea.crypto.stc.key.CryptoServer;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+import javax.crypto.KeyGenerator;
+import javax.crypto.SecretKey;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.KeyFactory;
+import java.security.PublicKey;
+import java.security.SecureRandom;
+import java.security.spec.X509EncodedKeySpec;
+
+import static org.junit.jupiter.api.Assertions.*;
+
+class CryptoServerTest {
+
+    private CryptoServer server;
+    private KeyPair keyPair;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
+        keyGen.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
+        keyPair = keyGen.generateKeyPair();
+
+        server = new CryptoServer(keyPair.getPrivate(), keyPair.getPublic());
+    }
+
+    @AfterEach
+    void tearDown() {
+        CryptoSessionContextAccessor.clearCryptoSessionContext();
+    }
+
+    @Test
+    void testGetPublicKey() {
+        PublicKeyResponse response = server.getPublicKey();
+        assertNotNull(response);
+        assertNotNull(response.publicKeyBase64());
+        assertEquals("in-memory-test-key:1", response.keyId());
+        assertTrue(response.expiresAtEpochMillis() > System.currentTimeMillis());
+    }
+
+    @Test
+    void testDecryptValidPayload() throws Exception {
+        KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
+        keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
+        SecretKey sessionKey = keyGenerator.generateKey();
+
+        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+        String plaintext = "Secret Message from Client";
+
+        String encryptedData = AesGcmCipher.encryptAsBase64(plaintext, sessionKey, iv);
+        String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, keyPair.getPublic());
+
+        CipherRequestPayload payload = new CipherRequestPayload(
+                encryptedSessionKey,
+                EncodingUtils.toBase64(iv),
+                encryptedData
+        );
+
+        String decrypted = server.decrypt(payload);
+        assertEquals(plaintext, decrypted);
+
+        // Verify resolved session key was set in request context
+        SecretKey resolvedKey = CryptoSessionContextAccessor.getResolvedSessionKey();
+        assertNotNull(resolvedKey);
+        assertArrayEquals(sessionKey.getEncoded(), resolvedKey.getEncoded());
+    }
+
+    @Test
+    void testValidatePayloadRejectsMissingFields() {
+        assertThrows(InvalidCryptoPayloadException.class, () -> server.validatePayload(null));
+        assertThrows(InvalidCryptoPayloadException.class, () -> server.validatePayload(
+                new CipherRequestPayload(null, "iv", "data")
+        ));
+        assertThrows(InvalidCryptoPayloadException.class, () -> server.validatePayload(
+                new CipherRequestPayload("key", null, "data")
+        ));
+        assertThrows(InvalidCryptoPayloadException.class, () -> server.validatePayload(
+                new CipherRequestPayload("key", "iv", null)
+        ));
+    }
+
+    @Test
+    void testDecryptFailsWithInvalidKey() {
+        CipherRequestPayload payload = new CipherRequestPayload(
+                EncodingUtils.toBase64(new byte[]{1, 2, 3}),
+                EncodingUtils.toBase64(new byte[12]),
+                EncodingUtils.toBase64(new byte[]{4, 5, 6})
+        );
+
+        assertThrows(SessionKeyDecryptionException.class, () -> server.decrypt(payload));
+    }
+
+    @Test
+    void testReturnedPublicKeyMatchesKeyIdPrivateKey() throws Exception {
+        PublicKeyResponse response = server.getPublicKey();
+        PublicKey publicKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA)
+                .generatePublic(new X509EncodedKeySpec(EncodingUtils.fromBase64(response.publicKeyBase64())));
+
+        KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
+        keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
+        SecretKey sessionKey = keyGenerator.generateKey();
+        String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, publicKey);
+
+        KeyRing.KeyEntry keyEntry = server.keyRing().findKeyEntry(response.keyId()).orElseThrow();
+        SecretKey decrypted = SessionKeyService.decryptSessionKeyBase64(encryptedSessionKey, keyEntry.privateKey());
+        assertArrayEquals(sessionKey.getEncoded(), decrypted.getEncoded());
+    }
+}

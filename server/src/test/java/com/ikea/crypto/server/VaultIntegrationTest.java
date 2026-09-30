@@ -1,16 +1,16 @@
 package com.ikea.crypto.server;
 
-import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.crypto.AesGcmCipher;
-import com.ikea.crypto.common.crypto.CryptoSessionMaterialFactory;
-import com.ikea.crypto.common.crypto.SessionKeyService;
-import com.ikea.crypto.common.model.CipherRequestPayload;
-import com.ikea.crypto.common.model.PublicKeyResponse;
-import com.ikea.crypto.common.util.EncodingUtils;
-import com.ikea.crypto.server.service.CryptoServer;
-import com.ikea.crypto.server.service.KeyRing;
-import com.ikea.crypto.server.vault.VaultKeySynchronizer;
-import com.ikea.crypto.server.vault.VaultProperties;
+import com.ikea.crypto.stc.constant.CryptoConstants;
+import com.ikea.crypto.stc.crypto.AesGcmCipher;
+import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.stc.crypto.SessionKeyService;
+import com.ikea.crypto.stc.model.CipherRequestPayload;
+import com.ikea.crypto.stc.model.PublicKeyResponse;
+import com.ikea.crypto.stc.util.EncodingUtils;
+import com.ikea.crypto.stc.key.CryptoServer;
+import com.ikea.crypto.stc.key.KeyRing;
+import com.ikea.crypto.stc.vault.VaultKeySynchronizer;
+import com.ikea.crypto.stc.config.VaultProperties;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;

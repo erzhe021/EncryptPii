@@ -4,10 +4,10 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.client.core.CryptoClient;
 import com.ikea.crypto.client.core.CryptoHttpClient;
 import com.ikea.crypto.client.model.*;
-import com.ikea.crypto.common.constant.CryptoConstants;
-import com.ikea.crypto.common.model.CipherRequestPayload;
-import com.ikea.crypto.common.model.CipherResponsePayload;
-import com.ikea.crypto.common.model.SessionKeyTransport;
+import com.ikea.crypto.stc.constant.CryptoConstants;
+import com.ikea.crypto.stc.model.CipherRequestPayload;
+import com.ikea.crypto.stc.model.CipherResponsePayload;
+import com.ikea.crypto.stc.model.SessionKeyTransport;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -34,10 +34,10 @@ public class CryptoClientController {
 
     public CryptoClientController(
             @Value("${crypto.server.base-url:http:/localhost:9090}") String serverBaseUrl,
-            @Value("${crypto.server.endpoints.rsa.public-key:/crypto/server/public-key}") String publicKeyPath,
-            @Value("${crypto.server.endpoints.rsa.bidirectional:/crypto/server/bidirectional}") String bidirectionalPath,
-            @Value("${crypto.server.endpoints.rsa.request-only:/crypto/server/request-only}") String requestOnlyPath,
-            @Value("${crypto.server.endpoints.rsa.response-only:/crypto/server/response-only}") String responseOnlyPath
+            @Value("${crypto.server.endpoints.public-key:/crypto/server/public-key}") String publicKeyPath,
+            @Value("${crypto.server.endpoints.bidirectional:/crypto/server/bidirectional}") String bidirectionalPath,
+            @Value("${crypto.server.endpoints.request-only:/crypto/server/request-only}") String requestOnlyPath,
+            @Value("${crypto.server.endpoints.response-only:/crypto/server/response-only}") String responseOnlyPath
     ) {
         this.objectMapper = new ObjectMapper();
         this.bidirectionalPath = bidirectionalPath;
