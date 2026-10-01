@@ -1,9 +1,9 @@
 package com.ikea.crypto.client.model;
 
 /**
- * PlainData is a record that represents plain text data.
+ * PlainData is a record that represents plain text request.
  *
- * @param data the plain text data
+ * @param data the plain text request
  */
 public record PlainData(
         String data

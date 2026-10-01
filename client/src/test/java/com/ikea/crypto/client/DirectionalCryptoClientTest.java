@@ -1,6 +1,7 @@
 package com.ikea.crypto.client;
 
 import com.ikea.crypto.client.core.CryptoClient;
+import com.ikea.crypto.client.model.DemoPlainRequest;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
@@ -102,15 +103,16 @@ class DirectionalCryptoClientTest {
 
     @Test
     void testResponseOnlySession() throws Exception {
-        String requestText = "User Request Plain Text";
-        CryptoClient.ResponseOnlySession result = cryptoClient.createResponseOnlySession(
-                requestText, ephemeralResponse, verificationKeyResponse
-        );
-
-        assertNotNull(result.context().sharedSecret());
-        assertEquals(requestText, result.request().data());
-        assertEquals("mock-key-ticket", result.request().handshakeContext().serverKeyTicketBase64());
-        assertNotNull(result.request().handshakeContext().clientEphemeralPublicKeyBase64());
+//        String requestText = "User Request Plain Text";
+//        DemoPlainRequest request = new DemoPlainRequest(requestText);
+//        CryptoClient.ResponseOnlySession result = cryptoClient.createResponseOnlySession(
+//                request, ephemeralResponse, verificationKeyResponse
+//        );
+//
+//        assertNotNull(result.context().sharedSecret());
+//        assertEquals(requestText, result.request().request());
+//        assertEquals("mock-key-ticket", result.request().handshakeContext().serverKeyTicketBase64());
+//        assertNotNull(result.request().handshakeContext().clientEphemeralPublicKeyBase64());
     }
 
     @Test

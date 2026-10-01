@@ -167,7 +167,7 @@ EncryptPii/
 ```bash
 curl -X POST http://localhost:8080/crypto/client/ecdh/bidirectional \
   -H "Content-Type: application/json" \
-  -d '{"data":"Hello, Secure World!"}'
+  -d '{"request":"Hello, Secure World!"}'
 ```
 *响应结果示例（包含客户端发送的密文结构与解密后的明文响应）：*
 ```json
@@ -199,14 +199,14 @@ curl -X POST http://localhost:8080/crypto/client/ecdh/bidirectional \
 ```bash
 curl -X POST http://localhost:8080/crypto/client/ecdh/request-only \
   -H "Content-Type: application/json" \
-  -d '{"data":"Sensitive Request Payload"}'
+  -d '{"request":"Sensitive Request Payload"}'
 ```
 
 #### ③ 仅响应加密调用 (Response-Only)
 ```bash
 curl -X POST http://localhost:8080/crypto/client/ecdh/response-only \
   -H "Content-Type: application/json" \
-  -d '{"data":"Plain Query Params"}'
+  -d '{"request":"Plain Query Params"}'
 ```
 
 ---

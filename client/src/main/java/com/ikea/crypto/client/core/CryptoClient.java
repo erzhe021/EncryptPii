@@ -1,6 +1,8 @@
 package com.ikea.crypto.client.core;
 
 import com.ikea.crypto.client.model.CryptoRequestContext;
+import com.ikea.crypto.client.model.DemoPlainRequest;
+import com.ikea.crypto.client.model.PlainRequestPayload;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
@@ -19,7 +21,7 @@ import java.util.UUID;
 
 /**
  * CryptoClient is a client-side implementation of the Elliptic Curve Diffie-Hellman (ECDH) key exchange protocol.
- * It provides methods to encrypt and decrypt data using ECDH key exchange and AES-GCM encryption.
+ * It provides methods to encrypt and decrypt request using ECDH key exchange and AES-GCM encryption.
  * It is solely responsible for cryptographic operations (ECDSA signature verification, ECDH key agreement,
  * HKDF key derivation, and AES-GCM encryption/decryption) without any network or HTTP transport dependencies.
  */
@@ -42,11 +44,11 @@ public class CryptoClient {
     }
 
     /**
-     * Encrypts the given data using ECDH key exchange and AES-GCM encryption.
+     * Encrypts the given request using ECDH key exchange and AES-GCM encryption.
      * The method verifies the server's ephemeral public key signature, derives a shared secret,
-     * and derives a request AES key to encrypt the data.
+     * and derives a request AES key to encrypt the request.
      *
-     * @param data The plaintext data to encrypt.
+     * @param data The plaintext request to encrypt.
      * @param ephemeralResponse The server's ephemeral public key response.
      * @param ecdsaResponse The server's ECDSA verification key response.
      * @return An EncryptionResult containing the cipher request payload and crypto context for response decryption.
@@ -57,7 +59,7 @@ public class CryptoClient {
             EphemeralKeyResponse ephemeralResponse,
             VerificationKeyResponse ecdsaResponse
     ) throws GeneralSecurityException {
-        log.debug("start to encrypt data using ECDH key exchange and AES-GCM encryption");
+        log.debug("start to encrypt request using ECDH key exchange and AES-GCM encryption");
         verifyServerEphemeralPublicKey(ephemeralResponse, ecdsaResponse);
         NegotiatedKeys negotiatedKeys = negotiateKeys(ephemeralResponse.ephemeralPublicKeyBase64());
 
@@ -98,14 +100,14 @@ public class CryptoClient {
      * This method verifies the server's ephemeral public key signature, derives a shared secret,
      * and returns a ResponseOnlySession containing the plain request payload and the context needed for response decryption.
      *
-     * @param data The plaintext data to send in the request. Can be null if no data is being sent.
+     * @param demoPlainRequest The plain request payload to send in the response-only session.
      * @param ephemeralResponse The server's ephemeral public key response.
      * @param ecdsaResponse The server's ECDSA verification key response.
      * @return A ResponseOnlySession containing the request payload and context for response decryption.
      * @throws GeneralSecurityException If key negotiation or signature verification fails due to cryptographic errors.
      */
     public ResponseOnlySession createResponseOnlySession(
-            String data,
+            DemoPlainRequest demoPlainRequest,
             EphemeralKeyResponse ephemeralResponse,
             VerificationKeyResponse ecdsaResponse
     ) throws GeneralSecurityException {
@@ -118,7 +120,7 @@ public class CryptoClient {
                                 negotiatedKeys.clientEphemeralPublicKeyBase64(),
                                 ephemeralResponse.serverKeyTicketBase64()
                         ),
-                        data
+                        demoPlainRequest
                 ),
                 new CryptoRequestContext(
                         UUID.randomUUID().toString(),
@@ -134,9 +136,9 @@ public class CryptoClient {
     /**
      * Decrypts the given CipherDataPayload using the response AES key derived from the shared secret.
      *
-     * @param payload The CipherDataPayload containing the encrypted data and associated metadata.
+     * @param payload The CipherDataPayload containing the encrypted request and associated metadata.
      * @param context The CryptoRequestContext containing the shared secret or key agreement keys.
-     * @return The decrypted plaintext data as a String.
+     * @return The decrypted plaintext request as a String.
      * @throws GeneralSecurityException If decryption fails due to cryptographic errors or missing keys.
      */
     public String decrypt(CipherDataPayload payload, CryptoRequestContext context) throws GeneralSecurityException {

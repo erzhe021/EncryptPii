@@ -78,7 +78,7 @@ class CryptoServerIntegrationTest {
 //        );
 //
 //        SensitiveData responseData = objectMapper.readValue(decryptedResponseJson, SensitiveData.class);
-//        assertEquals("mock ecdh response for request - hello-server", responseData.data());
+//        assertEquals("mock ecdh response for request - hello-server", responseData.request());
 //    }
 //
 //    @Test
@@ -124,7 +124,7 @@ class CryptoServerIntegrationTest {
 //                postResult.getResponse().getContentAsString(),
 //                PlainData.class
 //        );
-//        assertEquals("mock plain response for request - hello-request-only", plainResponse.data());
+//        assertEquals("mock plain response for request - hello-request-only", plainResponse.request());
 //    }
 //
 //    @Test
@@ -176,6 +176,6 @@ class CryptoServerIntegrationTest {
 //        );
 //
 //        PlainData plainResponse = objectMapper.readValue(decryptedResponseJson, PlainData.class);
-//        assertEquals("mock ecdh response for request - hello-response-only", plainResponse.data());
+//        assertEquals("mock ecdh response for request - hello-response-only", plainResponse.request());
 //    }
 }

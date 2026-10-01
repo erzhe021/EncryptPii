@@ -6,6 +6,7 @@ public final class CryptoConstants {
 
     // --- Core Algorithms ---
     public static final String ALGORITHM_AES = "AES";
+    public static final String ALGORITHM_RSA = "RSA";
     public static final String ALGORITHM_EC = "EC";
     public static final String ALGORITHM_ECDH = "ECDH";
     public static final String ALGORITHM_HMAC_SHA256 = "HmacSHA256";

@@ -1,6 +1,7 @@
 package com.ikea.crypto.stc.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.exception.CryptoExceptionHandler;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.web.advice.RequestDecryptAdvice;
@@ -18,8 +19,6 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestBodyAdvice;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -29,24 +28,22 @@ import java.security.spec.ECGenParameterSpec;
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(RequestBodyAdvice.class)
 @ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "enabled", havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties(SensitiveTransportCryptoProperties.class)
+@EnableConfigurationProperties({SensitiveTransportCryptoProperties.class, VaultProperties.class})
 public class SensitiveTransportCryptoAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    public CryptoServer cryptoServer() throws GeneralSecurityException, IOException {
-        Path keyDir = resolveKeyDirectory();
-        if (Files.exists(keyDir.resolve("ecdsa-private-key.pkcs8")) && Files.exists(keyDir.resolve("ecdsa-public-key.x509"))
-                && Files.exists(keyDir.resolve("ecdh-ticket-master-key.aes"))) {
-            return CryptoServer.create(keyDir);
+    public CryptoServer cryptoServer(VaultProperties vaultProperties) throws GeneralSecurityException, IOException, InterruptedException {
+        if (vaultProperties.isEnabled()) {
+            return CryptoServer.createFromVault(vaultProperties);
         }
 
-        KeyPairGenerator keyGen = KeyPairGenerator.getInstance("EC");
-        keyGen.initialize(new ECGenParameterSpec("secp256r1"));
+        KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
+        keyGen.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
         KeyPair keyPair = keyGen.generateKeyPair();
 
-        KeyGenerator masterKeyGenerator = KeyGenerator.getInstance("AES");
-        masterKeyGenerator.init(256);
+        KeyGenerator masterKeyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
+        masterKeyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
         SecretKey masterKey = masterKeyGenerator.generateKey();
         return new CryptoServer(keyPair.getPrivate(), keyPair.getPublic(), masterKey);
     }
@@ -77,11 +74,4 @@ public class SensitiveTransportCryptoAutoConfiguration {
         return new CryptoKeyEndpoint(cryptoServer);
     }
 
-    private Path resolveKeyDirectory() {
-        Path localKeys = Path.of("src/main/resources/keys");
-        if (Files.exists(localKeys)) {
-            return localKeys;
-        }
-        return Path.of("server/src/main/resources/keys");
-    }
 }

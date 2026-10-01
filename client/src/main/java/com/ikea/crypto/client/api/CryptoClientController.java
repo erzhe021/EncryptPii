@@ -3,8 +3,11 @@ package com.ikea.crypto.client.api;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.client.core.CryptoClient;
 import com.ikea.crypto.client.core.CryptoHttpClient;
-import com.ikea.crypto.client.model.PlainData;
-import com.ikea.crypto.stc.model.*;
+import com.ikea.crypto.client.model.*;
+import com.ikea.crypto.stc.model.CipherDataPayload;
+import com.ikea.crypto.stc.model.CipherRequestPayload;
+import com.ikea.crypto.stc.model.EphemeralKeyResponse;
+import com.ikea.crypto.stc.model.VerificationKeyResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -43,62 +46,94 @@ public class CryptoClientController {
     }
 
     @PostMapping("/bidirectional")
-    public Map<String, Object> bidirectionalEcdhEncrypt(@RequestBody PlainData plainData) throws Exception {
+    public Map<String, Object> bidirectionalEcdhEncrypt(@RequestBody DemoSensitiveRequest request) throws Exception {
+        long startTime = System.currentTimeMillis();
+
         EphemeralKeyResponse ephemeralResponse = cryptoHttpClient.fetchEphemeralPublicKey();
         VerificationKeyResponse ecdsaResponse = cryptoHttpClient.fetchEcdsaPublicKey();
-        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(toJsonString(plainData), ephemeralResponse, ecdsaResponse);
+        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(toJsonString(request), ephemeralResponse, ecdsaResponse);
         CipherRequestPayload requestPayload = encrypted.payload();
+        long encryptedTime = System.currentTimeMillis();
 
         CipherDataPayload responsePayload = cryptoHttpClient.post(ecdhBidirectionalPath, requestPayload, CipherDataPayload.class);
+        long responseTime = System.currentTimeMillis();
+
         String decryptedServerResponse = cryptoClient.decrypt(responsePayload, encrypted.context());
-        PlainData decryptedServerResponseData = objectMapper.readValue(decryptedServerResponse, PlainData.class);
+        DemoSensitiveResponse demoSensitiveResponse = objectMapper.readValue(decryptedServerResponse, DemoSensitiveResponse.class);
+        long decryptedTime = System.currentTimeMillis();
 
         return Map.of(
-                "request", Map.of("data", plainData.data(), "encrypted", requestPayload),
-                "response", Map.of("data", decryptedServerResponseData.data(), "encrypted", responsePayload)
+                "request", Map.of("plain", request, "cipher", requestPayload),
+                "response", Map.of("plain", demoSensitiveResponse, "cipher", responsePayload),
+                "latency", new LatencyInMs(
+                        decryptedTime - startTime,
+                        encryptedTime - startTime,
+                        responseTime - encryptedTime,
+                        decryptedTime - responseTime
+                )
         );
     }
 
     @PostMapping("/request-only")
-    public Map<String, Object> requestOnlyEcdhEncrypt(@RequestBody PlainData plainData) throws Exception {
+    public Map<String, Object> requestOnlyEcdhEncrypt(@RequestBody DemoSensitiveRequest request) throws Exception {
+        long startTime = System.currentTimeMillis();
         EphemeralKeyResponse ephemeralResponse = cryptoHttpClient.fetchEphemeralPublicKey();
         VerificationKeyResponse ecdsaResponse = cryptoHttpClient.fetchEcdsaPublicKey();
-        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(toJsonString(plainData), ephemeralResponse, ecdsaResponse);
+        CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(toJsonString(request), ephemeralResponse, ecdsaResponse);
         CipherRequestPayload requestPayload = encrypted.payload();
-
-        PlainData responsePlainData = cryptoHttpClient.post(ecdhRequestOnlyPath, requestPayload, PlainData.class);
+        long encryptedTime = System.currentTimeMillis();
+        DemoPlainResponse demoPlainResponse = cryptoHttpClient.post(ecdhRequestOnlyPath, requestPayload, DemoPlainResponse.class);
+        long responseTime = System.currentTimeMillis();
 
         return Map.of(
-                "request", Map.of("data", plainData.data(), "encrypted", requestPayload),
-                "response", Map.of("data", responsePlainData.data())
+                "request", Map.of("plain", request, "cipher", requestPayload),
+                "response", demoPlainResponse,
+                "latency", new LatencyInMs(
+                        responseTime - startTime,
+                        encryptedTime - startTime,
+                        responseTime - encryptedTime,
+                        0
+                )
         );
     }
 
     @PostMapping("/response-only")
-    public Map<String, Object> responseOnlyEcdhEncrypt(@RequestBody(required = false) PlainData plainData) throws Exception {
+    public Map<String, Object> responseOnlyEcdhEncrypt(@RequestBody(required = false) DemoPlainRequest request) throws Exception {
+        long startTime = System.currentTimeMillis();
+
         EphemeralKeyResponse ephemeralResponse = cryptoHttpClient.fetchEphemeralPublicKey();
         VerificationKeyResponse ecdsaResponse = cryptoHttpClient.fetchEcdsaPublicKey();
         CryptoClient.ResponseOnlySession responseOnlySession = cryptoClient.createResponseOnlySession(
-                plainData == null ? null : plainData.data(),
+                request,
                 ephemeralResponse,
                 ecdsaResponse
         );
         PlainRequestPayload requestPayload = responseOnlySession.request();
+        long encryptedTime = System.currentTimeMillis();
 
         CipherDataPayload responsePayload = cryptoHttpClient.post(ecdhResponseOnlyPath, requestPayload, CipherDataPayload.class);
+        long responseTime = System.currentTimeMillis();
+
         String decryptedResponseData = cryptoClient.decrypt(responsePayload, responseOnlySession.context());
-        PlainData decryptedServerResponseData = objectMapper.readValue(decryptedResponseData, PlainData.class);
+        DemoSensitiveResponse demoSensitiveResponse = objectMapper.readValue(decryptedResponseData, DemoSensitiveResponse.class);
+        long decryptedTime = System.currentTimeMillis();
 
         return Map.of(
                 "request", requestPayload,
-                "response", Map.of("data", decryptedServerResponseData.data(), "encrypted", responsePayload)
+                "response", Map.of("plain", demoSensitiveResponse, "cipher", responsePayload),
+                "latency", new LatencyInMs(
+                        decryptedTime - startTime,
+                        encryptedTime - startTime,
+                        responseTime - encryptedTime,
+                        decryptedTime - responseTime
+                )
         );
     }
 
-    private String toJsonString(PlainData data) throws Exception {
-        if (data == null || data.data() == null || data.data().isEmpty()) {
-            throw new IllegalArgumentException("PlainData cannot be null or empty");
+    private String toJsonString(DemoSensitiveRequest request) throws Exception {
+        if (request == null) {
+            throw new IllegalArgumentException("DemoSensitiveRequest cannot be null");
         }
-        return objectMapper.writeValueAsString(data);
+        return objectMapper.writeValueAsString(request);
     }
 }

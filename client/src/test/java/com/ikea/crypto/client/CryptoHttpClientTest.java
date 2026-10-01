@@ -50,7 +50,7 @@ class CryptoHttpClientTest {
         EphemeralKeyResponse responseObj = new EphemeralKeyResponse(
                 "server-ephemeral-key",
                 "SHA256withECDSA",
-                "signature-data",
+                "signature-request",
                 "ticket-123"
         );
         String json = objectMapper.writeValueAsString(responseObj);
@@ -107,7 +107,7 @@ class CryptoHttpClientTest {
     @Test
     @SuppressWarnings("unchecked")
     void testPostAndDeserialize() throws Exception {
-        CipherDataPayload responsePayload = new CipherDataPayload("iv-base64", "encrypted-data-base64");
+        CipherDataPayload responsePayload = new CipherDataPayload("iv-base64", "encrypted-request-base64");
         String json = objectMapper.writeValueAsString(responsePayload);
 
         when(mockHttpResponse.statusCode()).thenReturn(200);
@@ -123,7 +123,7 @@ class CryptoHttpClientTest {
 
         assertNotNull(result);
         assertEquals("iv-base64", result.ivBase64());
-        assertEquals("encrypted-data-base64", result.encryptedDataBase64());
+        assertEquals("encrypted-request-base64", result.encryptedDataBase64());
     }
 
     @Test
