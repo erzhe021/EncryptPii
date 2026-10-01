@@ -2,9 +2,9 @@ package com.ikea.crypto.client;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.client.core.CryptoHttpClient;
-import com.ikea.crypto.common.model.CipherDataPayload;
-import com.ikea.crypto.common.model.EphemeralKeyResponse;
-import com.ikea.crypto.common.model.VerificationKeyResponse;
+import com.ikea.crypto.stc.model.CipherDataPayload;
+import com.ikea.crypto.stc.model.EphemeralKeyResponse;
+import com.ikea.crypto.stc.model.VerificationKeyResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;

@@ -8,3 +8,13 @@ crypto:
 logging:
   level:
     com.ikea.crypto: DEBUG
+
+sensitive:
+  transport:
+    crypto:
+      enabled: true
+      endpoint:
+        enabled: true
+        base-path: /crypto/server/ecdh
+      exception-handler:
+        enabled: true

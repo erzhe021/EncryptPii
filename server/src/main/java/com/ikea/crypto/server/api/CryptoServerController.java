@@ -1,43 +1,23 @@
 package com.ikea.crypto.server.api;
 
-import com.ikea.crypto.common.model.demo.PlainData;
-import com.ikea.crypto.common.model.demo.SensitiveData;
-import com.ikea.crypto.common.model.EphemeralKeyResponse;
-import com.ikea.crypto.common.model.PlainRequestPayload;
-import com.ikea.crypto.common.model.VerificationKeyResponse;
-import com.ikea.crypto.server.advice.DecryptRequest;
-import com.ikea.crypto.server.advice.EncryptResponse;
-import com.ikea.crypto.server.context.CryptoSessionContext;
-import com.ikea.crypto.server.context.CryptoSessionContextAccessor;
-import com.ikea.crypto.server.service.CryptoServer;
+import com.ikea.crypto.server.model.PlainData;
+import com.ikea.crypto.server.model.SensitiveData;
+import com.ikea.crypto.stc.annotation.DecryptRequest;
+import com.ikea.crypto.stc.annotation.EncryptResponse;
+import com.ikea.crypto.stc.model.PlainRequestPayload;
+import com.ikea.crypto.stc.session.CryptoSessionContext;
+import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.web.bind.annotation.*;
-
-import java.security.GeneralSecurityException;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/crypto/server/ecdh")
 @Slf4j
 public class CryptoServerController {
-
-    private final CryptoServer cryptoServer;
-
-    public CryptoServerController(CryptoServer cryptoServer) {
-        this.cryptoServer = cryptoServer;
-    }
-
-    @GetMapping("/ephemeral-public-key")
-    public EphemeralKeyResponse getEcdhEphemeralPublicKey() throws GeneralSecurityException {
-        log.debug("【api called】start to generating ECDH ephemeral key pair and return public key");
-        return cryptoServer.getEphemeralPublicKey();
-    }
-
-    @GetMapping("/ecdsa-public-key")
-    public VerificationKeyResponse getEcdsaPublicKey() {
-        log.debug("【api called】start to retrieving ECDSA public key for signature verification");
-        return cryptoServer.getEcdsaPublicKey();
-    }
 
     @PostMapping("/bidirectional")
     @DecryptRequest

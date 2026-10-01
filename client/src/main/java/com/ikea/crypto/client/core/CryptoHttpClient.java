@@ -1,8 +1,8 @@
 package com.ikea.crypto.client.core;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ikea.crypto.common.model.EphemeralKeyResponse;
-import com.ikea.crypto.common.model.VerificationKeyResponse;
+import com.ikea.crypto.stc.model.EphemeralKeyResponse;
+import com.ikea.crypto.stc.model.VerificationKeyResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
