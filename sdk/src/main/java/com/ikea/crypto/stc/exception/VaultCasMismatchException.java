@@ -1,4 +1,4 @@
-package com.ikea.crypto.stc.vault;
+package com.ikea.crypto.stc.exception;
 
 import lombok.Getter;
 

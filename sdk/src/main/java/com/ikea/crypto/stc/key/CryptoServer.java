@@ -1,19 +1,14 @@
 package com.ikea.crypto.stc.key;
 
 import com.ikea.crypto.stc.config.VaultProperties;
-import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.model.*;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.security.*;
-import java.security.spec.ECGenParameterSpec;
-import java.security.spec.PKCS8EncodedKeySpec;
-import java.security.spec.X509EncodedKeySpec;
+import java.security.GeneralSecurityException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.time.Duration;
 
 @Slf4j
@@ -45,16 +40,6 @@ public class CryptoServer {
         this.handshakeService = new HandshakeService(ecdsaSigningService, aesTicketMasterService, ticketTtl);
     }
 
-    public static CryptoServer create(Path keyDirectory) throws GeneralSecurityException, IOException {
-        Files.createDirectories(keyDirectory);
-        KeyPair ecdsaKeyPair = loadOrCreateLongLivedKeyPair(
-                keyDirectory.resolve("ecdsa-private-key.pkcs8"),
-                keyDirectory.resolve("ecdsa-public-key.x509")
-        );
-        SecretKey ticketMasterKey = loadOrCreateMasterKey(keyDirectory.resolve("ecdh-ticket-master-key.aes"));
-        return new CryptoServer(ecdsaKeyPair.getPrivate(), ecdsaKeyPair.getPublic(), ticketMasterKey);
-    }
-
     public static CryptoServer createFromVault(VaultProperties properties)
             throws GeneralSecurityException, IOException, InterruptedException {
         return createFromVault(
@@ -66,12 +51,7 @@ public class CryptoServer {
         );
     }
 
-    public static CryptoServer createFromVault(String vaultAddr, String vaultToken, String ecdsaSecretPath, String aesSecretPath)
-            throws GeneralSecurityException, IOException, InterruptedException {
-        return createFromVault(vaultAddr, vaultToken, ecdsaSecretPath, aesSecretPath, VaultProperties.AuthMethod.TOKEN);
-    }
-
-    public static CryptoServer createFromVault(
+    private static CryptoServer createFromVault(
             String vaultAddr,
             String vaultToken,
             String ecdsaSecretPath,
@@ -112,35 +92,10 @@ public class CryptoServer {
 
     private static String normalizeSecretPath(String secretPath) {
         if (secretPath == null || secretPath.isBlank()) {
-            return "sensitive-transport/ecdsa-ciam";
+            return "sensitive-transport-crypto/ecdsa-ciam";
         }
         String normalized = secretPath.trim();
         return normalized.startsWith("/") ? normalized.substring(1) : normalized;
     }
 
-    private static SecretKey loadOrCreateMasterKey(Path keyPath) throws IOException {
-        if (Files.exists(keyPath)) {
-            return new SecretKeySpec(Files.readAllBytes(keyPath), CryptoConstants.ALGORITHM_AES);
-        }
-        byte[] keyBytes = new byte[CryptoConstants.MASTER_KEY_SIZE_BYTES];
-        new SecureRandom().nextBytes(keyBytes);
-        Files.write(keyPath, keyBytes);
-        return new SecretKeySpec(keyBytes, CryptoConstants.ALGORITHM_AES);
-    }
-
-    private static KeyPair loadOrCreateLongLivedKeyPair(Path privateKeyPath, Path publicKeyPath) throws GeneralSecurityException, IOException {
-        KeyFactory keyFactory = KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC);
-        if (Files.exists(privateKeyPath) && Files.exists(publicKeyPath)) {
-            return new KeyPair(
-                    keyFactory.generatePublic(new X509EncodedKeySpec(Files.readAllBytes(publicKeyPath))),
-                    keyFactory.generatePrivate(new PKCS8EncodedKeySpec(Files.readAllBytes(privateKeyPath)))
-            );
-        }
-        KeyPairGenerator generator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
-        generator.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
-        KeyPair keyPair = generator.generateKeyPair();
-        Files.write(privateKeyPath, keyPair.getPrivate().getEncoded());
-        Files.write(publicKeyPath, keyPair.getPublic().getEncoded());
-        return keyPair;
-    }
 }

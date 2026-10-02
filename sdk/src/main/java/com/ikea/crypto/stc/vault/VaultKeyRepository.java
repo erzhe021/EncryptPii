@@ -52,7 +52,7 @@ public class VaultKeyRepository {
      * Reads raw secret version data from Vault. When version is null, reads latest.
      */
     public Optional<VaultClient.VaultSecretEntry> readSecretVersionRaw(String alias, Integer version)
-            throws IOException, InterruptedException {
+            throws IOException {
         String vaultToken = authenticator.authenticate();
         String secretPath = resolveSecretPath(alias);
         return vaultClient.readSecretVersion(vaultToken, secretPath, version);
@@ -69,7 +69,7 @@ public class VaultKeyRepository {
      * Reads and deserializes a specific key version from Vault.
      */
     public Optional<KeyRing.KeyEntry> readKeyVersion(String alias, Integer version)
-            throws IOException, InterruptedException, GeneralSecurityException {
+            throws IOException, GeneralSecurityException {
         Optional<VaultClient.VaultSecretEntry> entryOpt = readSecretVersionRaw(alias, version);
         if (entryOpt.isEmpty()) {
             return Optional.empty();
@@ -90,7 +90,7 @@ public class VaultKeyRepository {
      * Writes an RSA keypair to Vault KV v2 with optional Check-And-Set (CAS).
      */
     public VaultClient.VaultWriteResult writeKeyWithCas(String alias, KeyPair keyPair, Integer cas)
-            throws IOException, InterruptedException {
+            throws IOException {
         String vaultToken = authenticator.authenticate();
         String secretPath = resolveSecretPath(alias);
         Map<String, Object> payload = codec.serializeKeyPair(keyPair);

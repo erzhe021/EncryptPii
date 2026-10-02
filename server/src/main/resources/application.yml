@@ -21,8 +21,8 @@ sensitive:
         auth-path: ${VAULT_AUTH_PATH:auth/kubernetes}
         token: ${VAULT_TOKEN:root} #default is root, only used when auth-method is TOKEN
         auto-bootstrap: true # default is true, if set to false, the key must be created manually in vault
-        ecdsa-secret-path: ${VAULT_SECRET_PATH:secret/request/sensitive-transport-crypto/ecdsa-ciam} # change to your desired path in vault, make sure to update the client configuration accordingly
-        aes-secret-path: ${VAULT_AES_SECRET_PATH:secret/request/sensitive-transport-crypto/aes-ciam} # change to your desired path in vault, make sure to update the client configuration accordingly
+        ecdsa-secret-path: ${VAULT_SECRET_PATH:secret/sensitive-transport-crypto/ecdsa-ciam} # change to your desired path in vault, make sure to update the client configuration accordingly
+        aes-secret-path: ${VAULT_AES_SECRET_PATH:secret/sensitive-transport-crypto/aes-ciam} # change to your desired path in vault, make sure to update the client configuration accordingly
         key-alias: ${VAULT_KEY_ALIAS:ciam} #change to your desired key alias in vault, make sure to update the client configuration accordingly
         validity-millis: ${VAULT_VALIDITY_MILLIS:3600000} # 60s only for testing, in production it should be set to a higher value
         grace-period-millis: ${VAULT_GRACE_PERIOD_MILLIS:300000} # 30s only for testing, in production it should be set to a higher value

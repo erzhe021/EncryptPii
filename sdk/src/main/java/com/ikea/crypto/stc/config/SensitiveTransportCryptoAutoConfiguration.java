@@ -40,12 +40,12 @@ public class SensitiveTransportCryptoAutoConfiguration {
 
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_EC);
         keyGen.initialize(new ECGenParameterSpec(CryptoConstants.CURVE_ECDH));
-        KeyPair keyPair = keyGen.generateKeyPair();
+        KeyPair ecdsaKeyPair = keyGen.generateKeyPair();
 
         KeyGenerator masterKeyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
         masterKeyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
         SecretKey masterKey = masterKeyGenerator.generateKey();
-        return new CryptoServer(keyPair.getPrivate(), keyPair.getPublic(), masterKey);
+        return new CryptoServer(ecdsaKeyPair.getPrivate(), ecdsaKeyPair.getPublic(), masterKey);
     }
 
     @Bean

@@ -11,13 +11,7 @@ import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
-import java.security.GeneralSecurityException;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyPairGenerator;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.Signature;
+import java.security.*;
 import java.security.spec.ECGenParameterSpec;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
@@ -67,7 +61,7 @@ public class EcdsaSigningService {
     }
 
     public static EcdsaSigningService fromVault(VaultProperties properties)
-            throws GeneralSecurityException, IOException, InterruptedException {
+            throws GeneralSecurityException, IOException {
         VaultClient client = new VaultClient(properties.getAddr());
         VaultAuthenticator authenticator = new VaultAuthenticator(properties, client);
         String token = authenticator.authenticate();
@@ -114,9 +108,6 @@ public class EcdsaSigningService {
             Map<String, Object> payload = new HashMap<>();
             payload.put("privateKey", EncodingUtils.toBase64(pair.getPrivate().getEncoded()));
             payload.put("publicKey", EncodingUtils.toBase64(pair.getPublic().getEncoded()));
-            payload.put("privateKeyBase64", EncodingUtils.toBase64(pair.getPrivate().getEncoded()));
-            payload.put("publicKeyBase64", EncodingUtils.toBase64(pair.getPublic().getEncoded()));
-            payload.put("rotatedAtEpochMillis", String.valueOf(System.currentTimeMillis()));
             vaultClient.writeSecret(vaultToken, secretPath, payload);
             this.privateKey = pair.getPrivate();
             this.publicKey = pair.getPublic();
@@ -133,7 +124,7 @@ public class EcdsaSigningService {
     }
 
     private static void ensureRequiredSecretsPresent(VaultClient client, String vaultToken, VaultProperties properties)
-            throws GeneralSecurityException, IOException {
+            throws GeneralSecurityException {
         String ecdsaPath = normalizeSecretPath(properties.getEcdsaSecretPath());
         boolean ecdsaMissing = client.readSecret(vaultToken, ecdsaPath).isEmpty();
         if (!ecdsaMissing) {
@@ -150,26 +141,23 @@ public class EcdsaSigningService {
         Map<String, Object> payload = new HashMap<>();
         payload.put("privateKey", EncodingUtils.toBase64(pair.getPrivate().getEncoded()));
         payload.put("publicKey", EncodingUtils.toBase64(pair.getPublic().getEncoded()));
-        payload.put("privateKeyBase64", EncodingUtils.toBase64(pair.getPrivate().getEncoded()));
-        payload.put("publicKeyBase64", EncodingUtils.toBase64(pair.getPublic().getEncoded()));
-        payload.put("rotatedAtEpochMillis", String.valueOf(System.currentTimeMillis()));
         client.writeSecret(vaultToken, ecdsaPath, payload);
     }
 
     private static PrivateKey loadPrivateKeyFromVault(VaultClient client, String vaultToken, String secretPath, String keyFieldName)
-            throws GeneralSecurityException, IOException {
+            throws GeneralSecurityException {
         JsonNode secret = client.readSecret(vaultToken, secretPath)
                 .orElseThrow(() -> new IllegalStateException("Vault secret not found: " + secretPath));
-        String keyBase64 = readKeyFromNode(secret, keyFieldName, "privateKeyBase64", "privateKey", "ecdsaPrivateKeyBase64");
+        String keyBase64 = readKeyFromNode(secret, keyFieldName, "privateKey");
         return KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC)
                 .generatePrivate(new PKCS8EncodedKeySpec(EncodingUtils.fromBase64(keyBase64)));
     }
 
     private static PublicKey loadPublicKeyFromVault(VaultClient client, String vaultToken, String secretPath, String keyFieldName)
-            throws GeneralSecurityException, IOException {
+            throws GeneralSecurityException {
         JsonNode secret = client.readSecret(vaultToken, secretPath)
                 .orElseThrow(() -> new IllegalStateException("Vault secret not found: " + secretPath));
-        String keyBase64 = readKeyFromNode(secret, keyFieldName, "publicKeyBase64", "publicKey", "ecdsaPublicKeyBase64");
+        String keyBase64 = readKeyFromNode(secret, keyFieldName, "publicKey");
         return KeyFactory.getInstance(CryptoConstants.ALGORITHM_EC)
                 .generatePublic(new X509EncodedKeySpec(EncodingUtils.fromBase64(keyBase64)));
     }

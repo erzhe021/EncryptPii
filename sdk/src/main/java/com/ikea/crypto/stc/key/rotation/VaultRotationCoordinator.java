@@ -1,6 +1,7 @@
 package com.ikea.crypto.stc.key.rotation;
 
 import com.ikea.crypto.stc.config.VaultProperties;
+import com.ikea.crypto.stc.exception.VaultCasMismatchException;
 import com.ikea.crypto.stc.model.KeyMetadata;
 import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.vault.*;

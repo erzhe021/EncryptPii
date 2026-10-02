@@ -26,7 +26,7 @@ public class VaultAuthenticator {
      * Authenticates with Vault using the configured authentication method and retrieves a Vault token.
      * Caches the authenticated token to avoid redundant login handshakes and duplicate logging.
      */
-    public String authenticate() throws IOException, InterruptedException {
+    public String authenticate() throws IOException {
         if (cachedToken != null && !cachedToken.isBlank()) {
             return cachedToken;
         }

@@ -128,10 +128,7 @@ public class AesTicketMasterService {
             SecretKey newKey = generator.generateKey();
             Map<String, Object> payload = new HashMap<>();
             byte[] bytes = newKey.getEncoded();
-            payload.put("keyBase64", EncodingUtils.toBase64(bytes));
-            payload.put("aesKeyBase64", EncodingUtils.toBase64(bytes));
-            payload.put("masterKeyBase64", EncodingUtils.toBase64(bytes));
-            payload.put("rotatedAtEpochMillis", String.valueOf(System.currentTimeMillis()));
+            payload.put("masterKey", EncodingUtils.toBase64(bytes));
             vaultClient.writeSecret(vaultToken, secretPath, payload);
             this.ticketMasterKey = newKey;
             log.info("Auto-rotated Vault AES ticket key at path {}", secretPath);
@@ -147,7 +144,7 @@ public class AesTicketMasterService {
     }
 
     private static void ensureRequiredSecretsPresent(VaultClient client, String vaultToken, VaultProperties properties)
-            throws GeneralSecurityException, IOException {
+            throws GeneralSecurityException {
         String aesPath = normalizeSecretPath(properties.getAesSecretPath());
         boolean aesMissing = client.readSecret(vaultToken, aesPath).isEmpty();
         if (!aesMissing) {
@@ -161,17 +158,14 @@ public class AesTicketMasterService {
         SecretKey key = generator.generateKey();
         byte[] bytes = key.getEncoded();
         Map<String, Object> payload = new HashMap<>();
-        payload.put("keyBase64", EncodingUtils.toBase64(bytes));
-        payload.put("aesKeyBase64", EncodingUtils.toBase64(bytes));
-        payload.put("masterKeyBase64", EncodingUtils.toBase64(bytes));
-        payload.put("rotatedAtEpochMillis", String.valueOf(System.currentTimeMillis()));
+        payload.put("masterKey", EncodingUtils.toBase64(bytes));
         client.writeSecret(vaultToken, aesPath, payload);
     }
 
     private static SecretKey loadMasterKeyFromVault(VaultClient client, String vaultToken, String secretPath) {
         JsonNode secret = client.readSecret(vaultToken, secretPath)
                 .orElseThrow(() -> new IllegalStateException("Vault secret not found: " + secretPath));
-        String keyBase64 = readKeyFromNode(secret, "keyBase64", "aesKeyBase64", "masterKeyBase64", "key", "secretKey", "secret");
+        String keyBase64 = readKeyFromNode(secret, "masterKey");
         byte[] keyBytes = EncodingUtils.fromBase64(keyBase64);
         return new SecretKeySpec(keyBytes, CryptoConstants.ALGORITHM_AES);
     }

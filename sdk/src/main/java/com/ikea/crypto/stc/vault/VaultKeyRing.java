@@ -42,23 +42,6 @@ public class VaultKeyRing extends KeyRing {
         this.rotationCoordinator = new VaultRotationCoordinator(this.repository, properties, this.codec);
     }
 
-    public VaultKeyRing(
-            VaultProperties properties,
-            VaultClient vaultClient,
-            VaultAuthenticator authenticator,
-            VaultKeyCodec codec,
-            VaultKeyRepository repository,
-            VaultRotationCoordinator rotationCoordinator
-    ) {
-        super(properties.getKeyAlias(), properties.getValidityMillis(), properties.getGracePeriodMillis());
-        this.properties = properties;
-        this.vaultClient = vaultClient;
-        this.authenticator = authenticator;
-        this.codec = codec;
-        this.repository = repository;
-        this.rotationCoordinator = rotationCoordinator;
-    }
-
     /**
      * Initializes keys from Vault KV v2.
      * Backtracks active and transition keys within grace period, auto-bootstrapping if none exist.
@@ -263,15 +246,15 @@ public class VaultKeyRing extends KeyRing {
         return syncLatestKeyFromVault(getKeyAlias());
     }
 
-    public String authenticate() throws IOException, InterruptedException {
+    public String authenticate() throws IOException {
         return authenticator.authenticate();
     }
 
-    public VaultClient.VaultWriteResult saveKeyPairToVault(String alias, KeyPair keyPair) throws IOException, InterruptedException {
+    public VaultClient.VaultWriteResult saveKeyPairToVault(String alias, KeyPair keyPair) throws IOException {
         return repository.writeKeyWithCas(alias, keyPair, null);
     }
 
-    public VaultClient.VaultWriteResult saveKeyPairToVault(String alias, KeyPair keyPair, Integer cas) throws IOException, InterruptedException {
+    public VaultClient.VaultWriteResult saveKeyPairToVault(String alias, KeyPair keyPair, Integer cas) throws IOException {
         return repository.writeKeyWithCas(alias, keyPair, cas);
     }
 }
