@@ -9,6 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -210,7 +211,7 @@ public class VaultKeyRing extends KeyRing {
                 boolean makeActive = (getActiveKeyEntry() == null
                         || (remoteEntry.metadata().version() != null
                             && getActiveKeyEntry().metadata().version() != null
-                            && remoteEntry.metadata().version() > getActiveKeyEntry().metadata().version()
+                            && Objects.requireNonNull(remoteEntry.metadata().version()) > Objects.requireNonNull(getActiveKeyEntry().metadata().version())
                             && !remoteEntry.metadata().isExpired()));
 
                 registerKeyEntry(remoteEntry, makeActive);
@@ -246,7 +247,7 @@ public class VaultKeyRing extends KeyRing {
             if (latestOpt.isPresent()) {
                 KeyEntry remoteEntry = latestOpt.get();
                 long currentLocal = getCurrentVersion(alias);
-                if (remoteEntry.metadata().version() != null && remoteEntry.metadata().version() > currentLocal) {
+                if (remoteEntry.metadata().version() != null && Objects.requireNonNull(remoteEntry.metadata().version()) > currentLocal) {
                     registerKeyEntry(remoteEntry, true);
                     log.info("Synced newer key version {} from Vault into local memory", remoteEntry.metadata().version());
                     return remoteEntry;

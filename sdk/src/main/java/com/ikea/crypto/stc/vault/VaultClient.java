@@ -54,7 +54,7 @@ public class VaultClient {
                 .build();
         KubernetesAuthentication authentication = new KubernetesAuthentication(options, restTemplateBuilder().build());
         String token = authentication.login().getToken();
-        if (token == null || token.isBlank()) {
+        if (token.isBlank()) {
             throw new IllegalStateException("Vault Kubernetes login did not return a client token");
         }
         log.info("Successfully authenticated to Vault via Kubernetes auth method (role: {})", role);
@@ -77,10 +77,10 @@ public class VaultClient {
                 return Optional.empty();
             }
 
-            int resolvedVersion = metadata != null && metadata.getVersion() != null
+            int resolvedVersion = metadata != null
                     ? metadata.getVersion().getVersion()
-                    : (version != null ? version : 1);
-            String createdTime = metadata != null && metadata.getCreatedAt() != null
+                    : version != null ? version : 1;
+            String createdTime = metadata != null
                     ? metadata.getCreatedAt().toString()
                     : null;
             return Optional.of(new VaultSecretEntry(objectMapper.valueToTree(secret.getData()), resolvedVersion, createdTime));
@@ -121,9 +121,9 @@ public class VaultClient {
     }
 
     private VaultWriteResult toWriteResult(String vaultToken, String path, Versioned.Metadata metadata) {
-        int version = metadata != null && metadata.getVersion() != null ? metadata.getVersion().getVersion() : -1;
-        String createdTime = metadata != null && metadata.getCreatedAt() != null ? metadata.getCreatedAt().toString() : null;
-        if (version <= 0 || createdTime == null) {
+        int version = metadata != null ? metadata.getVersion().getVersion() : -1;
+        String createdTime = metadata != null ? metadata.getCreatedAt().toString() : null;
+        if (version <= 0) {
             Optional<VaultSecretEntry> latest = readSecretVersion(vaultToken, path, null);
             if (latest.isPresent()) {
                 version = latest.get().version();

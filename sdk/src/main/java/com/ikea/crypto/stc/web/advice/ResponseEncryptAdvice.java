@@ -1,11 +1,12 @@
 package com.ikea.crypto.stc.web.advice;
 
-import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
+import com.ikea.crypto.stc.annotation.EncryptResponse;
+import com.ikea.crypto.stc.exception.CryptoException;
+import com.ikea.crypto.stc.exception.CryptoServerSideException;
+import com.ikea.crypto.stc.exception.ResponseEncryptionException;
 import com.ikea.crypto.stc.session.CryptoSessionContext;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
-import com.ikea.crypto.stc.exception.CryptoException;
-import com.ikea.crypto.stc.exception.ResponseEncryptionException;
-import com.ikea.crypto.stc.annotation.EncryptResponse;
+import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
@@ -54,9 +55,7 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
             // Encrypt the response body using the handler
             return payloadHandler.encrypt(body, sessionContext);
         } catch (CryptoException e) {
-            throw e;
-        } catch (GeneralSecurityException e) {
-            throw new ResponseEncryptionException("Failed to encrypt response body", e);
+            throw new CryptoServerSideException("Failed to encrypt response body", e);
         } finally {
             CryptoSessionContextAccessor.clearCryptoSessionContext();
         }

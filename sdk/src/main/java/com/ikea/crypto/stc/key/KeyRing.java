@@ -176,6 +176,20 @@ public class KeyRing {
      */
     public long getCurrentVersion(String keyAlias) {
         String targetName = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : this.keyAlias;
+        long maxVersion = getMaxVersion(targetName);
+        if (maxVersion > 0) {
+            return maxVersion;
+        }
+        if (activeKeyEntry != null) {
+            KeyMetadata metadata = activeKeyEntry.metadata();
+            if (metadata != null && targetName.equals(metadata.keyAlias()) && metadata.version() != null) {
+                return Objects.requireNonNull(metadata.version());
+            }
+        }
+        return 0;
+    }
+
+    private long getMaxVersion(String targetName) {
         long maxVersion = 0;
         String prefix = targetName + ":";
         for (String id : keyEntriesById.keySet()) {
@@ -190,13 +204,7 @@ public class KeyRing {
                 }
             }
         }
-        if (maxVersion > 0) {
-            return maxVersion;
-        }
-        if (activeKeyEntry != null && targetName.equals(activeKeyEntry.metadata().keyAlias()) && activeKeyEntry.metadata().version() != null) {
-            return activeKeyEntry.metadata().version();
-        }
-        return 0;
+        return maxVersion;
     }
 
     public KeyPair generateKeyPair() throws GeneralSecurityException {

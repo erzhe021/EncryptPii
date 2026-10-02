@@ -1,11 +1,12 @@
 package com.ikea.crypto.stc.web.advice;
 
-import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
+import com.ikea.crypto.stc.annotation.DecryptRequest;
+import com.ikea.crypto.stc.exception.CryptoException;
+import com.ikea.crypto.stc.exception.CryptoServerSideException;
+import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
 import com.ikea.crypto.stc.session.CryptoSessionContext;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
-import com.ikea.crypto.stc.exception.CryptoException;
-import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
-import com.ikea.crypto.stc.annotation.DecryptRequest;
+import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpHeaders;
@@ -56,7 +57,7 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
             CryptoSessionContextAccessor.setCryptoSessionContext(sessionContext);
             decryptedBody = payloadHandler.decrypt(sessionContext);
         } catch (CryptoException e) {
-            throw e;
+            throw new CryptoServerSideException("Failed to decrypt request body", e);
         } catch (GeneralSecurityException e) {
             throw new InvalidCryptoPayloadException("Failed to decrypt request body", e);
         }

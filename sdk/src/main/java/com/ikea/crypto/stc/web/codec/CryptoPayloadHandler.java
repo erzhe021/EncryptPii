@@ -5,16 +5,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
-import com.ikea.crypto.stc.model.CipherRequestPayload;
-import com.ikea.crypto.stc.model.CipherResponsePayload;
-import com.ikea.crypto.stc.model.SessionKeyTransport;
-import com.ikea.crypto.stc.util.EncodingUtils;
-import com.ikea.crypto.stc.session.CryptoSessionContext;
-import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
-import com.ikea.crypto.stc.exception.CryptoClientSideException;
 import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
 import com.ikea.crypto.stc.exception.ResponseEncryptionException;
 import com.ikea.crypto.stc.key.CryptoServer;
+import com.ikea.crypto.stc.model.CipherRequestPayload;
+import com.ikea.crypto.stc.model.CipherResponsePayload;
+import com.ikea.crypto.stc.model.SessionKeyTransport;
+import com.ikea.crypto.stc.session.CryptoSessionContext;
+import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
+import com.ikea.crypto.stc.util.EncodingUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -58,7 +57,7 @@ public class CryptoPayloadHandler {
         return cryptoServer.decrypt(payload);
     }
 
-    public Object encrypt(Object responseBody, CryptoSessionContext sessionContext) throws GeneralSecurityException {
+    public Object encrypt(Object responseBody, CryptoSessionContext sessionContext) {
         if (sessionContext == null || sessionContext.requestKeyMaterial() == null) {
             throw new InvalidCryptoPayloadException("Session context is required for RSA operations");
         }
@@ -91,8 +90,6 @@ public class CryptoPayloadHandler {
                 String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(responseBodyString, sessionKey, iv);
                 return new CipherResponsePayload(EncodingUtils.toBase64(iv), encryptedDataBase64);
             }
-        } catch (CryptoClientSideException e) {
-            throw e;
         } catch (GeneralSecurityException e) {
             throw new ResponseEncryptionException("Failed to encrypt response body", e);
         }

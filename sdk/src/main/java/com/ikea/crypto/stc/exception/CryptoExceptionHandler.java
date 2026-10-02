@@ -17,7 +17,7 @@ import java.security.GeneralSecurityException;
  */
 @Slf4j
 @RestControllerAdvice
-@Order(Ordered.LOWEST_PRECEDENCE)
+@Order()
 public class CryptoExceptionHandler {
 
     @ResponseStatus(HttpStatus.BAD_REQUEST)
