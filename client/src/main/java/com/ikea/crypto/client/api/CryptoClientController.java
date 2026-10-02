@@ -60,24 +60,21 @@ public class CryptoClientController {
         CipherRequestPayload requestPayload = encrypted.payload();
 
         long encryptedTime = System.currentTimeMillis();
-        log.debug("request encryption time: {} ms", encryptedTime - startTime);
 
         CipherResponsePayload responsePayload = cryptoHttpClient.postBidirectional(bidirectionalPath, requestPayload);
 
         long httpTime = System.currentTimeMillis();
-        log.debug("http request-response time: {} ms", httpTime - encryptedTime);
 
         String decryptedServerResponse = cryptoClient.decrypt(responsePayload, encrypted.context());
         DemoSensitiveResponse demoSensitiveResponse =
                 objectMapper.readValue(decryptedServerResponse, DemoSensitiveResponse.class);
 
         long finish = System.currentTimeMillis();
-        log.debug("response decryption time: {} ms", finish - httpTime);
 
         return Map.of(
                 "request", Map.of("plain", demoSensitiveRequest, "cipher", requestPayload),
                 "response", Map.of("plain", demoSensitiveResponse, "cipher", responsePayload),
-                "latency", new LatencyInMs(
+                "latency in ms", new LatencyInMs(
                         (finish - startTime),
                         (encryptedTime - startTime),
                         (httpTime - encryptedTime),
@@ -97,17 +94,15 @@ public class CryptoClientController {
         CipherRequestPayload requestPayload = encrypted.payload();
 
         long encryptedTime = System.currentTimeMillis();
-        log.debug("request encryption time: {} ms", encryptedTime - startTime);
 
         DemoPlainResponse demoPlainResponse = cryptoHttpClient.postRequestOnly(requestOnlyPath, requestPayload);
 
         long httpTime = System.currentTimeMillis();
-        log.debug("http request-response time: {} ms", httpTime - encryptedTime);
 
         return Map.of(
                 "request", Map.of("plain", demoSensitiveRequest, "cipher", requestPayload),
                 "response", demoPlainResponse,
-                "latency", new LatencyInMs(
+                "latency in ms", new LatencyInMs(
                         (System.currentTimeMillis() - startTime),
                         (encryptedTime - startTime),
                         (httpTime - encryptedTime),
@@ -130,23 +125,20 @@ public class CryptoClientController {
                 SessionKeyTransport.fromGeneratedKey(serverKeyInfo.keyId(), sessionKey, serverKeyInfo.publicKey());
 
         long requestPrepared = System.currentTimeMillis();
-        log.debug("request preparation time: {} ms", requestPrepared - startTime);
 
         CipherResponsePayload responsePayload =
                 cryptoHttpClient.postResponseOnly(responseOnlyPath, demoPlainRequest, sessionTransport);
         long httpTime = System.currentTimeMillis();
-        log.debug("http request-response time: {} ms", httpTime - requestPrepared);
 
         // Decrypt the response data using the session key and IV
         String decryptedResponseData = cryptoClient.decrypt(responsePayload, sessionKey);
         DemoSensitiveResponse demoSensitiveResponse =
                 objectMapper.readValue(decryptedResponseData, DemoSensitiveResponse.class);
-        log.debug("response plain data after decryption: {}", demoSensitiveResponse);
 
         return Map.of(
                 "request", demoPlainRequest == null ? "no data" : demoPlainRequest,
                 "response", Map.of("plain", demoSensitiveResponse, "cipher", responsePayload),
-                "latency", new LatencyInMs(
+                "latency in ms", new LatencyInMs(
                         (System.currentTimeMillis() - startTime),
                         (requestPrepared - startTime),
                         (httpTime - requestPrepared),

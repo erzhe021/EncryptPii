@@ -2,7 +2,7 @@
 
 本项目实现了基于 **HashiCorp Vault KV v2** 的端到端传输密钥生命周期管理与多 Pod 分布式平滑轮换。通过将密钥管理下沉至 Vault 并结合本地内存密钥环（`VaultKeyRing`），在保证**私钥不落地、统一集中治理**的前提下，实现了**纳秒级本地加解密（0 网络 RTT）**与**零停机平滑轮转**。
 
-> 说明：本文中的“轮换”指 Vault/DevOps 的密钥生命周期操作；应用侧仅暴露 `GET /crypto/server/public-key` 供客户端取公钥，不再提供 HTTP rotate 接口。
+> 说明：本文中的“轮换”指 Vault/DevOps 的密钥生命周期操作；应用侧仅暴露 `GET /crypto/server/public-key` 供客户端取公钥，不提供 HTTP rotate 接口。
 
 ---
 
@@ -41,13 +41,13 @@
 
 ### 1. Key ID 命名规范
 系统以 `<keyAlias>:<version>` 格式唯一标识一个密钥版本，例如：
-* `ciam:1`
-* `ciam:2`
+* `rsa-ciam:1`
+* `rsa-ciam:2`
 
 客户端请求时在 Payload / Header 中携带 `keyId`，服务端根据 `keyId` 精确索引对应私钥。
 
 ### 2. Vault KV v2 存储格式
-在 Vault 的 Secret 路径（默认 `secret/data/sensitive-transport-crypto/ciam`）下存储：
+在 Vault 的 Secret 路径（默认 `secret/data/sensitive-transport-crypto/rsa-ciam`）下存储：
 ```json
 {
   "data": {
