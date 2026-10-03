@@ -24,6 +24,7 @@ sensitive:
         kubernetes:
           role: ${VAULT_K8S_ROLE:crypto-server}
           token-path: ${VAULT_K8S_TOKEN_PATH:/var/run/secrets/kubernetes.io/serviceaccount/token}
+      kong-gateway-token: ${KONG_CRYPTO_GATEWAY_TOKEN:19c1a9a1aa5e3d251e5a83b68fe0b4ce081fb3b38809b1cf4a0b849623ff8184}
 
 logging:
   level:

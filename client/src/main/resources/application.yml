@@ -2,7 +2,8 @@ server:
   port: 8080
 crypto:
   server:
-    base-url: http://localhost:9090
+#    base-url: http://localhost:9090 #directly use the server's base url, but for testing we can use the local one
+    base-url: http://localhost:8000 #use Kong as a proxy to forward the request to the server
     endpoints:
       public-key: /crypto/server/public-key
       bidirectional: /crypto/server/bidirectional
