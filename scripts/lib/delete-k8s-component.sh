@@ -76,6 +76,7 @@ case "$component" in
     delete_resource kong deployment encryptpii-kong
     delete_resource kong service encryptpii-kong
     delete_resource kong configmap encryptpii-kong-config
+    delete_resource kong serviceaccount encryptpii-kong
     delete_resource kong secret encryptpii-vault encryptpii-gateway
     ;;
   vault)
@@ -87,6 +88,8 @@ case "$component" in
     delete_resource vault statefulset vault
     delete_resource vault service vault vault-internal
     delete_resource vault configmap vault-config
+    delete_resource vault serviceaccount vault
+    kubectl delete clusterrolebinding vault-auth-delegator --ignore-not-found --wait=true --timeout=180s
     if [[ "$purge_data" == true ]]; then
       delete_resource vault persistentvolumeclaim data-vault-0
       while IFS= read -r volume; do

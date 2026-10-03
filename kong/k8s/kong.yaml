@@ -3,6 +3,12 @@ kind: Namespace
 metadata:
   name: kong
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: encryptpii-kong
+  namespace: kong
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -18,7 +24,8 @@ spec:
       labels:
         app: encryptpii-kong
     spec:
-      automountServiceAccountToken: false
+      serviceAccountName: encryptpii-kong
+      automountServiceAccountToken: true
       containers:
         - name: kong
           image: encryptpii-kong:3.7
@@ -42,12 +49,7 @@ spec:
               value: 0.0.0.0:8100
             - name: KONG_NGINX_HTTP_CLIENT_MAX_BODY_SIZE
               value: 16m
-            - name: ENCRYPTPII_VAULT_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: encryptpii-vault
-                  key: token
-            - name: ENCRYPTPII_GATEWAY_TOKEN
+            - name: KONG_TO_ENCRYPTPII_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: encryptpii-gateway

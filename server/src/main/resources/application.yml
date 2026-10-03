@@ -9,7 +9,7 @@ spring:
 sensitive:
   transport:
     crypto:
-      kong-gateway-token: ${KONG_CRYPTO_GATEWAY_TOKEN:${ENCRYPTPII_GATEWAY_TOKEN:}}
+      kong-gateway-token: ${KONG_TO_ENCRYPTPII_AUTH_TOKEN:}
 
 logging:
   level:

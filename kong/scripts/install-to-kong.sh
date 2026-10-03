@@ -21,13 +21,9 @@ if [[ -z "${ENCRYPTPII_VAULT_TOKEN:-}" || "$ENCRYPTPII_VAULT_TOKEN" == replace-w
   printf 'ENCRYPTPII_VAULT_TOKEN must be set in %s\n' "$ENV_FILE" >&2
   exit 1
 fi
-gateway_token="${ENCRYPTPII_GATEWAY_TOKEN:-}"
+gateway_token="${KONG_TO_ENCRYPTPII_AUTH_TOKEN:-}"
 if [[ ${#gateway_token} -lt 32 ]]; then
-  printf 'Set ENCRYPTPII_GATEWAY_TOKEN to a random value of at least 32 characters in %s\n' "$ENV_FILE" >&2
-  exit 1
-fi
-if [[ "$ENCRYPTPII_GATEWAY_TOKEN" == replace-with-* ]]; then
-  printf 'Replace the example gateway token in %s before installation\n' "$ENV_FILE" >&2
+  printf 'Set KONG_TO_ENCRYPTPII_AUTH_TOKEN to a random value of at least 32 characters in %s\n' "$ENV_FILE" >&2
   exit 1
 fi
 

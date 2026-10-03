@@ -128,7 +128,7 @@ upsert_plugin() {
         key_validity_millis:$key_validity_millis,
         key_grace_period_millis:$key_grace_period_millis,
         upstream_path:$upstream_path,
-        upstream_auth_token:"{vault://env/ENCRYPTPII_GATEWAY_TOKEN}",
+        upstream_auth_token:"{vault://env/KONG_TO_ENCRYPTPII_AUTH_TOKEN}",
         decrypt_request:$decrypt_request,
         encrypt_response:$encrypt_response,
         serve_public_key:$serve_public_key,

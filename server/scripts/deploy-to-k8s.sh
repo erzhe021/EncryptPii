@@ -5,7 +5,7 @@ umask 077
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 if [[ "${1:-}" == --help ]]; then
-  printf '用法: server/scripts/deploy-to-k8s.sh [--skip-build]\n构建并部署 Server，保留已有 gateway Secret。\n'
+  printf '用法: server/scripts/deploy-to-k8s.sh [--skip-build]\n构建并部署 Server，使用根目录 .env 中的 KONG_TO_ENCRYPTPII_AUTH_TOKEN。\n'
   exit 0
 fi
 skip_build=false
@@ -21,23 +21,17 @@ if [[ "$(kubectl config current-context)" != docker-desktop ]]; then
 fi
 source "$REPO_DIR/kong/scripts/load-env.sh"
 load_plugin_env "$REPO_DIR/.env"
-kubectl create namespace encryptpii --dry-run=client -o yaml | kubectl apply -f -
-gateway_secret="$(kubectl -n encryptpii get secret encryptpii-gateway --ignore-not-found -o name)"
-if [[ -z "$gateway_secret" ]]; then
-  token="${KONG_CRYPTO_GATEWAY_TOKEN:-${ENCRYPTPII_GATEWAY_TOKEN:-}}"
-  if [[ "${#token}" -lt 32 || "$token" == replace-with-* || "$token" == *$'\n'* || "$token" == *$'\r'* ]]; then
-    printf '首次部署需要根目录 .env 中有效且与 Kong 一致的 gateway token（至少 32 字符）。\n' >&2
-    exit 1
-  fi
-  if [[ -n "${ENCRYPTPII_GATEWAY_TOKEN:-}" && "$token" != "$ENCRYPTPII_GATEWAY_TOKEN" ]]; then
-    printf 'KONG_CRYPTO_GATEWAY_TOKEN 与 ENCRYPTPII_GATEWAY_TOKEN 不一致。\n' >&2
-    exit 1
-  fi
-  work_dir="$(mktemp -d)"
-  trap 'rm -f "$work_dir/token"; rmdir "$work_dir"' EXIT
-  printf '%s' "$token" > "$work_dir/token"
-  kubectl -n encryptpii create secret generic encryptpii-gateway --from-file=token="$work_dir/token"
+token="${KONG_TO_ENCRYPTPII_AUTH_TOKEN:-}"
+if [[ "${#token}" -lt 32 || "$token" == replace-with-* || "$token" == *$'\n'* || "$token" == *$'\r'* ]]; then
+  printf '根目录 .env 中的 KONG_TO_ENCRYPTPII_AUTH_TOKEN 必须是至少 32 字符的有效密钥。\n' >&2
+  exit 1
 fi
+kubectl create namespace encryptpii --dry-run=client -o yaml | kubectl apply -f -
+work_dir="$(mktemp -d)"
+trap 'rm -f "$work_dir/token"; rmdir "$work_dir"' EXIT
+printf '%s' "$token" > "$work_dir/token"
+kubectl -n encryptpii create secret generic encryptpii-gateway \
+  --from-file=token="$work_dir/token" --dry-run=client -o yaml | kubectl apply -f -
 if [[ "$skip_build" != true ]]; then
   bash "$SCRIPT_DIR/build-image.sh"
 fi

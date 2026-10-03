@@ -10,7 +10,10 @@ return {
         type = "record",
         fields = {
           { vault_addr = { type = "string", required = true } },
-          { vault_token = { type = "string", required = true, referenceable = true } },
+          { vault_auth_method = { type = "string", default = "token", one_of = { "token", "kubernetes" } } },
+          { vault_token = { type = "string", referenceable = true } },
+          { vault_auth_role = { type = "string", match = [[^[%w_-]+$]] } },
+          { vault_kubernetes_jwt_path = { type = "string", default = "/var/run/secrets/kubernetes.io/serviceaccount/token" } },
           { vault_secret_path = { type = "string", required = true, match = [[^[%w/_-]+$]] } },
           { key_alias = { type = "string", required = true, match = [[^[%w_-]+$]] } },
           { key_validity_millis = { type = "integer", default = 60000, between = { 1, 31536000000 } } },

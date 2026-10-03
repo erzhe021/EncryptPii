@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 LOCAL_DIR="$REPO_DIR/vault/.local"
 if [[ "${1:-}" == --help ]]; then
-  printf '用法: vault/scripts/deploy-to-k8s.sh\n部署 Vault；首次初始化密钥和令牌，重复运行保留数据。\n'
+  printf '用法: vault/scripts/deploy-to-k8s.sh\n部署 Vault；首次初始化密钥和 Kubernetes auth，重复运行保留数据。\n'
   exit 0
 fi
 if [[ "$#" -ne 0 ]]; then

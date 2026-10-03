@@ -16,6 +16,7 @@ local OAEP_OPTIONS = {
 }
 local key_cache = {}
 local key_cache_order = {}
+local vault_token_cache = {}
 
 local CryptoKongPlugin = {
   PRIORITY = 1000,
@@ -103,6 +104,97 @@ local function get_vault_json(config, token, location, path)
   return decoded
 end
 
+local function get_vault_token(config, location)
+  if config.vault_auth_method ~= "kubernetes" then
+    local token, token_err = resolve_secret(config.vault_token)
+    if not token or token == "" then
+      kong.log.err("Unable to resolve the configured Vault token: ", token_err)
+      return nil, "Vault is unavailable"
+    end
+    return token
+  end
+
+  if type(config.vault_auth_role) ~= "string" or config.vault_auth_role == "" then
+    kong.log.err("Kubernetes Vault auth requires a role")
+    return nil, "Vault is unavailable"
+  end
+  local cache_key = location.host .. ":" .. location.port .. ":" .. config.vault_auth_role
+  local cached = vault_token_cache[cache_key]
+  if cached and cached.expires_at > ngx.now() then
+    return cached.token
+  end
+
+  local jwt_file, open_err = io.open(config.vault_kubernetes_jwt_path, "r")
+  if not jwt_file then
+    kong.log.err("Unable to read the Kubernetes service-account JWT: ", open_err)
+    return nil, "Vault is unavailable"
+  end
+  local jwt = jwt_file:read("*a")
+  jwt_file:close()
+  if not jwt or jwt == "" then
+    kong.log.err("Kubernetes service-account JWT file is empty")
+    return nil, "Vault is unavailable"
+  end
+  jwt = jwt:gsub("%s+$", "")
+
+  local httpc = http.new()
+  httpc:set_timeouts(1000, 1000, 2000)
+  local ok, connect_err = httpc:connect({
+    scheme = location.scheme,
+    host = location.host,
+    port = location.port,
+    ssl_verify = location.scheme == "https",
+  })
+  if not ok then
+    kong.log.err("Unable to connect to Vault for Kubernetes login: ", connect_err)
+    return nil, "Vault is unavailable"
+  end
+
+  local request_body, encode_err = cjson.encode({
+    role = config.vault_auth_role,
+    jwt = jwt,
+  })
+  if not request_body then
+    kong.log.err("Unable to encode the Vault Kubernetes login request: ", encode_err)
+    httpc:close()
+    return nil, "Vault is unavailable"
+  end
+  local response, request_err = httpc:request({
+    method = "POST",
+    path = location.base_path .. "/v1/auth/kubernetes/login",
+    headers = {
+      ["Content-Type"] = "application/json",
+      ["Accept"] = "application/json",
+    },
+    body = request_body,
+  })
+  if not response then
+    kong.log.err("Vault Kubernetes login request failed: ", request_err)
+    httpc:close()
+    return nil, "Vault is unavailable"
+  end
+  local response_body, body_err = response:read_body()
+  httpc:close()
+  local decoded, decode_err
+  if response_body then
+    decoded, decode_err = cjson.decode(response_body)
+  end
+  local token = decoded and decoded.auth and decoded.auth.client_token
+  local lease_duration = decoded and tonumber(decoded.auth and decoded.auth.lease_duration)
+  if response.status ~= 200 or type(token) ~= "string" or token == ""
+    or not lease_duration or lease_duration <= 0 then
+    kong.log.err("Vault Kubernetes login returned HTTP ", response.status, ": ",
+      body_err or decode_err or "missing token or lease duration")
+    return nil, "Vault is unavailable"
+  end
+
+  vault_token_cache[cache_key] = {
+    token = token,
+    expires_at = ngx.now() + lease_duration * 0.8,
+  }
+  return token
+end
+
 local function parse_vault_created_time(value)
   local year, month, day, hour, minute, second
   if type(value) == "string" then
@@ -142,10 +234,9 @@ local function get_private_key(config, key_id)
     return nil, "Vault is unavailable"
   end
 
-  local vault_token, token_err = resolve_secret(config.vault_token)
-  if not vault_token or vault_token == "" then
-    kong.log.err("Unable to resolve the configured Vault token: ", token_err)
-    return nil, "Vault is unavailable"
+  local vault_token, token_err = get_vault_token(config, location)
+  if not vault_token then
+    return nil, token_err
   end
 
   local cache_expires_at = ngx.now() + KEY_CACHE_TTL_SECONDS
@@ -218,10 +309,9 @@ local function get_public_key_response(config)
     return nil, "Vault is unavailable"
   end
 
-  local vault_token, token_err = resolve_secret(config.vault_token)
-  if not vault_token or vault_token == "" then
-    kong.log.err("Unable to resolve the configured Vault token: ", token_err)
-    return nil, "Vault is unavailable"
+  local vault_token, token_err = get_vault_token(config, location)
+  if not vault_token then
+    return nil, token_err
   end
 
   local metadata_path = config.vault_secret_path:gsub("/data/", "/metadata/", 1)

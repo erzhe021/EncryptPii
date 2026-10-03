@@ -48,7 +48,7 @@ fi
 bash "$REPO_DIR/vault/scripts/deploy-to-k8s.sh"
 gateway_token="$(openssl rand -hex 32)"
 printf '%s' "$gateway_token" > "$LOCAL_DIR/gateway-token"
-ENCRYPTPII_GATEWAY_TOKEN="$gateway_token" KONG_CRYPTO_GATEWAY_TOKEN="$gateway_token" \
+KONG_TO_ENCRYPTPII_AUTH_TOKEN="$gateway_token" \
   bash "$REPO_DIR/server/scripts/deploy-to-k8s.sh" --skip-build
 bash "$REPO_DIR/kong/scripts/deploy-to-k8s.sh" --skip-build
 bash "$REPO_DIR/client/scripts/deploy-to-k8s.sh" --skip-build

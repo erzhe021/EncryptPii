@@ -9,7 +9,7 @@ skip_build=false
 for argument in "$@"; do
   case "$argument" in
     --help|-h)
-      printf '用法: kong/scripts/deploy-to-k8s.sh [--skip-build]\n默认连接集群内 Vault，使用 kong/encryptpii-vault Secret。\n'
+      printf '用法: kong/scripts/deploy-to-k8s.sh [--skip-build]\n默认使用 Kubernetes auth 访问集群内 Vault。\n'
       exit 0 ;;
     --vault-in-k8s) ;; # Compatible with older deployment commands.
     --skip-build) skip_build=true ;;
@@ -24,7 +24,6 @@ if [[ "$(kubectl config current-context)" != "docker-desktop" ]]; then
   exit 1
 fi
 kubectl -n encryptpii get secret encryptpii-gateway >/dev/null
-kubectl -n kong get secret encryptpii-vault >/dev/null
 if [[ "$skip_build" != true ]]; then
   "$SCRIPT_DIR/build-plugin.sh"
 fi
@@ -52,8 +51,8 @@ jq -n \
   def plugin($public; $decrypt; $encrypt; $source; $path):
     {name:"sensitive-transport-crypto",config:{
       vault_addr:$vault_addr,vault_secret_path:$secret_path,key_alias:$alias,
-      vault_token:"{vault://env/ENCRYPTPII_VAULT_TOKEN}",
-      upstream_auth_token:"{vault://env/ENCRYPTPII_GATEWAY_TOKEN}",
+      vault_auth_method:"kubernetes",vault_auth_role:"encryptpii-kong",
+      upstream_auth_token:"{vault://env/KONG_TO_ENCRYPTPII_AUTH_TOKEN}",
       key_validity_millis:$validity,key_grace_period_millis:$grace,
       max_body_bytes:$max_body,serve_public_key:$public,
       decrypt_request:$decrypt,encrypt_response:$encrypt,

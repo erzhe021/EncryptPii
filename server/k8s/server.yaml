@@ -27,7 +27,7 @@ spec:
             - name: http
               containerPort: 9090
           env:
-            - name: KONG_CRYPTO_GATEWAY_TOKEN
+            - name: KONG_TO_ENCRYPTPII_AUTH_TOKEN
               valueFrom:
                 secretKeyRef:
                   name: encryptpii-gateway
