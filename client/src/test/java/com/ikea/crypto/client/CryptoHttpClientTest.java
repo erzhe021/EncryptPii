@@ -1,7 +1,7 @@
 package com.ikea.crypto.client;
 
 import com.ikea.crypto.client.core.CryptoHttpClient;
-import com.ikea.crypto.stc.constant.CryptoConstants;
+import com.ikea.crypto.client.constant.CryptoConstants;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 

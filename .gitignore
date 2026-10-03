@@ -42,4 +42,5 @@ bin/
 
 ### Mac OS ###
 .DS_Store
-crypto-kong-plugin/.env
+sensitive-transport-crypto/.env
+/server/.env

@@ -2,13 +2,13 @@ package com.ikea.crypto.client;
 
 import com.ikea.crypto.client.context.CryptoRequestContext;
 import com.ikea.crypto.client.core.CryptoClient;
-import com.ikea.crypto.stc.constant.CryptoConstants;
-import com.ikea.crypto.stc.crypto.AesGcmCipher;
-import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
-import com.ikea.crypto.stc.crypto.SessionKeyService;
-import com.ikea.crypto.stc.model.CipherResponsePayload;
-import com.ikea.crypto.stc.model.CipherRequestPayload;
-import com.ikea.crypto.stc.util.EncodingUtils;
+import com.ikea.crypto.client.constant.CryptoConstants;
+import com.ikea.crypto.client.crypto.AesGcmCipher;
+import com.ikea.crypto.client.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.client.crypto.SessionKeyService;
+import com.ikea.crypto.client.model.CipherResponsePayload;
+import com.ikea.crypto.client.model.CipherRequestPayload;
+import com.ikea.crypto.client.util.EncodingUtils;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
