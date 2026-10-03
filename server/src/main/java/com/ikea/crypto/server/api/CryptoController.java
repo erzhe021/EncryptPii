@@ -17,8 +17,8 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 
 @RestController
-@RequestMapping("/crypto/kong")
-public class CryptoKongController {
+@RequestMapping("/crypto/server")
+public class CryptoController {
 
     private static final String GATEWAY_TOKEN_HEADER = "X-Crypto-Gateway-Token";
 

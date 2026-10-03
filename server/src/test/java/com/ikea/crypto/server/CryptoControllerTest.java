@@ -1,7 +1,7 @@
 package com.ikea.crypto.server;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ikea.crypto.server.api.CryptoKongController;
+import com.ikea.crypto.server.api.CryptoController;
 import com.ikea.crypto.server.model.DemoSensitiveRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,9 +14,9 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(CryptoKongController.class)
+@WebMvcTest(CryptoController.class)
 @TestPropertySource(properties = "sensitive.transport.crypto.kong-gateway-token=test-only-gateway-token")
-class CryptoKongControllerTest {
+class CryptoControllerTest {
 
     private static final String GATEWAY_TOKEN = "test-only-gateway-token";
 
@@ -28,7 +28,7 @@ class CryptoKongControllerTest {
 
     @Test
     void rejectsRequestsWithoutGatewayToken() throws Exception {
-        mockMvc.perform(post("/crypto/kong/bidirectional")
+        mockMvc.perform(post("/crypto/server/bidirectional")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new DemoSensitiveRequest("name", "phone", "email", "address"))))
@@ -36,8 +36,23 @@ class CryptoKongControllerTest {
     }
 
     @Test
+    void acceptsOtherAuthenticatedServerEndpoints() throws Exception {
+        mockMvc.perform(post("/crypto/server/request-only")
+                        .header("X-Crypto-Gateway-Token", GATEWAY_TOKEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new DemoSensitiveRequest("name", "phone", "email", "address"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.cardNumber").value("1234-5678-9012-3456"));
+        mockMvc.perform(post("/crypto/server/response-only")
+                        .header("X-Crypto-Gateway-Token", GATEWAY_TOKEN))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.name").value("eric"));
+    }
+
+    @Test
     void acceptsAuthenticatedPlaintextRequests() throws Exception {
-        mockMvc.perform(post("/crypto/kong/bidirectional")
+        mockMvc.perform(post("/crypto/server/bidirectional")
                         .header("X-Crypto-Gateway-Token", GATEWAY_TOKEN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(

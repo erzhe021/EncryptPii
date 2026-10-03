@@ -1,6 +1,6 @@
 package com.ikea.crypto.server;
 
-import com.ikea.crypto.server.api.CryptoServerController;
+import com.ikea.crypto.server.api.PlainController;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -11,8 +11,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(CryptoServerController.class)
-class CryptoServerControllerTest {
+@WebMvcTest(PlainController.class)
+class PlainControllerTest {
 
     @Autowired
     private MockMvc mockMvc;

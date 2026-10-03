@@ -2,14 +2,14 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-REPO_DIR="$(cd -- "$PLUGIN_DIR/.." && pwd)"
-COMPOSE_FILE="$PLUGIN_DIR/docker-compose.yml"
+KONG_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+REPO_DIR="$(cd -- "$KONG_DIR/.." && pwd)"
+COMPOSE_FILE="$KONG_DIR/docker-compose.yml"
 ENV_FILE="$REPO_DIR/.env"
 source "$SCRIPT_DIR/load-env.sh"
 load_plugin_env "$ENV_FILE"
 
-docker compose --env-file "$ENV_FILE" --project-directory "$PLUGIN_DIR" -f "$COMPOSE_FILE" build kong
+docker compose --env-file "$ENV_FILE" --project-directory "$KONG_DIR" -f "$COMPOSE_FILE" build kong
 
 docker run --rm \
   --entrypoint /usr/local/openresty/luajit/bin/luajit \

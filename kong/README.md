@@ -10,7 +10,9 @@ This plugin implements the EncryptPii SDK's hybrid RSA/AES-GCM wire format at Ko
 
 It requires Kong Gateway 3.x with LuaJIT and `lua-resty-openssl` installed in the Kong runtime.
 
-推荐部署到 Kubernetes：先部署 Vault 和 Server，再执行 `./sensitive-transport-crypto/scripts/deploy-to-k8s.sh`，最后部署 Client。Kong 默认通过集群内 Service 访问 Server/Vault，直接使用 `kong/encryptpii-vault` Secret，无需 `--vault-in-k8s`，不会从 `.env` 覆盖 Vault 令牌。
+目录结构：`k8s/` 存放 Kubernetes 清单，`plugins/sensitive-transport-crypto/` 存放 Lua 插件源码，`scripts/` 存放构建、部署、删除及路由配置脚本；`Dockerfile` 和旧版 `docker-compose.yml` 位于本目录。所有脚本继续读取仓库根目录 `.env`。
+
+推荐部署到 Kubernetes：先部署 Vault 和 Server，再执行 `./kong/scripts/deploy-to-k8s.sh`，最后部署 Client。Kong 默认通过集群内 Service 访问 Server/Vault，直接使用 `kong/encryptpii-vault` Secret，无需 `--vault-in-k8s`，不会从 `.env` 覆盖 Vault 令牌。
 
 ## Cryptographic compatibility
 
@@ -56,7 +58,7 @@ Legacy Docker Compose installation (not the default Kubernetes workflow):
 ```bash
 cp .env.example .env
 # Set ENCRYPTPII_VAULT_TOKEN and matching gateway tokens in the root .env.
-./sensitive-transport-crypto/scripts/install-to-kong.sh
+./kong/scripts/install-to-kong.sh
 ```
 
 To rebuild the plugin image only, run `./scripts/build-plugin.sh`. To reapply route configuration without restarting Kong, run `./scripts/configure-routes.sh`.
@@ -84,7 +86,7 @@ plugins:
       key_alias: rsa-ciam
       key_validity_millis: 60000
       key_grace_period_millis: 30000
-      upstream_path: /crypto/kong/bidirectional
+      upstream_path: /crypto/server/bidirectional
       upstream_auth_token: "{vault://env/ENCRYPTPII_GATEWAY_TOKEN}"
       decrypt_request: true
       encrypt_response: true
@@ -93,16 +95,16 @@ plugins:
 
 Use `decrypt_request: true, encrypt_response: false` for request-only encryption. Response-only routes set `decrypt_request: false, encrypt_response: true, session_key_source: header`.
 
-The `/plain/server/public-key` route is handled directly by the plugin: Kong reads the latest KV v2 version and returns the SDK-compatible `publicKeyBase64`, `keyId`, and `expiresAtEpochMillis` response without proxying to Spring. The protected business routes are rewritten to `/crypto/kong/*`; those handlers accept plaintext only when the configured `X-Crypto-Gateway-Token` matches.
+The `/crypto/server/public-key` route is handled directly by the plugin: Kong reads the latest KV v2 version and returns the SDK-compatible `publicKeyBase64`, `keyId`, and `expiresAtEpochMillis` response without proxying to Spring. Protected business requests are decrypted and forwarded to Server `/crypto/server/*`; those handlers accept plaintext only when the configured `X-Crypto-Gateway-Token` matches.
 
 The local Kong instance is configured with these routes:
 
 | Client path | Method | Upstream path | Crypto behavior |
 | --- | --- | --- | --- |
-| `/plain/server/public-key` | GET | none | Kong reads active public key and metadata from Vault |
-| `/plain/server/bidirectional` | POST | `/crypto/kong/bidirectional` | Decrypt request and encrypt response |
-| `/plain/server/request-only` | POST | `/crypto/kong/request-only` | Decrypt request |
-| `/plain/server/response-only` | POST | `/crypto/kong/response-only` | Decrypt session-key headers and encrypt response |
+| `/crypto/server/public-key` | GET | none | Kong reads active public key and metadata from Vault |
+| `/crypto/server/bidirectional` | POST | `/crypto/server/bidirectional` | Decrypt request and encrypt response |
+| `/crypto/server/request-only` | POST | `/crypto/server/request-only` | Decrypt request |
+| `/crypto/server/response-only` | POST | `/crypto/server/response-only` | Decrypt session-key headers and encrypt response |
 
 For production, grant Kong only `read` access to `secret/data/sensitive-transport-crypto/rsa-ciam` and `secret/metadata/sensitive-transport-crypto/rsa-ciam`. Configure a non-root Vault token and a random gateway token through your secret manager.
 

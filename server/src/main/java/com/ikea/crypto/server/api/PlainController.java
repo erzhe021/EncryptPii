@@ -9,11 +9,11 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/plain/server")
-public class CryptoServerController {
+public class PlainController {
 
     @PostMapping("/normal")
     public DemoPlainResponse normal(@RequestBody DemoPlainRequest request) {
-        return new DemoPlainResponse("123456789012", 3, 10000L, "remarks");
+        return new DemoPlainResponse("123456789012", 3, 10000L, "remarks for request: " + request.data());
     }
 
 }

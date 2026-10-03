@@ -12,9 +12,6 @@ esac
 
 usage() {
   component_dir="$component"
-  if [[ "$component" == kong ]]; then
-    component_dir=sensitive-transport-crypto
-  fi
   printf '用法: %s/scripts/delete-from-k8s.sh [--yes]' "$component_dir"
   if [[ "$component" == vault ]]; then
     printf ' [--purge-data]'

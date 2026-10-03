@@ -47,8 +47,8 @@ done
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
-PLUGIN_DIR="$REPO_DIR/sensitive-transport-crypto"
-source "$PLUGIN_DIR/scripts/load-env.sh"
+KONG_DIR="$REPO_DIR/kong"
+source "$KONG_DIR/scripts/load-env.sh"
 source "$SCRIPT_DIR/common.sh"
 if [[ -f "$REPO_DIR/.env" ]]; then
   load_plugin_env "$REPO_DIR/.env"

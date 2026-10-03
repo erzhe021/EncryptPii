@@ -20,14 +20,14 @@ if [[ "$(kubectl config current-context)" != docker-desktop ]]; then
   printf '此脚本要求当前 Kubernetes context 为 docker-desktop。\n' >&2
   exit 1
 fi
-source "$REPO_DIR/sensitive-transport-crypto/scripts/load-env.sh"
+source "$REPO_DIR/kong/scripts/load-env.sh"
 load_plugin_env "$REPO_DIR/.env"
 validate_crypto_config
 
 # 清理前完成配置校验和镜像构建，部署时复用这些镜像。
 bash "$REPO_DIR/server/scripts/build-image.sh"
 bash "$REPO_DIR/client/scripts/build-image.sh"
-bash "$REPO_DIR/sensitive-transport-crypto/scripts/build-plugin.sh"
+bash "$REPO_DIR/kong/scripts/build-plugin.sh"
 bash "$SCRIPT_DIR/cleanup-local-k8s.sh"
 
 mkdir -p "$LOCAL_DIR"
@@ -50,7 +50,7 @@ gateway_token="$(openssl rand -hex 32)"
 printf '%s' "$gateway_token" > "$LOCAL_DIR/gateway-token"
 ENCRYPTPII_GATEWAY_TOKEN="$gateway_token" KONG_CRYPTO_GATEWAY_TOKEN="$gateway_token" \
   bash "$REPO_DIR/server/scripts/deploy-to-k8s.sh" --skip-build
-bash "$REPO_DIR/sensitive-transport-crypto/scripts/deploy-to-k8s.sh" --skip-build
+bash "$REPO_DIR/kong/scripts/deploy-to-k8s.sh" --skip-build
 bash "$REPO_DIR/client/scripts/deploy-to-k8s.sh" --skip-build
 
 printf '\n重建完成。访问 Client：\n'

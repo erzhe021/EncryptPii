@@ -3,13 +3,13 @@ set -euo pipefail
 umask 077
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-REPO_DIR="$(cd -- "$PLUGIN_DIR/.." && pwd)"
+KONG_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+REPO_DIR="$(cd -- "$KONG_DIR/.." && pwd)"
 skip_build=false
 for argument in "$@"; do
   case "$argument" in
     --help|-h)
-      printf '用法: sensitive-transport-crypto/scripts/deploy-to-k8s.sh [--skip-build]\n默认连接集群内 Vault，使用 kong/encryptpii-vault Secret。\n'
+      printf '用法: kong/scripts/deploy-to-k8s.sh [--skip-build]\n默认连接集群内 Vault，使用 kong/encryptpii-vault Secret。\n'
       exit 0 ;;
     --vault-in-k8s) ;; # Compatible with older deployment commands.
     --skip-build) skip_build=true ;;
@@ -77,11 +77,11 @@ jq -n \
         {name:"encryptpii-public-key",paths:["/crypto/server/public-key"],methods:["GET"],
          strip_path:false,plugins:[plugin(true;false;false;"body";"/crypto/server/public-key")]},
         {name:"encryptpii-bidirectional",paths:["/crypto/server/bidirectional"],methods:["POST"],
-         strip_path:false,plugins:[plugin(false;true;true;"body";"/crypto/kong/bidirectional")]},
+         strip_path:false,plugins:[plugin(false;true;true;"body";"/crypto/server/bidirectional")]},
         {name:"encryptpii-request-only",paths:["/crypto/server/request-only"],methods:["POST"],
-         strip_path:false,plugins:[plugin(false;true;false;"body";"/crypto/kong/request-only")]},
+         strip_path:false,plugins:[plugin(false;true;false;"body";"/crypto/server/request-only")]},
         {name:"encryptpii-response-only",paths:["/crypto/server/response-only"],methods:["POST"],
-         strip_path:false,plugins:[plugin(false;false;true;"header";"/crypto/kong/response-only")]}
+         strip_path:false,plugins:[plugin(false;false;true;"header";"/crypto/server/response-only")]}
       ]
     }]
   }' > "$work_dir/kong.json"
@@ -90,7 +90,7 @@ kubectl -n kong create configmap encryptpii-kong-config \
 
 "$REPO_DIR/scripts/import-local-k8s-images.sh" encryptpii-kong:3.7
 
-kubectl apply -f "$PLUGIN_DIR/k8s/kong.yaml"
+kubectl apply -f "$KONG_DIR/k8s/kong.yaml"
 kubectl -n kong rollout restart deployment/encryptpii-kong
 kubectl -n kong rollout status deployment/encryptpii-kong --timeout=180s
 printf 'Kong deployed. Access with: kubectl -n kong port-forward service/encryptpii-kong 18000:8000 18001:8001 18002:8002\n'

@@ -19,7 +19,7 @@ if [[ "$(kubectl config current-context)" != docker-desktop ]]; then
   printf '此脚本要求 docker-desktop context。\n' >&2
   exit 1
 fi
-source "$REPO_DIR/sensitive-transport-crypto/scripts/load-env.sh"
+source "$REPO_DIR/kong/scripts/load-env.sh"
 load_plugin_env "$REPO_DIR/.env"
 kubectl create namespace encryptpii --dry-run=client -o yaml | kubectl apply -f -
 gateway_secret="$(kubectl -n encryptpii get secret encryptpii-gateway --ignore-not-found -o name)"

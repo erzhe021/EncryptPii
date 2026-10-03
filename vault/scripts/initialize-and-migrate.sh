@@ -5,7 +5,7 @@ umask 077
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(cd -- "$SCRIPT_DIR/../.." && pwd)"
 LOCAL_DIR="$SCRIPT_DIR/../.local"
-source "$REPO_DIR/sensitive-transport-crypto/scripts/load-env.sh"
+source "$REPO_DIR/kong/scripts/load-env.sh"
 load_plugin_env "$REPO_DIR/.env"
 if [[ "$(kubectl config current-context)" != docker-desktop ]]; then
   printf 'This script requires the docker-desktop context.\n' >&2

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-PLUGIN_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
-REPO_DIR="$(cd -- "$PLUGIN_DIR/.." && pwd)"
+KONG_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+REPO_DIR="$(cd -- "$KONG_DIR/.." && pwd)"
 ENV_FILE="$REPO_DIR/.env"
 
 source "$SCRIPT_DIR/load-env.sh"
@@ -170,9 +170,9 @@ response_only_route="$(
   upsert_route encryptpii-response-only /crypto/server/response-only POST
 )"
 
-upsert_plugin "$bidirectional_route" true true body /crypto/kong/bidirectional
-upsert_plugin "$request_only_route" true false body /crypto/kong/request-only
-upsert_plugin "$response_only_route" false true header /crypto/kong/response-only
+upsert_plugin "$bidirectional_route" true true body /crypto/server/bidirectional
+upsert_plugin "$request_only_route" true false body /crypto/server/request-only
+upsert_plugin "$response_only_route" false true header /crypto/server/response-only
 upsert_plugin "$public_key_route" false false body /crypto/server/public-key true
 
 api -X PUT "$ADMIN_URL/services/encryptpii-server-plain" \

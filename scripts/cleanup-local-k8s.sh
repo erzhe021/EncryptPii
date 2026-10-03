@@ -59,7 +59,7 @@ volume_names="$(
 )"
 
 bash "$REPO_DIR/client/scripts/delete-from-k8s.sh" --yes
-bash "$REPO_DIR/sensitive-transport-crypto/scripts/delete-from-k8s.sh" --yes
+bash "$REPO_DIR/kong/scripts/delete-from-k8s.sh" --yes
 bash "$REPO_DIR/server/scripts/delete-from-k8s.sh" --yes
 bash "$REPO_DIR/vault/scripts/delete-from-k8s.sh" --purge-data --yes
 

@@ -23,7 +23,7 @@ if [[ "$(kubectl config current-context)" != docker-desktop ]]; then
   printf '此脚本要求 docker-desktop context。\n' >&2
   exit 1
 fi
-source "$REPO_DIR/sensitive-transport-crypto/scripts/load-env.sh"
+source "$REPO_DIR/kong/scripts/load-env.sh"
 load_plugin_env "$REPO_DIR/.env"
 secret_path="${ENCRYPTPII_VAULT_SECRET_PATH:-}"
 if [[ ! "$secret_path" =~ ^secret/data/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$ ]]; then
