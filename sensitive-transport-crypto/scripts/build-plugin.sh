@@ -3,8 +3,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 PLUGIN_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+REPO_DIR="$(cd -- "$PLUGIN_DIR/.." && pwd)"
 COMPOSE_FILE="$PLUGIN_DIR/docker-compose.yml"
-ENV_FILE="$PLUGIN_DIR/.env"
+ENV_FILE="$REPO_DIR/.env"
 source "$SCRIPT_DIR/load-env.sh"
 load_plugin_env "$ENV_FILE"
 

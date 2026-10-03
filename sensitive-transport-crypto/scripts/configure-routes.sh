@@ -2,12 +2,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-ENV_FILE="$SCRIPT_DIR/../.env"
+PLUGIN_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
+REPO_DIR="$(cd -- "$PLUGIN_DIR/.." && pwd)"
+ENV_FILE="$REPO_DIR/.env"
 
 source "$SCRIPT_DIR/load-env.sh"
 if [[ -f "$ENV_FILE" ]]; then
   load_plugin_env "$ENV_FILE"
 fi
+validate_crypto_config
 
 ADMIN_URL="${KONG_ADMIN_URL:?Please set the KONG_ADMIN_URL environment variable}"
 UPSTREAM_URL="${ENCRYPTPII_UPSTREAM_URL:?Please set the ENCRYPTPII_UPSTREAM_URL environment variable}"
@@ -27,18 +30,6 @@ done
 
 if [[ ! "$UPSTREAM_URL" =~ ^https?://[^/]+$ ]]; then
   printf 'ENCRYPTPII_UPSTREAM_URL must be an HTTP(S) origin without a path\n' >&2
-  exit 1
-fi
-if [[ ! "$VAULT_SECRET_PATH" =~ ^secret/data/[A-Za-z0-9/_-]+$ ]]; then
-  printf 'ENCRYPTPII_VAULT_SECRET_PATH must be a KV v2 data path\n' >&2
-  exit 1
-fi
-if [[ ! "$KEY_ALIAS" =~ ^[A-Za-z0-9_-]+$ ]]; then
-  printf 'ENCRYPTPII_KEY_ALIAS contains unsupported characters\n' >&2
-  exit 1
-fi
-if [[ ! "$KEY_VALIDITY_MILLIS" =~ ^[0-9]+$ || ! "$KEY_GRACE_PERIOD_MILLIS" =~ ^[0-9]+$ || ! "$MAX_BODY_BYTES" =~ ^[0-9]+$ ]]; then
-  printf 'Key lifecycle and body-size settings must be positive integers\n' >&2
   exit 1
 fi
 
@@ -184,4 +175,19 @@ upsert_plugin "$request_only_route" true false body /crypto/kong/request-only
 upsert_plugin "$response_only_route" false true header /crypto/kong/response-only
 upsert_plugin "$public_key_route" false false body /crypto/server/public-key true
 
-printf 'Configured the Vault-backed public-key route and three protected crypto routes. ADMIN URL: %s\n' "$ADMIN_URL"
+api -X PUT "$ADMIN_URL/services/encryptpii-server-plain" \
+  -H 'Content-Type: application/json' \
+  --data-binary "$(jq -n --arg url "$UPSTREAM_URL" \
+    '{name:"encryptpii-server-plain",url:$url}')" >/dev/null
+api -X PUT "$ADMIN_URL/routes/encryptpii-plain" \
+  -H 'Content-Type: application/json' \
+  --data-binary '{
+    "name":"encryptpii-plain",
+    "service":{"name":"encryptpii-server-plain"},
+    "paths":["/plain/server/normal"],
+    "methods":["POST"],
+    "strip_path":false,
+    "path_handling":"v0"
+  }' >/dev/null
+
+printf 'Configured the Vault-backed public-key route, three protected crypto routes, and a plugin-free plaintext route. ADMIN URL: %s\n' "$ADMIN_URL"

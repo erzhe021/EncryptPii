@@ -1,13 +1,20 @@
 server:
   port: 8080
+
 crypto:
   server:
-    base-url: http://localhost:8000 #use Kong as a proxy to forward the request to the server
+    base-url: http://encryptpii-kong.kong.svc.cluster.local:8000
     endpoints:
       public-key: /crypto/server/public-key
       bidirectional: /crypto/server/bidirectional
       request-only: /crypto/server/request-only
       response-only: /crypto/server/response-only
+
+plain:
+  server:
+    base-url: ${crypto.server.base-url}
+    endpoints:
+      normal: /plain/server/normal
 
 logging:
   level:

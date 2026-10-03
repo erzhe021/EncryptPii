@@ -4,7 +4,7 @@ server:
 spring:
   config:
     import:
-      - optional:file:./server/.env[.properties]
+      - optional:file:./.env[.properties]
 
 sensitive:
   transport:

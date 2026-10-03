@@ -5,7 +5,7 @@ load_plugin_env() {
   local line name value
 
   if [[ ! -f "$env_file" ]]; then
-    printf 'Missing %s. Copy .env.example to .env and configure the required values.\n' "$env_file" >&2
+    printf 'Missing %s. Copy the repository-root .env.example to .env and configure the required values.\n' "$env_file" >&2
     return 1
   fi
 
@@ -17,7 +17,7 @@ load_plugin_env() {
     name="${BASH_REMATCH[2]}"
     value="${BASH_REMATCH[3]}"
     case "$name" in
-      KONG_ADMIN_URL|KONG_ADMIN_GUI_URL|KONG_ADMIN_GUI_API_URL|ENCRYPTPII_VAULT_TOKEN|ENCRYPTPII_GATEWAY_TOKEN|ENCRYPTPII_UPSTREAM_URL|ENCRYPTPII_VAULT_ADDR|ENCRYPTPII_VAULT_SECRET_PATH|ENCRYPTPII_KEY_ALIAS|ENCRYPTPII_KEY_VALIDITY_MILLIS|ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS|ENCRYPTPII_MAX_BODY_BYTES)
+      KONG_CRYPTO_GATEWAY_TOKEN|KONG_ADMIN_URL|KONG_ADMIN_GUI_URL|KONG_ADMIN_GUI_API_URL|ENCRYPTPII_VAULT_TOKEN|ENCRYPTPII_GATEWAY_TOKEN|ENCRYPTPII_UPSTREAM_URL|ENCRYPTPII_VAULT_ADDR|ENCRYPTPII_VAULT_SECRET_PATH|ENCRYPTPII_KEY_ALIAS|ENCRYPTPII_KEY_VALIDITY_MILLIS|ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS|ENCRYPTPII_MAX_BODY_BYTES)
         if printenv "$name" >/dev/null; then
           continue
         fi
@@ -38,4 +38,29 @@ load_plugin_env() {
     fi
     export "$name=$value"
   done < "$env_file"
+}
+
+validate_crypto_config() {
+  if [[ ! "${ENCRYPTPII_VAULT_SECRET_PATH:-}" =~ ^secret/data/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$ ||
+    ! "${ENCRYPTPII_KEY_ALIAS:-}" =~ ^[A-Za-z0-9_-]+$ ||
+    "${ENCRYPTPII_KEY_ALIAS:-}" == replace-with-* ]]; then
+    printf '根目录 .env 中的 Vault 密钥路径或别名无效。\n' >&2
+    return 1
+  fi
+  local setting value minimum maximum
+  for setting in ENCRYPTPII_KEY_VALIDITY_MILLIS ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS ENCRYPTPII_MAX_BODY_BYTES; do
+    value="${!setting:-}"
+    minimum=1
+    maximum=31536000000
+    [[ "$setting" != ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS ]] || minimum=0
+    [[ "$setting" != ENCRYPTPII_MAX_BODY_BYTES ]] || maximum=16777216
+    if [[ ! "$value" =~ ^(0|[1-9][0-9]*)$ || ${#value} -gt 11 ]]; then
+      printf '%s 必须是范围 %s–%s 内的整数。\n' "$setting" "$minimum" "$maximum" >&2
+      return 1
+    fi
+    if ((value < minimum || value > maximum)); then
+      printf '%s 必须是范围 %s–%s 内的整数。\n' "$setting" "$minimum" "$maximum" >&2
+      return 1
+    fi
+  done
 }

@@ -33,11 +33,11 @@ public class CryptoClientController {
     private final String responseOnlyPath;
 
     public CryptoClientController(
-            @Value("${crypto.server.base-url:http:/localhost:9090}") String serverBaseUrl,
-            @Value("${crypto.server.endpoints.public-key:/crypto/server/public-key}") String publicKeyPath,
-            @Value("${crypto.server.endpoints.bidirectional:/crypto/server/bidirectional}") String bidirectionalPath,
-            @Value("${crypto.server.endpoints.request-only:/crypto/server/request-only}") String requestOnlyPath,
-            @Value("${crypto.server.endpoints.response-only:/crypto/server/response-only}") String responseOnlyPath
+            @Value("${crypto.server.base-url}") String serverBaseUrl,
+            @Value("${crypto.server.endpoints.public-key}") String publicKeyPath,
+            @Value("${crypto.server.endpoints.bidirectional}") String bidirectionalPath,
+            @Value("${crypto.server.endpoints.request-only}") String requestOnlyPath,
+            @Value("${crypto.server.endpoints.response-only}") String responseOnlyPath
     ) {
         this.objectMapper = new ObjectMapper();
         this.bidirectionalPath = bidirectionalPath;
