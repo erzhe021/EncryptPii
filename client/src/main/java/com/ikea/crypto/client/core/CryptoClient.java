@@ -28,10 +28,6 @@ public class CryptoClient {
         this.secureRandom = new SecureRandom();
     }
 
-    public CryptoClient(SecureRandom secureRandom) {
-        this.secureRandom = secureRandom == null ? new SecureRandom() : secureRandom;
-    }
-
     public record EncryptionResult(CipherRequestPayload payload, CryptoRequestContext context) {
     }
 
@@ -44,20 +40,14 @@ public class CryptoClient {
             throw new IllegalArgumentException("serverPublicKey cannot be null");
         }
 
-        // Generate a random AES session key
         log.debug("start to generate client session key");
         SecretKey sessionKey = CryptoSessionMaterialFactory.generateAesSessionKey(secureRandom);
-
-        // Generate a random IV for AES encryption
         byte[] iv = CryptoSessionMaterialFactory.generateIv(secureRandom);
 
-        // Encrypt the data with AES using the session key and IV
         String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(data, sessionKey, iv);
 
-        // Encrypt the AES session key with the server's RSA public key
         String encryptedSessionKeyBase64 = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, serverPublicKey);
 
-        // Return the encrypted payload containing the encrypted session key, IV, and encrypted data
         log.debug("put session key in context for future decryption");
         return new EncryptionResult(
                 new CipherRequestPayload(

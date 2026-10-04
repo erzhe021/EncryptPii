@@ -1,6 +1,4 @@
 package com.ikea.crypto.server.model;
 
-public record DemoPlainRequest(
-        String data
-) {
+public record DemoPlainRequest(String data) {
 }

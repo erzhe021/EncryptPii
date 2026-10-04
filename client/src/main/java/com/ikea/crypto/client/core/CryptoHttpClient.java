@@ -69,10 +69,17 @@ public class CryptoHttpClient {
         this.publicKeyEndpoint = publicKeyEndpoint;
     }
 
+    public CryptoHttpClient(URI serverBaseUri) {
+        this(serverBaseUri, null);
+    }
+
     /**
      * Fetches the server's RSA public key metadata, returning the cached instance if still valid.
      */
     public ServerKeyInfo fetchServerKeyInfo() throws GeneralSecurityException {
+        if (publicKeyEndpoint == null) {
+            throw new IllegalStateException("Public key endpoint is not configured");
+        }
         CachedPublicKey currentCache = this.cachedPublicKey;
         if (currentCache != null) {
             if (currentCache.isValid()) {
@@ -85,9 +92,11 @@ public class CryptoHttpClient {
                         currentCache.keyId(),
                         DateUtils.toDate(currentCache.expiresAtEpochMillis()));
             }
+        } else {
+            log.debug("no cached RSA public key found");
         }
 
-        log.debug("no cached RSA public key found, start to fetching RSA public key from server");
+        log.debug("start to fetching RSA public key from server");
         HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
                 .build();
@@ -130,7 +139,8 @@ public class CryptoHttpClient {
                     || keyResponse.expiresAtEpochMillis() <= System.currentTimeMillis()) {
                 throw new GeneralSecurityException("KEY_EXPIRED response contains invalid public key data");
             }
-            log.warn("server returned KEY_EXPIRED response, refreshing cached RSA public key, keyId={}", keyResponse.keyId());
+            log.warn("server returned KEY_EXPIRED response, refreshing cached RSA public key, keyId={}, expiresAt={}",
+                    keyResponse.keyId(), DateUtils.toDate(keyResponse.expiresAtEpochMillis()));
             return cacheServerKeyInfo(keyResponse);
         } catch (JsonProcessingException e) {
             throw new GeneralSecurityException("Unable to parse public key data from KEY_EXPIRED response", e);
@@ -171,6 +181,11 @@ public class CryptoHttpClient {
      */
     public DemoPlainResponse postRequestOnly(String path, CipherRequestPayload requestPayload) throws Exception {
         HttpResponse<String> response = sendJsonRequest(path, requestPayload);
+        return objectMapper.readValue(response.body(), DemoPlainResponse.class);
+    }
+
+    public DemoPlainResponse postPlain(String path, DemoPlainRequest request) throws Exception {
+        HttpResponse<String> response = sendJsonRequest(path, request);
         return objectMapper.readValue(response.body(), DemoPlainResponse.class);
     }
 

@@ -1,47 +1,42 @@
 package com.ikea.crypto.client.api;
 
+import com.ikea.crypto.client.core.CryptoHttpClient;
 import com.ikea.crypto.client.model.DemoPlainRequest;
+import com.ikea.crypto.client.model.DemoPlainResponse;
+import com.ikea.crypto.client.model.LatencyInMs;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.MediaType;
-import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.client.RestClient;
+
+import java.net.URI;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/plain/client")
 public class PlainClientController {
 
-    private final RestClient restClient;
+    private final CryptoHttpClient cryptoHttpClient;
     private final String normalPath;
 
     public PlainClientController(
-            RestClient.Builder builder,
             @Value("${plain.server.base-url}") String kongBaseUrl,
             @Value("${plain.server.endpoints.normal}") String normalPath) {
-        this.restClient = builder.baseUrl(kongBaseUrl).build();
+        this.cryptoHttpClient = new CryptoHttpClient(URI.create(kongBaseUrl));
         this.normalPath = normalPath;
     }
 
     @PostMapping("/normal")
-    public ResponseEntity<byte[]> normal(@RequestBody DemoPlainRequest request) {
-        return forward(normalPath, request);
-    }
-
-    private ResponseEntity<byte[]> forward(String path, Object body) {
-        RestClient.RequestBodySpec request = restClient.post().uri(path).contentType(MediaType.APPLICATION_JSON);
-        if (body != null) {
-            request.body(body);
-        }
-        return request.exchange((httpRequest, response) -> {
-            ResponseEntity.BodyBuilder result = ResponseEntity.status(response.getStatusCode());
-            MediaType contentType = response.getHeaders().getContentType();
-            if (contentType != null) {
-                result.contentType(contentType);
-            }
-            return result.body(response.getBody().readAllBytes());
-        });
+    public Map<String, Object> normal(@RequestBody DemoPlainRequest request) throws Exception {
+        long startTime = System.currentTimeMillis();
+        DemoPlainResponse response = cryptoHttpClient.postPlain(normalPath, request);
+        long finish = System.currentTimeMillis();
+        return Map.of(
+                "request", request,
+                "response", response,
+                "latency in ms", new LatencyInMs(
+                        finish - startTime, 0, finish - startTime, 0)
+        );
     }
 }
