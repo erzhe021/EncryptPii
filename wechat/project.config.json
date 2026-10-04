@@ -3,7 +3,7 @@
   "miniprogramRoot": "./",
   "compileType": "miniprogram",
   "libVersion": "3.4.10",
-  "appid": "wxe00a37c9200edd75",
+  "appid": "wxplaceholder",
   "projectname": "EncryptPii-WeChat",
   "setting": {
     "urlCheck": false,

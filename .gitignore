@@ -45,3 +45,5 @@ bin/
 /.env
 /certs/
 /vault/.local/
+
+project.private.config.json
