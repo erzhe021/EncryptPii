@@ -21,11 +21,8 @@ if [[ "$(kubectl config current-context)" != docker-desktop ]]; then
 fi
 source "$REPO_DIR/kong/scripts/load-env.sh"
 load_plugin_env "$REPO_DIR/.env"
+validate_gateway_token
 token="${KONG_TO_ENCRYPTPII_AUTH_TOKEN:-}"
-if [[ "${#token}" -lt 32 || "$token" == replace-with-* || "$token" == *$'\n'* || "$token" == *$'\r'* ]]; then
-  printf '根目录 .env 中的 KONG_TO_ENCRYPTPII_AUTH_TOKEN 必须是至少 32 字符的有效密钥。\n' >&2
-  exit 1
-fi
 kubectl create namespace encryptpii --dry-run=client -o yaml | kubectl apply -f -
 work_dir="$(mktemp -d)"
 trap 'rm -f "$work_dir/token"; rmdir "$work_dir"' EXIT

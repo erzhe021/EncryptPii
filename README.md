@@ -268,7 +268,7 @@ Vault 默认保留 PVC；只有确定要永久删除数据时才使用：
 ./scripts/cleanup-local-k8s.sh
 ```
 
-脚本会清理 `vault`、`kong`、`encryptpii` 三个 namespace 及其全部资源，并删除相关 Vault PV 对象。Vault 数据和初始化状态将不可恢复。非交互执行可显式传入 `--yes`：
+脚本仅删除本项目的 Client、Server、Kong、Vault 具名资源、共享 gateway Secret，以及 Vault PVC `data-vault-0` 和与该 PVC 关联的 PV。保留 `vault`、`kong`、`encryptpii` 三个 namespace、其中的其他资源和本地凭据文件，不按命名空间批量删除资源或 PV。Vault 数据和初始化状态将不可恢复。非交互执行可显式传入 `--yes`：
 
 ```bash
 ./scripts/cleanup-local-k8s.sh --yes
@@ -284,7 +284,7 @@ Vault 默认保留 PVC；只有确定要永久删除数据时才使用：
 ./scripts/rebuild-local-k8s.sh
 ```
 
-重建脚本会先校验配置并构建 Server、Client、Kong 镜像，再执行有交互确认的清理；构建失败时不会先删除现有部署。之后会将旧凭据归档到 `vault/.local/previous-*`，初始化新 Vault 和 RSA 密钥，生成新的 gateway token，并依次部署 Server、Kong、Client。新凭据保存在 `vault/.local/`。重建会更换密钥和 token，旧加密请求与旧应用 token 不再可用。
+重建脚本会先校验配置（包括 gateway token）并构建 Server、Client、Kong 镜像，再执行有交互确认的清理；配置校验或构建失败时不会先删除现有部署。之后会将旧凭据（包括历史 `gateway-token` 文件）归档到 `vault/.local/previous-*`，初始化新 Vault 和 RSA 密钥，并依次部署 Server、Kong、Client。Gateway token 与单独部署 Server 使用相同来源：已导出的 `KONG_TO_ENCRYPTPII_AUTH_TOKEN` 优先，否则读取根目录 `.env`；不再随机生成 token 或创建 `vault/.local/gateway-token`。Kong 部署时复制 Server 的 gateway Secret，保持两端一致。新的 Vault 凭据保存在 `vault/.local/`；重建会更换 RSA 密钥和 Vault token，旧加密请求与旧 Vault token 不再可用，但不会主动更换 gateway token。
 
 ## 密钥与加密协议
 

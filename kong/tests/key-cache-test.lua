@@ -1,4 +1,9 @@
-local now = 1700000000
+local INITIAL_TIME_SECONDS = 1700000000
+local SECONDS_PER_HOUR = 60 * 60
+local SECONDS_PER_DAY = 24 * SECONDS_PER_HOUR
+local MILLIS_PER_SECOND = 1000
+
+local now = INITIAL_TIME_SECONDS
 local current_version = 1
 local created_time = os.date("!%Y-%m-%dT%H:%M:%SZ", now)
 local version2_created_time = created_time
@@ -78,22 +83,10 @@ ngx = {
 }
 kong = { log = { err = function() end } }
 
-local function upvalue(fn, name)
-  for i = 1, math.huge do
-    local key, value = debug.getupvalue(fn, i)
-    assert(key, "Missing upvalue: " .. name)
-    if key == name then
-      return value
-    end
-  end
-end
-
 local plugin = dofile("/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/handler.lua")
 assert(plugin.init_worker == nil, "Cache cleanup must not register a worker timer")
-local decrypt_session_key = upvalue(plugin.access, "decrypt_session_key")
-local get_private_key = upvalue(decrypt_session_key, "get_private_key")
-local cache = upvalue(get_private_key, "key_cache")
-local order = upvalue(get_private_key, "key_cache_order")
+local get_private_key = require("kong.plugins.sensitive-transport-crypto.keys").get_private_key
+local get_vault_context = require("kong.plugins.sensitive-transport-crypto.vault").get_context
 local config = {
   vault_addr = "http://vault:8200",
   vault_auth_role = "encryptpii-kong",
@@ -105,89 +98,92 @@ local config = {
 }
 
 local first = assert(get_private_key(config, "test:1"))
-assert(#order == 1)
-assert(cache[order[1]].expires_at == 1700000005,
-  "An active key cache must not outlive the configured grace period")
 assert(get_private_key(config, "test:1") == first)
 assert(reads == 2, "Valid cache hits must avoid Vault")
 assert(logins == 1, "The first Vault read must authenticate through Kubernetes")
 
-now = 1700000005
-assert(#order == 1, "Idle workers must leave cleanup until the next key access")
+now = INITIAL_TIME_SECONDS + 5
 get_private_key(config, "invalid:1")
-assert(#order == 0 and next(cache) == nil, "Key access must release expired key references")
+assert(get_private_key(config, "test:1") ~= first,
+  "Expired cached keys must be fetched again on the next valid access")
+assert(reads == 4, "Expired-key cleanup must happen during a later key access")
 
-now = 1700000000
+now = INITIAL_TIME_SECONDS
 created_time = os.date("!%Y-%m-%dT%H:%M:%SZ", now)
 version2_created_time = created_time
 config.key_validity_millis = 120000
 config.key_grace_period_millis = 120000
+local reads_before_policy_change = reads
 assert(get_private_key(config, "test:1"))
-assert(cache[order[1]].expires_at == now + 60, "Cache TTL must still be limited to 60 seconds")
+assert(reads == reads_before_policy_change + 2,
+  "Key cache entries must be isolated by validity and grace policies")
+local reads_before_ttl = reads
 now = now + 60
 assert(get_private_key(config, "test:1"))
-assert(#order == 1, "Reloading an expired key must not leave duplicate eviction entries")
+assert(reads == reads_before_ttl + 2, "Key cache TTL must remain limited to 60 seconds")
 assert(logins == 1, "Unexpired Kubernetes login tokens must be reused")
 
-now = 1700000000
+now = INITIAL_TIME_SECONDS
 current_version = 2
 config.key_validity_millis = 10000
 config.key_grace_period_millis = 5000
 assert(get_private_key(config, "test:1"))
-assert(#order == 2, "Different expiry policies must not share a cached key")
-now = 1700000015
+now = INITIAL_TIME_SECONDS + 15
 local key, _, status, code = get_private_key(config, "test:1")
 assert(not key and status == 400 and code == "stale_key")
-assert(#order == 1, "Request-time cleanup must remove the expired key and its order entry")
 
-now = 1700000000
+now = INITIAL_TIME_SECONDS
 current_version = 1
 created_time = os.date("!%Y-%m-%dT%H:%M:%SZ", now)
-version2_created_time = os.date("!%Y-%m-%dT%H:%M:%SZ", now + 15 * 24 * 60 * 60)
-config.key_validity_millis = 30 * 24 * 60 * 60 * 1000
-config.key_grace_period_millis = 24 * 60 * 60 * 1000
+version2_created_time = os.date("!%Y-%m-%dT%H:%M:%SZ", now + 15 * SECONDS_PER_DAY)
+config.key_validity_millis = 30 * SECONDS_PER_DAY * MILLIS_PER_SECOND
+config.key_grace_period_millis = SECONDS_PER_DAY * MILLIS_PER_SECOND
 current_version = 2
-now = now + 15 * 24 * 60 * 60 + 23 * 60 * 60
+now = now + 15 * SECONDS_PER_DAY + 23 * SECONDS_PER_HOUR
 assert(get_private_key(config, "test:1"),
   "A rotated key must remain available during the full post-rotation grace period")
-now = now + 60 * 60
+now = now + SECONDS_PER_HOUR
 local rotated_key, _, rotated_status, rotated_code = get_private_key(config, "test:1")
 assert(not rotated_key and rotated_status == 400 and rotated_code == "stale_key",
   "A rotated key must expire exactly one grace period after the next version is created")
 
-now = 1700000000
+now = INITIAL_TIME_SECONDS
 config.key_validity_millis = 120000
 config.key_grace_period_millis = 120000
 for i = 1, 20 do
   config.vault_secret_path = "secret/data/test-" .. i
   assert(get_private_key(config, "test:1"))
 end
-assert(#order == 16, "Cache size must stay bounded")
-local seen = {}
-for _, id in ipairs(order) do
-  assert(cache[id] and not seen[id], "Eviction entries must be unique and reference a live cache entry")
-  seen[id] = true
-end
+local reads_before_eviction_check = reads
+config.vault_secret_path = "secret/data/test-1"
+assert(get_private_key(config, "test:1"))
+assert(reads == reads_before_eviction_check + 2,
+  "The cache must evict older entries when it reaches its 16-key limit")
+reads_before_eviction_check = reads
+config.vault_secret_path = "secret/data/test-20"
+assert(get_private_key(config, "test:1"))
+assert(reads == reads_before_eviction_check, "Recently used keys must remain cached")
 now = now + 60
+local reads_before_cleanup = reads
 get_private_key(config, "invalid:1")
-assert(#order == 0 and next(cache) == nil, "Cleanup must clear both cache data structures")
+local refreshed_key, refresh_err = get_private_key(config, "test:1")
+assert(refreshed_key, refresh_err)
+assert(reads == reads_before_cleanup + 2, "Expired entries must be removed during later key access")
 
-local get_vault_token = upvalue(get_private_key, "get_vault_token")
-local location = { host = "vault", port = 8200, scheme = "http", base_path = "" }
-now = now + 30 * 24 * 60 * 60
-assert(get_vault_token(config, location) == "login-token")
+now = now + 30 * SECONDS_PER_DAY
+assert(get_vault_context(config).token == "login-token")
 local previous_logins = logins
 now = now + 80
-assert(get_vault_token(config, location) == "login-token")
+assert(get_vault_context(config).token == "login-token")
 assert(logins == previous_logins + 1, "Expired login tokens must trigger Kubernetes login")
 now = now + 80
 login_status = 403
-local rejected_token, login_err = get_vault_token(config, location)
-assert(not rejected_token and login_err == "Vault is unavailable",
+local rejected_context, login_err = get_vault_context(config)
+assert(not rejected_context and login_err == "Vault is unavailable",
   "Failed Kubernetes login must not fall back to another authentication method")
 config.vault_auth_role = nil
-local missing_role_token, role_err = get_vault_token(config, location)
-assert(not missing_role_token and role_err == "Vault is unavailable",
+local missing_role_context, role_err = get_vault_context(config)
+assert(not missing_role_context and role_err == "Vault is unavailable",
   "A Kubernetes role is required")
 io.open = original_io_open
 

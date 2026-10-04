@@ -40,6 +40,14 @@ load_plugin_env() {
   done < "$env_file"
 }
 
+validate_gateway_token() {
+  local token="${KONG_TO_ENCRYPTPII_AUTH_TOKEN:-}"
+  if [[ "${#token}" -lt 32 || "$token" == replace-with-* || "$token" == *$'\n'* || "$token" == *$'\r'* ]]; then
+    printf 'KONG_TO_ENCRYPTPII_AUTH_TOKEN 必须是至少 32 字符的有效密钥（环境变量或根目录 .env）。\n' >&2
+    return 1
+  fi
+}
+
 validate_crypto_config() {
   if [[ ! "${ENCRYPTPII_VAULT_SECRET_PATH:-}" =~ ^secret/data/[A-Za-z0-9_-]+(/[A-Za-z0-9_-]+)*$ ||
     ! "${ENCRYPTPII_KEY_ALIAS:-}" =~ ^[A-Za-z0-9_-]+$ ||

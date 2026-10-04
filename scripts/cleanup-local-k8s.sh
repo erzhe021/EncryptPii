@@ -6,8 +6,8 @@ REPO_DIR="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 usage() {
   printf '%s\n' \
     '用法: scripts/cleanup-local-k8s.sh [--yes]' \
-    '删除 docker-desktop 集群中的 vault、kong、encryptpii 命名空间及其全部资源，' \
-    '并删除这些命名空间所拥有的 PersistentVolume。Vault 数据将无法恢复。' \
+    '仅删除 docker-desktop 集群中本项目的具名资源，保留命名空间和其他资源。' \
+    '删除 Vault PVC data-vault-0 及其关联 PV。Vault 数据将无法恢复。' \
     '--yes 跳过交互确认。'
 }
 
@@ -37,9 +37,8 @@ if [[ "$context" != docker-desktop ]]; then
   exit 1
 fi
 
-namespaces=(vault kong encryptpii)
 if [[ "$assume_yes" != true ]]; then
-  printf '即将删除命名空间及其中所有资源：%s\n' "${namespaces[*]}"
+  printf '即将删除本项目的 Client、Server、Kong、Vault 资源和共享 gateway Secret；保留命名空间及其他资源。\n'
   printf 'Vault PVC 和其中的密钥/数据也会被删除，且无法恢复。\n'
   printf '如确认，请输入 DELETE：'
   IFS= read -r confirmation
@@ -49,27 +48,12 @@ if [[ "$assume_yes" != true ]]; then
   fi
 fi
 
-volume_names="$(
-  kubectl get persistentvolumes -o json |
-    jq -r '
-      .items[]
-      | select(.spec.claimRef.namespace == "vault" and .spec.claimRef.name != "data-vault-0")
-      | .metadata.name
-    '
-)"
-
 bash "$REPO_DIR/client/scripts/delete-from-k8s.sh" --yes
 bash "$REPO_DIR/kong/scripts/delete-from-k8s.sh" --yes
 bash "$REPO_DIR/server/scripts/delete-from-k8s.sh" --yes
 bash "$REPO_DIR/vault/scripts/delete-from-k8s.sh" --purge-data --yes
 
-for namespace in "${namespaces[@]}"; do
-  kubectl delete namespace "$namespace" --ignore-not-found --wait=true --timeout=300s
-done
+kubectl -n encryptpii delete secret encryptpii-gateway \
+  --ignore-not-found --wait=true --timeout=180s
 
-while IFS= read -r volume; do
-  [[ -n "$volume" ]] || continue
-  kubectl delete persistentvolume "$volume" --ignore-not-found --wait=true --timeout=300s
-done <<< "$volume_names"
-
-printf '已删除指定项目命名空间及其持久卷资源。\n'
+printf '已删除本项目的具名资源及 Vault 持久卷；命名空间、其他资源和本地文件已保留。\n'

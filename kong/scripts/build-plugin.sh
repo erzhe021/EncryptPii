@@ -17,6 +17,9 @@ docker run --rm \
   -e '
     local files = {
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/handler.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/vault.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/keys.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/crypto.lua",
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/schema.lua",
     }
     for _, file in ipairs(files) do
@@ -31,3 +34,9 @@ docker run --rm \
   --entrypoint /usr/local/openresty/luajit/bin/luajit \
   encryptpii-kong:3.7 \
   /tmp/plugin-tests/key-cache-test.lua
+
+docker run --rm \
+  --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  --entrypoint /usr/local/openresty/luajit/bin/luajit \
+  encryptpii-kong:3.7 \
+  /tmp/plugin-tests/size-limit-log-test.lua

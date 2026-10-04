@@ -23,6 +23,7 @@ fi
 source "$REPO_DIR/kong/scripts/load-env.sh"
 load_plugin_env "$REPO_DIR/.env"
 validate_crypto_config
+validate_gateway_token
 
 # 清理前完成配置校验和镜像构建，部署时复用这些镜像。
 bash "$REPO_DIR/server/scripts/build-image.sh"
@@ -46,13 +47,10 @@ if [[ -n "$credential_archive" ]]; then
 fi
 
 bash "$REPO_DIR/vault/scripts/deploy-to-k8s.sh"
-gateway_token="$(openssl rand -hex 32)"
-printf '%s' "$gateway_token" > "$LOCAL_DIR/gateway-token"
-KONG_TO_ENCRYPTPII_AUTH_TOKEN="$gateway_token" \
-  bash "$REPO_DIR/server/scripts/deploy-to-k8s.sh" --skip-build
+bash "$REPO_DIR/server/scripts/deploy-to-k8s.sh" --skip-build
 bash "$REPO_DIR/kong/scripts/deploy-to-k8s.sh" --skip-build
 bash "$REPO_DIR/client/scripts/deploy-to-k8s.sh" --skip-build
 
 printf '\n重建完成。访问 Client：\n'
 printf 'Docker Desktop LoadBalancer 就绪后可直接访问：http://localhost:18080\n'
-printf 'Vault 初始化凭据和新 token 保存在 %s\n' "$LOCAL_DIR"
+printf 'Vault 初始化凭据和轮换 token 保存在 %s\n' "$LOCAL_DIR"

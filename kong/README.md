@@ -8,7 +8,7 @@
 
 | 路径 | 用途 |
 | --- | --- |
-| `plugins/sensitive-transport-crypto/` | 插件实现与配置 schema |
+| `plugins/sensitive-transport-crypto/` | `handler.lua` 生命周期编排；`vault.lua` Vault Kubernetes 登录与 token 缓存；`keys.lua` 密钥读取、有效期校验与私钥缓存；`crypto.lua` RSA/AES-GCM 加解密；`schema.lua` 配置 schema |
 | `k8s/kong.yaml` | Kong Namespace、ServiceAccount、Deployment 和 Service |
 | `scripts/build-plugin.sh` | 构建镜像、检查 Lua 文件并运行插件测试 |
 | `scripts/deploy-to-k8s.sh` | 生成 DB-less 配置并部署 Kong |

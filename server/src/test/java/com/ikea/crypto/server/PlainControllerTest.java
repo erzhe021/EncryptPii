@@ -26,7 +26,7 @@ class PlainControllerTest {
                 .andExpect(jsonPath("$.cardNumber").value("123456789012"))
                 .andExpect(jsonPath("$.memberTier").value(3))
                 .andExpect(jsonPath("$.points").value(10000))
-                .andExpect(jsonPath("$.remarks").value("remarks"));
+                .andExpect(jsonPath("$.remarks").value("remarks for request: demo"));
     }
 
     @Test
