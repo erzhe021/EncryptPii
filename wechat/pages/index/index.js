@@ -10,6 +10,18 @@ const MODES = [
 // plain 与 response-only 复用「明文请求内容」输入形态，其余模式收集敏感字段
 const PLAIN_INPUT_MODES = ['plain', 'response-only'];
 
+const ERROR_MESSAGES = {
+  INVALID_ARGUMENT: '请检查服务地址和请求参数。',
+  NETWORK_ERROR: '网络请求失败，请检查网络连接。',
+  RANDOM_UNAVAILABLE: '无法获取安全随机数，请确认微信版本支持该功能。',
+  INVALID_SERVER_KEY: 'Kong 返回的公钥信息无效或已过期。',
+  ENCRYPTION_FAILED: '请求加密失败。',
+  INVALID_CIPHER_PAYLOAD: '加密响应格式无效。',
+  DECRYPTION_FAILED: '响应认证或解密失败。',
+  INVALID_RESPONSE: '服务响应格式无效。',
+  KEY_RETRY_FAILED: '公钥刷新后重试失败。'
+};
+
 function usesPlainInput(mode) {
   return PLAIN_INPUT_MODES.includes(mode);
 }
@@ -78,7 +90,10 @@ Page({
       const result = await callApi(mode, payload);
       this.setData({ result: JSON.stringify(result, null, 2) });
     } catch (error) {
-      this.setData({ error: error.message || '请求失败' });
+      const message = error.code === 'HTTP_ERROR'
+        ? `请求失败（HTTP ${error.statusCode}）`
+        : ERROR_MESSAGES[error.code] || '请求失败';
+      this.setData({ error: message });
     } finally {
       this.setData({ loading: false });
     }

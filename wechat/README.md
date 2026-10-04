@@ -5,7 +5,7 @@
 ## 配置与运行
 
 1. 修改 `config.js` 中的 `KONG_BASE_URL`，设置为手机可访问的 Kong HTTPS 域名，不要填写 Client、Server 或 Kong Admin API 地址。
-2. 在微信开发者工具中导入 `wechat` 目录并运行。`project.config.json` 使用 `touristappid`，发布前请替换为小程序 AppID。
+2. 在微信开发者工具中导入 `wechat` 目录并运行。发布前请确认 `project.config.json` 中配置的是团队自己的小程序 AppID。
 3. 在小程序管理后台将 Kong 域名加入 `request` 合法域名；生产环境必须使用 HTTPS。
 
 ## 接口映射
@@ -20,4 +20,10 @@
 
 请求加密模式与 Java SDK 使用相同的 RSA OAEP 摘要参数、AES-GCM IV 和认证标签格式。响应加密模式通过 `X-STC-KEY-ID` 和 `X-STC-SESSION-KEY` 请求头发送 RSA 加密的 AES 会话密钥。公钥在内存中缓存至过期；收到 `KEY_EXPIRED` 时刷新并最多重试一次。
 
-RSA/AES 实现使用 node-forge 浏览器 bundle，见 `lib/FORGE-LICENSE.txt`。会话密钥、IV 和 RSA OAEP 填充随机数均使用微信 `wx.getRandomValues`；需使用支持该 API 的微信基础库。不要将真实个人信息提交到未受信任或未启用 HTTPS 的服务。
+RSA/AES 实现使用 SDK 内置的 node-forge 浏览器 bundle，见 `sdk/lib/FORGE-LICENSE.txt`。会话密钥、IV 和 RSA OAEP seed 均按请求使用微信 `wx.getRandomValues` 获取；不再使用全局随机池或覆盖 Forge 随机函数。需使用支持该 API 的微信基础库。不要将真实个人信息提交到未受信任或未启用 HTTPS 的服务。
+
+## 共享 SDK
+
+独立 SDK 位于 `sdk/`，可单独打包发布到团队私有 npm 仓库，接入方式见 [SDK 文档](sdk/README.md)。核心逻辑不依赖 `wx`，微信适配器负责网络和安全随机数，每个客户端实例独立管理公钥缓存。
+
+本演示直接通过 `require('../sdk/index')` 接入，无需 npm 构建。`utils/api.js` 仅将 SDK 的显式诊断结果转换成页面展示格式；其他团队默认使用 `client.send()` 获取业务响应，不应复用演示中的明文/密文对照输出。

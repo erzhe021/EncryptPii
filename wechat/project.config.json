@@ -29,7 +29,9 @@
   },
   "simulatorPluginLibVersion": {},
   "packOptions": {
-    "ignore": [],
+    "ignore": [
+      { "type": "folder", "value": "sdk/test" }
+    ],
     "include": []
   },
   "editorSetting": {}
