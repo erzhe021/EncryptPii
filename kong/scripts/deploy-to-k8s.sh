@@ -19,6 +19,18 @@ done
 source "$SCRIPT_DIR/load-env.sh"
 load_plugin_env "$REPO_DIR/.env"
 validate_crypto_config
+if [[ -z "${KONG_TLS_CERT_FILE:-}" || -z "${KONG_TLS_KEY_FILE:-}" ]]; then
+  printf 'KONG_TLS_CERT_FILE 和 KONG_TLS_KEY_FILE 必须在根目录 .env 中配置。\n' >&2
+  exit 1
+fi
+tls_cert_file="$KONG_TLS_CERT_FILE"
+tls_key_file="$KONG_TLS_KEY_FILE"
+[[ "$tls_cert_file" = /* ]] || tls_cert_file="$REPO_DIR/$tls_cert_file"
+[[ "$tls_key_file" = /* ]] || tls_key_file="$REPO_DIR/$tls_key_file"
+if [[ ! -f "$tls_cert_file" || ! -f "$tls_key_file" ]]; then
+  printf '找不到 TLS 证书或私钥文件：请检查 KONG_TLS_CERT_FILE 和 KONG_TLS_KEY_FILE。\n' >&2
+  exit 1
+fi
 if [[ "$(kubectl config current-context)" != "docker-desktop" ]]; then
   printf 'This local deployment script requires the docker-desktop context.\n' >&2
   exit 1
@@ -36,6 +48,9 @@ cleanup() {
 trap cleanup EXIT
 
 kubectl create namespace kong --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n kong create secret tls encryptpii-kong-tls \
+  --cert="$tls_cert_file" --key="$tls_key_file" \
+  --dry-run=client -o yaml | kubectl apply -f -
 kubectl -n encryptpii get secret encryptpii-gateway -o json |
   jq '{apiVersion:"v1",kind:"Secret",metadata:{name:"encryptpii-gateway",namespace:"kong"},type:.type,data:.data}' |
   kubectl apply -f -
@@ -92,4 +107,4 @@ kubectl -n kong create configmap encryptpii-kong-config \
 kubectl apply -f "$KONG_DIR/k8s/kong.yaml"
 kubectl -n kong rollout restart deployment/encryptpii-kong
 kubectl -n kong rollout status deployment/encryptpii-kong --timeout=180s
-printf 'Kong deployed. Access with: kubectl -n kong port-forward service/encryptpii-kong 18000:8000 18001:8001 18002:8002\n'
+printf 'Kong deployed. Access with: kubectl -n kong port-forward service/encryptpii-kong 18443:8443 18000:8000 18001:8001 18002:8002\n'

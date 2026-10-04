@@ -37,6 +37,12 @@ spec:
               value: /etc/kong-config/kong.json
             - name: KONG_PLUGINS
               value: bundled,sensitive-transport-crypto
+            - name: KONG_PROXY_LISTEN
+              value: 0.0.0.0:8000, 0.0.0.0:8443 ssl
+            - name: KONG_SSL_CERT
+              value: /etc/kong/tls/tls.crt
+            - name: KONG_SSL_CERT_KEY
+              value: /etc/kong/tls/tls.key
             - name: KONG_ADMIN_LISTEN
               value: 0.0.0.0:8001
             - name: KONG_ADMIN_GUI_LISTEN
@@ -57,6 +63,8 @@ spec:
           ports:
             - name: proxy
               containerPort: 8000
+            - name: proxy-tls
+              containerPort: 8443
             - name: admin
               containerPort: 8001
             - name: manager
@@ -64,6 +72,9 @@ spec:
           volumeMounts:
             - name: config
               mountPath: /etc/kong-config
+              readOnly: true
+            - name: tls
+              mountPath: /etc/kong/tls
               readOnly: true
           startupProbe:
             httpGet:
@@ -90,6 +101,9 @@ spec:
         - name: config
           configMap:
             name: encryptpii-kong-config
+        - name: tls
+          secret:
+            secretName: encryptpii-kong-tls
 ---
 apiVersion: v1
 kind: Service
@@ -103,6 +117,9 @@ spec:
     - name: proxy
       port: 8000
       targetPort: proxy
+    - name: proxy-tls
+      port: 8443
+      targetPort: proxy-tls
     - name: admin
       port: 8001
       targetPort: admin

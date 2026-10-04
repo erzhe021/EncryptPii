@@ -15,7 +15,7 @@ EncryptPii 演示如何使用 Java 客户端、Kong Lua 插件和 HashiCorp Vaul
 Client LoadBalancer :18080                    namespace: encryptpii
     |
     v
-Kong Service :8000 --------------------------> Server Service :9090
+Kong Service :8000 / :8443 ------------------> Server Service :9090
     |                                             namespace: encryptpii
     +---- 读取密钥 ----> Vault Service :8200
                          namespace: vault
@@ -102,6 +102,7 @@ KONG_TO_ENCRYPTPII_AUTH_TOKEN=填入生成的随机值
 | `ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS` | 旧版本解密宽限期，范围 0–31536000000 毫秒 |
 | `ENCRYPTPII_MAX_BODY_BYTES` | 插件请求/响应缓冲上限，范围 1–16777216 字节，默认 1048576 |
 | `KONG_TO_ENCRYPTPII_AUTH_TOKEN` | Kong 到 Server 的共享认证密钥，至少 32 个字符，Server 与 Kong 必须一致 |
+| `KONG_TLS_CERT_FILE`、`KONG_TLS_KEY_FILE` | Kong HTTPS 的 PEM 证书和私钥路径，相对仓库根目录或绝对路径；证书 SAN 必须匹配访问域名 |
 
 脚本从自身路径定位仓库根目录，因此可从其他工作目录运行。已导出的环境变量优先于 `.env`。配置文件只读取字面量 `KEY=value` 及引号，不执行 shell 命令，也不展开变量。不要提交 `.env`。
 
@@ -142,7 +143,7 @@ Server 集群内地址为 `http://encryptpii-server.encryptpii.svc.cluster.local
 
 脚本构建并导入自定义 Kong 镜像、生成 DB-less 声明式配置、将 Server 的 gateway Secret 复制到 `kong` namespace 并部署。Kong 通过 `kong/encryptpii-kong` ServiceAccount 使用 Vault 的 `encryptpii-kong` Kubernetes auth role 获取短期 token；Vault 地址为集群内的 `vault.vault.svc.cluster.local:8200`。
 
-Kong 配置了四条加密路由和一条不挂插件的明文路由。不需要 PostgreSQL 或 Kong Ingress Controller。DB-less 模式不支持通过 Admin API 写入配置，因此不要对该部署运行 `configure-routes.sh`；修改路由、插件配置、镜像或 Secret 后重新运行部署脚本。
+部署前需在 `.env` 配置 TLS 证书/私钥路径并准备好 PEM 文件；脚本会创建 TLS Secret 并启用 Kong 的 `8443` HTTPS 代理端口。证书生成和本机 HTTPS 测试示例见 [`kong/README.md`](kong/README.md)。Kong 配置了四条加密路由和一条不挂插件的明文路由。不需要 PostgreSQL 或 Kong Ingress Controller。DB-less 模式不支持通过 Admin API 写入配置，因此不要对该部署运行 `configure-routes.sh`；修改路由、插件配置、镜像或 Secret 后重新运行部署脚本。
 
 ### 6. 部署 Client
 
@@ -394,11 +395,11 @@ Vault 使用手动解封。Pod 重启后如处于 sealed 状态：
 需要检查 Kong 时，可在单独终端执行：
 
 ```bash
-kubectl -n kong port-forward service/encryptpii-kong 18000:8000 18001:8001 18002:8002
-curl --fail-with-body http://localhost:18000/crypto/server/public-key
+kubectl -n kong port-forward service/encryptpii-kong 18443:8443 18000:8000 18001:8001 18002:8002
+curl --cacert certs/kong.crt --fail-with-body https://localhost:18443/crypto/server/public-key
 ```
 
-本机端口 `18000`、`18001`、`18002` 分别对应 Kong Proxy、Admin API 和 Manager。Manager 页面访问时应保持浏览器 host 一致，混用 `localhost` 与 `127.0.0.1` 可能导致 CORS 错误。Vault UI/API 诊断可选用：
+本机端口 `18443`、`18000`、`18001`、`18002` 分别对应 Kong HTTPS Proxy、HTTP Proxy、Admin API 和 Manager。Manager 页面访问时应保持浏览器 host 一致，混用 `localhost` 与 `127.0.0.1` 可能导致 CORS 错误。Vault UI/API 诊断可选用：
 
 ```bash
 kubectl -n vault port-forward service/vault 18200:8200

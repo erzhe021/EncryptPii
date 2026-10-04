@@ -102,12 +102,32 @@ cp .env.example .env
 
 ```dotenv
 KONG_TO_ENCRYPTPII_AUTH_TOKEN=replace-with-a-random-shared-secret
+KONG_TLS_CERT_FILE=certs/kong.crt
+KONG_TLS_KEY_FILE=certs/kong.key
 ENCRYPTPII_VAULT_SECRET_PATH=secret/data/sensitive-transport-crypto/rsa-ciam
 ENCRYPTPII_KEY_ALIAS=rsa-ciam
 ENCRYPTPII_KEY_VALIDITY_MILLIS=3600000
 ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS=600000
 ENCRYPTPII_MAX_BODY_BYTES=1048576
 ```
+
+`KONG_TLS_CERT_FILE` 和 `KONG_TLS_KEY_FILE` 是相对仓库根目录或绝对路径的 PEM 文件路径。证书必须包含客户端访问 Kong 时使用的 DNS 名称或 IP 地址；不要将证书私钥提交到 Git。部署脚本会在 `kong` namespace 创建或更新 `encryptpii-kong-tls` Secret，并挂载到 Kong。部署前需准备证书，例如本机端口转发测试可使用自签名 localhost 证书：
+
+```bash
+mkdir -p certs
+openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+  -keyout certs/kong.key -out certs/kong.crt \
+  -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost"
+```
+
+本机访问时将代理 HTTPS 端口转发到 `18443`：
+
+```bash
+kubectl -n kong port-forward service/encryptpii-kong 18443:8443
+curl --cacert certs/kong.crt https://localhost:18443/crypto/server/public-key
+```
+
+生产环境应使用受信任 CA 签发且 SAN 与实际域名匹配的证书，并通过安全的证书管理流程更新证书后重新部署 Kong。HTTP 代理端口 `8000` 仍然开放；如需强制 HTTPS，应在入口层禁用 HTTP 或配置 HTTP 到 HTTPS 重定向。Admin API 不应向不可信网络开放。
 
 部署 Kong：
 
@@ -130,10 +150,10 @@ ENCRYPTPII_MAX_BODY_BYTES=1048576
 如需本机访问本地集群中的 Kong：
 
 ```bash
-kubectl -n kong port-forward service/encryptpii-kong 18000:8000 18001:8001 18002:8002
+kubectl -n kong port-forward service/encryptpii-kong 18443:8443 18000:8000 18001:8001 18002:8002
 ```
 
-Kong 的代理、Admin API 和 Manager 分别通过本机端口 `18000`、`18001` 和 `18002` 访问。Admin API 不应向不可信网络开放。
+Kong 的 HTTPS 代理、HTTP 代理、Admin API 和 Manager 分别通过本机端口 `18443`、`18000`、`18001` 和 `18002` 访问。Admin API 不应向不可信网络开放。
 
 ## 路由与配置
 

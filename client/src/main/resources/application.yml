@@ -3,7 +3,7 @@ server:
 
 crypto:
   server:
-    base-url: http://encryptpii-kong.kong.svc.cluster.local:8000
+    base-url: https://encryptpii-kong.kong.svc.cluster.local:8443
     endpoints:
       public-key: /crypto/server/public-key
       bidirectional: /crypto/server/bidirectional
