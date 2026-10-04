@@ -25,7 +25,7 @@ spec:
             - name: CRYPTO_SERVER_BASE_URL
               value: http://encryptpii-kong.kong.svc.cluster.local:8000
             - name: LOGGING_LEVEL_COM_IKEA_CRYPTO
-              value: INFO
+              value: DEBUG
           startupProbe:
             httpGet:
               path: /actuator/health

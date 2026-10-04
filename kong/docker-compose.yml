@@ -56,7 +56,6 @@ services:
       KONG_PG_DATABASE: kong
       KONG_PLUGINS: bundled,sensitive-transport-crypto
       KONG_NGINX_HTTP_CLIENT_MAX_BODY_SIZE: 16m
-      ENCRYPTPII_VAULT_TOKEN: ${ENCRYPTPII_VAULT_TOKEN:?Please set the ENCRYPTPII_VAULT_TOKEN environment variable}
       KONG_TO_ENCRYPTPII_AUTH_TOKEN: ${KONG_TO_ENCRYPTPII_AUTH_TOKEN:?Please set the KONG_TO_ENCRYPTPII_AUTH_TOKEN environment variable}
 
       # 日志配置

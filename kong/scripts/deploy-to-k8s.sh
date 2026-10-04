@@ -51,7 +51,7 @@ jq -n \
   def plugin($public; $decrypt; $encrypt; $source; $path):
     {name:"sensitive-transport-crypto",config:{
       vault_addr:$vault_addr,vault_secret_path:$secret_path,key_alias:$alias,
-      vault_auth_method:"kubernetes",vault_auth_role:"encryptpii-kong",
+      vault_auth_role:"encryptpii-kong",
       upstream_auth_token:"{vault://env/KONG_TO_ENCRYPTPII_AUTH_TOKEN}",
       key_validity_millis:$validity,key_grace_period_millis:$grace,
       max_body_bytes:$max_body,serve_public_key:$public,

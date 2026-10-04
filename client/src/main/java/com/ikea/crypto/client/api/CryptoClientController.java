@@ -1,13 +1,10 @@
 package com.ikea.crypto.client.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ikea.crypto.client.constant.CryptoConstants;
 import com.ikea.crypto.client.core.CryptoClient;
 import com.ikea.crypto.client.core.CryptoHttpClient;
 import com.ikea.crypto.client.model.*;
-import com.ikea.crypto.client.constant.CryptoConstants;
-import com.ikea.crypto.client.model.CipherRequestPayload;
-import com.ikea.crypto.client.model.CipherResponsePayload;
-import com.ikea.crypto.client.model.SessionKeyTransport;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -18,6 +15,10 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.net.URI;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 @RestController
@@ -54,14 +55,26 @@ public class CryptoClientController {
         long startTime = System.currentTimeMillis();
         log.debug("starting bidirectional RSA encryption");
 
+        String plaintext = toJsonString(demoSensitiveRequest);
         CryptoHttpClient.ServerKeyInfo serverKeyInfo = cryptoHttpClient.fetchServerKeyInfo();
         CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(
-                toJsonString(demoSensitiveRequest), serverKeyInfo.keyId(), serverKeyInfo.publicKey());
+                plaintext, serverKeyInfo.keyId(), serverKeyInfo.publicKey());
         CipherRequestPayload requestPayload = encrypted.payload();
 
         long encryptedTime = System.currentTimeMillis();
 
-        CipherResponsePayload responsePayload = cryptoHttpClient.postBidirectional(bidirectionalPath, requestPayload);
+        CipherResponsePayload responsePayload;
+        try {
+            responsePayload = cryptoHttpClient.postBidirectional(bidirectionalPath, requestPayload);
+        } catch (CryptoHttpClient.HttpStatusException failure) {
+            serverKeyInfo = cryptoHttpClient.getRefreshedKeyFromFailure(failure);
+            if (serverKeyInfo == null) {
+                throw failure;
+            }
+            encrypted = cryptoClient.encrypt(plaintext, serverKeyInfo.keyId(), serverKeyInfo.publicKey());
+            requestPayload = encrypted.payload();
+            responsePayload = cryptoHttpClient.postBidirectional(bidirectionalPath, requestPayload);
+        }
 
         long httpTime = System.currentTimeMillis();
 
@@ -88,14 +101,26 @@ public class CryptoClientController {
             throws Exception {
         long startTime = System.currentTimeMillis();
         log.debug("starting request-only RSA encryption");
+        String plaintext = toJsonString(demoSensitiveRequest);
         CryptoHttpClient.ServerKeyInfo serverKeyInfo = cryptoHttpClient.fetchServerKeyInfo();
         CryptoClient.EncryptionResult encrypted = cryptoClient.encrypt(
-                toJsonString(demoSensitiveRequest), serverKeyInfo.keyId(), serverKeyInfo.publicKey());
+                plaintext, serverKeyInfo.keyId(), serverKeyInfo.publicKey());
         CipherRequestPayload requestPayload = encrypted.payload();
 
         long encryptedTime = System.currentTimeMillis();
 
-        DemoPlainResponse demoPlainResponse = cryptoHttpClient.postRequestOnly(requestOnlyPath, requestPayload);
+        DemoPlainResponse demoPlainResponse;
+        try {
+            demoPlainResponse = cryptoHttpClient.postRequestOnly(requestOnlyPath, requestPayload);
+        } catch (CryptoHttpClient.HttpStatusException failure) {
+            serverKeyInfo = cryptoHttpClient.getRefreshedKeyFromFailure(failure);
+            if (serverKeyInfo == null) {
+                throw failure;
+            }
+            encrypted = cryptoClient.encrypt(plaintext, serverKeyInfo.keyId(), serverKeyInfo.publicKey());
+            requestPayload = encrypted.payload();
+            demoPlainResponse = cryptoHttpClient.postRequestOnly(requestOnlyPath, requestPayload);
+        }
 
         long httpTime = System.currentTimeMillis();
 
@@ -126,8 +151,21 @@ public class CryptoClientController {
 
         long requestPrepared = System.currentTimeMillis();
 
-        CipherResponsePayload responsePayload =
-                cryptoHttpClient.postResponseOnly(responseOnlyPath, demoPlainRequest, sessionTransport);
+        CipherResponsePayload responsePayload;
+        try {
+            responsePayload =
+                    cryptoHttpClient.postResponseOnly(responseOnlyPath, demoPlainRequest, sessionTransport);
+        } catch (CryptoHttpClient.HttpStatusException failure) {
+            serverKeyInfo = cryptoHttpClient.getRefreshedKeyFromFailure(failure);
+            if (serverKeyInfo == null) {
+                throw failure;
+            }
+            sessionKey = generateSessionKey();
+            sessionTransport =
+                    SessionKeyTransport.fromGeneratedKey(serverKeyInfo.keyId(), sessionKey, serverKeyInfo.publicKey());
+            responsePayload =
+                    cryptoHttpClient.postResponseOnly(responseOnlyPath, demoPlainRequest, sessionTransport);
+        }
         long httpTime = System.currentTimeMillis();
 
         // Decrypt the response data using the session key and IV

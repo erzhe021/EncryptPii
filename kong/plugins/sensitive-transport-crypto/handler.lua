@@ -23,9 +23,40 @@ local CryptoKongPlugin = {
   VERSION = "1.0.0",
 }
 
+local function remove_cached_key(cache_id)
+  key_cache[cache_id] = nil
+  for i = #key_cache_order, 1, -1 do
+    if key_cache_order[i] == cache_id then
+      table.remove(key_cache_order, i)
+    end
+  end
+end
+
+local function cleanup_key_cache()
+  local now = ngx.now()
+  for i = #key_cache_order, 1, -1 do
+    local cache_id = key_cache_order[i]
+    local cached = key_cache[cache_id]
+    if not cached or cached.expires_at <= now then
+      key_cache[cache_id] = nil
+      table.remove(key_cache_order, i)
+    end
+  end
+end
+
 local function json_error(status, message)
   return kong.response.exit(status, {
     message = message,
+  })
+end
+
+local function json_key_error(status, code, message, data)
+  return kong.response.exit(status, {
+    code = code,
+    msg = message,
+    data = data,
+  }, {
+    ["Cache-Control"] = "no-store",
   })
 end
 
@@ -105,15 +136,6 @@ local function get_vault_json(config, token, location, path)
 end
 
 local function get_vault_token(config, location)
-  if config.vault_auth_method ~= "kubernetes" then
-    local token, token_err = resolve_secret(config.vault_token)
-    if not token or token == "" then
-      kong.log.err("Unable to resolve the configured Vault token: ", token_err)
-      return nil, "Vault is unavailable"
-    end
-    return token
-  end
-
   if type(config.vault_auth_role) ~= "string" or config.vault_auth_role == "" then
     kong.log.err("Kubernetes Vault auth requires a role")
     return nil, "Vault is unavailable"
@@ -215,17 +237,26 @@ local function parse_vault_created_time(value)
 end
 
 local function get_private_key(config, key_id)
-  local cached = key_cache[key_id]
-  if cached and cached.expires_at > ngx.now() then
-    return cached.key
-  end
-
+  cleanup_key_cache()
   local alias, version
   if type(key_id) == "string" then
-    alias, version = key_id:match("^([^:]+):(%d+)$")
+    alias = key_id:match("^([^:]+)")
   end
   if alias ~= config.key_alias then
-    return nil, "keyId does not match the configured key alias", 400
+    return nil, "Invalid key alias", 400, "invalid_key_alias"
+  end
+  if type(key_id) == "string" then
+    version = key_id:match("^[^:]+:(%d+)$")
+  end
+  if not version then
+    return nil, "keyId does not contain a valid version", 400, "stale_key"
+  end
+
+  local cache_id = config.vault_addr .. "|" .. config.vault_secret_path .. "|"
+    .. config.key_validity_millis .. "|" .. config.key_grace_period_millis .. "|" .. key_id
+  local cached = key_cache[cache_id]
+  if cached and cached.expires_at > ngx.now() then
+    return cached.key
   end
 
   local location, location_err = parse_vault_location(config.vault_addr)
@@ -239,7 +270,8 @@ local function get_private_key(config, key_id)
     return nil, token_err
   end
 
-  local cache_expires_at = ngx.now() + KEY_CACHE_TTL_SECONDS
+  local lookup_started_at = ngx.now()
+  local cache_expires_at = lookup_started_at + KEY_CACHE_TTL_SECONDS
   local metadata_path = config.vault_secret_path:gsub("/data/", "/metadata/", 1)
   local metadata, metadata_err = get_vault_json(config, vault_token, location, metadata_path)
   local metadata_data = metadata and metadata.data
@@ -250,23 +282,42 @@ local function get_private_key(config, key_id)
   end
 
   if tonumber(version) > current_version then
-    return nil, "keyId refers to a key version not present in Vault", 400
+    return nil, "keyId refers to a key version not present in Vault", 400, "stale_key"
   end
+  local version_metadata = metadata_data.versions and metadata_data.versions[version]
+  if not version_metadata or version_metadata.destroyed
+    or (version_metadata.deletion_time and version_metadata.deletion_time ~= "") then
+    return nil, "keyId refers to a key version not available in Vault", 400, "stale_key"
+  end
+  local created_at = parse_vault_created_time(version_metadata.created_time)
+  if not created_at then
+    kong.log.err("Unable to read Vault creation time for keyId ", key_id)
+    return nil, "Vault key is unavailable"
+  end
+  local grace_deadline
   if tonumber(version) < current_version then
-    local version_metadata = metadata_data.versions and metadata_data.versions[version]
-    local created_at = version_metadata and parse_vault_created_time(version_metadata.created_time)
-    if not created_at then
-      kong.log.err("Unable to read Vault creation time for historical keyId ", key_id)
+    local next_version_metadata = metadata_data.versions[tostring(tonumber(version) + 1)]
+    local rotated_at = next_version_metadata
+      and parse_vault_created_time(next_version_metadata.created_time)
+    if not rotated_at then
+      kong.log.err("Unable to read Vault rotation time for keyId ", key_id)
       return nil, "Vault key is unavailable"
     end
-    local grace_deadline = created_at
+    grace_deadline = rotated_at + config.key_grace_period_millis
+    if ngx.now() * 1000 >= grace_deadline then
+      return nil, "keyId refers to a key expired beyond its grace period", 400, "stale_key"
+    end
+  else
+    grace_deadline = created_at
       + config.key_validity_millis
       + config.key_grace_period_millis
-    if ngx.now() * 1000 >= grace_deadline then
-      return nil, "keyId refers to a key expired beyond its grace period", 400
-    end
-    cache_expires_at = math.min(cache_expires_at, grace_deadline / 1000)
+    -- Bound active-key cache lifetime so it cannot outlive a full grace period after rotation.
+    cache_expires_at = math.min(
+      cache_expires_at,
+      lookup_started_at + config.key_grace_period_millis / 1000
+    )
   end
+  cache_expires_at = math.min(cache_expires_at, grace_deadline / 1000)
 
   local secret_path = config.vault_secret_path .. "?version=" .. version
   local secret, secret_err = get_vault_json(config, vault_token, location, secret_path)
@@ -291,14 +342,20 @@ local function get_private_key(config, key_id)
     return nil, "Vault key is unavailable"
   end
 
-  if #key_cache_order == KEY_CACHE_SIZE then
+  -- Vault I/O yields; prune again before inserting in case another request filled the cache.
+  cleanup_key_cache()
+  remove_cached_key(cache_id)
+  if cache_expires_at <= ngx.now() then
+    return key
+  end
+  if #key_cache_order >= KEY_CACHE_SIZE then
     key_cache[table.remove(key_cache_order, 1)] = nil
   end
-  key_cache[key_id] = {
+  key_cache[cache_id] = {
     key = key,
     expires_at = cache_expires_at,
   }
-  key_cache_order[#key_cache_order + 1] = key_id
+  key_cache_order[#key_cache_order + 1] = cache_id
   return key
 end
 
@@ -385,9 +442,9 @@ local function decrypt_session_key(config, key_id, encrypted_session_key_base64)
     return nil, decode_err
   end
 
-  local private_key, key_err, key_status = get_private_key(config, key_id)
+  local private_key, key_err, key_status, key_error_code = get_private_key(config, key_id)
   if not private_key then
-    return nil, key_err, key_status or 503
+    return nil, key_err, key_status or 503, key_error_code
   end
 
   local session_key, rsa_err = private_key:decrypt(
@@ -428,10 +485,10 @@ local function decrypt_request_body(config, body)
     return nil, "encryptedDataBase64 is too short"
   end
 
-  local session_key, rsa_err, key_status =
+  local session_key, rsa_err, key_status, key_error_code =
     decrypt_session_key(config, payload.keyId, payload.encryptedSessionKeyBase64)
   if not session_key then
-    return nil, rsa_err, nil, key_status
+    return nil, rsa_err, nil, key_status, key_error_code
   end
 
   local ciphertext = encrypted_data:sub(1, -GCM_TAG_BYTES - 1)
@@ -477,13 +534,25 @@ function CryptoKongPlugin:access(config)
   end
 
   if config.session_key_source == "header" then
-    local session_key, session_err, error_status = decrypt_session_key(
+    local session_key, session_err, error_status, key_error_code = decrypt_session_key(
       config,
       kong.request.get_header("X-STC-KEY-ID"),
       kong.request.get_header("X-STC-SESSION-KEY")
     )
     if not session_key then
       kong.log.warn("Rejected response-only session key: ", session_err)
+      if key_error_code == "stale_key" then
+        local latest_key, latest_key_err = get_public_key_response(config)
+        if not latest_key then
+          kong.log.err("Unable to include the latest public key in expired-key response: ", latest_key_err)
+          return json_error(503, "Public key is unavailable")
+        end
+        return json_key_error(400, "KEY_EXPIRED",
+          "密钥版本已过期，请更新公钥。最新公钥参考data", latest_key)
+      end
+      if key_error_code == "invalid_key_alias" then
+        return json_key_error(400, "INVALID_KEY", "keyId中的keyAlias无效")
+      end
       return json_error(error_status or 400, error_status and "Vault key is unavailable"
         or "Invalid response-only session key")
     end
@@ -503,9 +572,21 @@ function CryptoKongPlugin:access(config)
       return json_error(413, "Request body exceeds the crypto plugin size limit")
     end
 
-    local plaintext, decrypt_err, session_key, error_status = decrypt_request_body(config, body)
+    local plaintext, decrypt_err, session_key, error_status, key_error_code = decrypt_request_body(config, body)
     if not plaintext then
       kong.log.warn("Rejected encrypted request: ", decrypt_err)
+      if key_error_code == "stale_key" then
+        local latest_key, latest_key_err = get_public_key_response(config)
+        if not latest_key then
+          kong.log.err("Unable to include the latest public key in expired-key response: ", latest_key_err)
+          return json_error(503, "Public key is unavailable")
+        end
+        return json_key_error(400, "KEY_EXPIRED",
+          "密钥版本已过期，请更新公钥。最新公钥参考data", latest_key)
+      end
+      if key_error_code == "invalid_key_alias" then
+        return json_key_error(400, "INVALID_KEY", "keyId中的keyAlias无效")
+      end
       return json_error(error_status or 400, error_status and "Request decryption is unavailable"
         or "Invalid or undecryptable encrypted request")
     end

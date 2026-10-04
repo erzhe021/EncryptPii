@@ -122,7 +122,7 @@ upsert_plugin() {
       --arg session_key_source "$session_key_source" \
       '{
         vault_addr:$vault_addr,
-        vault_token:"{vault://env/ENCRYPTPII_VAULT_TOKEN}",
+        vault_auth_role:"encryptpii-kong",
         vault_secret_path:$vault_secret_path,
         key_alias:$key_alias,
         key_validity_millis:$key_validity_millis,

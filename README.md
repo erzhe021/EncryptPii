@@ -48,7 +48,7 @@ server/
   scripts/                            Build, deploy, delete
 kong/
   Dockerfile                          Kong 3.7 image with the Lua plugin
-  docker-compose.yml                  Legacy Docker Compose deployment
+  docker-compose.yml                  Kong image build configuration (legacy services retained)
   k8s/kong.yaml                       DB-less Kong Deployment and Services
   plugins/sensitive-transport-crypto/  Lua handler and schema
   scripts/                            Build, deploy, delete, configuration helpers
@@ -107,7 +107,7 @@ ENCRYPTPII_MAX_BODY_BYTES=1048576
 KONG_TO_ENCRYPTPII_AUTH_TOKEN=<the-generated-random-value>
 ```
 
-Do not paste the angle-bracket placeholders literally. No pre-existing `ENCRYPTPII_VAULT_TOKEN` is needed for the Kubernetes workflow: Kong authenticates to Vault with its Kubernetes ServiceAccount. The token variable is retained only for legacy Docker Compose and Admin API configuration workflows. Kong deployment fixes its upstream and Vault addresses to the cluster Services rather than taking external addresses or tokens from `.env`.
+Do not paste the angle-bracket placeholders literally. Kong authenticates to Vault only with its Kubernetes ServiceAccount; no static Vault token is configured for the plugin. Kong deployment fixes its upstream and Vault addresses to the cluster Services rather than taking external addresses or tokens from `.env`. Source Vault migration requires an explicit `SOURCE_VAULT_TOKEN`; manual rotation uses its separate rotation credential.
 
 | Setting | Meaning |
 | --- | --- |
@@ -344,6 +344,8 @@ An expired current public key is not issued: the public-key route returns 503. D
 
 Kong's public-key endpoint reads the current version for each call and returns `Cache-Control: no-store`; it never returns private-key material. The next public-key request sees a successful rotation without a Kong restart. Client caches its public key until expiry, so it may continue to send an older `keyId`. Parsed private keys are cached per Kong worker for up to 60 seconds; caches are not an immediate key-revocation mechanism.
 
+Kong caps private-key cache expiry at the validity-plus-grace deadline and removes expired entries when accessing a private key and before inserting a fetched key, without a cleanup timer. Idle workers retain expired entries until the next private-key access. Cleanup clears Kong's cache references without modifying Vault versions; it does not guarantee immediate secure memory erasure.
+
 No automatic rotation scheduler is included. Schedule rotation before expiry with failure monitoring and overlap prevention, coordinating client refresh, grace periods, and Vault version retention.
 
 ### Cryptographic wire format
@@ -362,6 +364,8 @@ Request-body encryption uses:
 RSA uses OAEP SHA-256 with MGF1-SHA-1, matching Java. AES uses 256-bit GCM, a 12-byte IV, and a 16-byte tag. Response-only mode sends the RSA-encrypted AES key in `X-STC-SESSION-KEY` and the version in `X-STC-KEY-ID`; Kong removes these headers before forwarding. Encrypted responses contain `ivBase64` and `encryptedDataBase64`.
 
 `KONG_TO_ENCRYPTPII_AUTH_TOKEN` is a shared service-to-service credential, independent of the RSA pair, and does not change during key rotation. Server encrypted-flow handlers return 503 for an empty configured token and 403 for a missing or incorrect supplied token. For token rotation, update this one `.env` value and redeploy Server followed by Kong so both workloads receive the same credential.
+
+If Kong rejects an encrypted request because its `keyId` version is missing or beyond the grace period, it returns HTTP 400 with `code: "KEY_EXPIRED"` and the latest public key in `data`. The demo Java Client installs that key, re-encrypts, and retries once without a separate public-key request. A key-alias mismatch returns `code: "INVALID_KEY"` without key data and is not retried; malformed or undecryptable payloads are not refresh signals.
 
 ## Maintenance and troubleshooting
 
@@ -387,8 +391,7 @@ Do not delete its PVC or credentials as routine maintenance. PVC persistence doe
 For optional Kong proxy/Admin/Manager diagnostics, keep this command running in a separate terminal:
 
 ```bash
-kubectl -n kong port-forward service/encryptpii-kong \
-  18000:8000 18001:8001 18002:8002
+kubectl -n kong port-forward service/encryptpii-kong 18000:8000 18001:8001 18002:8002
 ```
 
 Then query the public key:
@@ -421,19 +424,13 @@ These workflows are not required for the default all-Kubernetes deployment.
 
 ### Migrate an existing external Vault
 
-`vault/scripts/initialize-and-migrate.sh` migrates readable retained versions into a fresh Kubernetes Vault. It reads `.env` for the key path and source token; use explicit `SOURCE_VAULT_ADDR` and `SOURCE_VAULT_TOKEN` for the source.
+`vault/scripts/initialize-and-migrate.sh` migrates readable retained versions into a fresh Kubernetes Vault. It reads `.env` for the key path; set `SOURCE_VAULT_TOKEN` explicitly and use `SOURCE_VAULT_ADDR` to override the default source address `http://localhost:8200`.
 
 It sets sufficient destination version retention before writing and verifies the migrated versions. Destination version numbers and creation times are new; this is not an exact Vault backup/restore. Deleted/destroyed source versions and an existing destination mount cause a stop. It is not an incremental synchronization tool. Reset Client caches after switching Vaults.
 
-### Docker Compose and host-run applications
+### Image building and host-run applications
 
-The legacy Compose deployment is documented in [kong/README.md](kong/README.md). It requires a separately running Vault and Spring Server, explicit host-reachable address/token overrides, and available ports 5432, 8000, 8001, 8002, 8443, and 8444. Root `.env` now defaults to Kubernetes addresses, so running the legacy installer without overrides is not the recommended setup.
-
-`kong/scripts/build-plugin.sh` builds the image and checks Lua compilation. `configure-routes.sh` manages routes in database-backed Kong; `install-to-kong.sh` starts Compose and applies that configuration. Preserve the Compose project identity and database volume when reusing an installation.
-
-```bash
-docker compose --env-file .env -f kong/docker-compose.yml ps
-```
+`kong/scripts/build-plugin.sh` uses Docker Compose to build the image and checks Lua compilation. Standalone Compose runtime installation is no longer supported because the plugin requires a Kubernetes ServiceAccount JWT. `install-to-kong.sh` delegates to the Kubernetes deployment script. `configure-routes.sh` manages routes only in database-backed Kong running in Kubernetes; the default DB-less deployment uses declarative configuration instead. See [kong/README.md](kong/README.md).
 
 For a host-run Client connected to Kubernetes Kong, first start the Kong diagnostic port forward, then:
 

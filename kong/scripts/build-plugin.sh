@@ -25,3 +25,9 @@ docker run --rm \
     end
     print("Kong plugin Lua files compile successfully")
   '
+
+docker run --rm \
+  --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  --entrypoint /usr/local/openresty/luajit/bin/luajit \
+  encryptpii-kong:3.7 \
+  /tmp/plugin-tests/key-cache-test.lua

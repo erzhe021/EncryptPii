@@ -1,14 +1,11 @@
 package com.ikea.crypto.client.core;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ikea.crypto.client.model.DemoPlainRequest;
-import com.ikea.crypto.client.model.DemoPlainResponse;
 import com.ikea.crypto.client.constant.CryptoConstants;
-import com.ikea.crypto.client.model.CipherRequestPayload;
-import com.ikea.crypto.client.model.CipherResponsePayload;
-import com.ikea.crypto.client.model.PublicKeyResponse;
-import com.ikea.crypto.client.model.SessionKeyTransport;
+import com.ikea.crypto.client.model.*;
+import com.ikea.crypto.client.util.DateUtils;
 import com.ikea.crypto.client.util.EncodingUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpHeaders;
@@ -31,6 +28,19 @@ import java.security.spec.X509EncodedKeySpec;
 @Slf4j
 public class CryptoHttpClient {
 
+    public static final String KEY_EXPIRED_CODE = "KEY_EXPIRED";
+
+    public static final class HttpStatusException extends IllegalStateException {
+        private final int statusCode;
+        private final String responseBody;
+
+        private HttpStatusException(String path, int statusCode, String responseBody) {
+            super("request path: " + path + " failed: status=" + statusCode + ", body=" + responseBody);
+            this.statusCode = statusCode;
+            this.responseBody = responseBody;
+        }
+    }
+
     private final HttpClient httpClient;
     private final URI serverBaseUri;
     private final ObjectMapper objectMapper;
@@ -40,9 +50,6 @@ public class CryptoHttpClient {
     private volatile CachedPublicKey cachedPublicKey;
 
     public record ServerKeyInfo(String keyId, PublicKey publicKey, long expiresAtEpochMillis) {
-        boolean isValid() {
-            return System.currentTimeMillis() < expiresAtEpochMillis;
-        }
     }
 
     private record CachedPublicKey(String keyId, PublicKey publicKey, long expiresAtEpochMillis) {
@@ -69,14 +76,18 @@ public class CryptoHttpClient {
         CachedPublicKey currentCache = this.cachedPublicKey;
         if (currentCache != null) {
             if (currentCache.isValid()) {
-                log.debug("use cached RSA public key which is still valid, keyId={}", currentCache.keyId());
+                log.debug("use cached RSA public key which is still valid, keyId={}, expiresAt={}",
+                        currentCache.keyId(),
+                        DateUtils.toDate(currentCache.expiresAtEpochMillis()));
                 return currentCache.toServerKeyInfo();
             } else {
-                log.warn("cached RSA public key is expired, keyId={}", currentCache.keyId());
+                log.warn("cached RSA public key is expired, keyId={}, expiresAt={}",
+                        currentCache.keyId(),
+                        DateUtils.toDate(currentCache.expiresAtEpochMillis()));
             }
         }
 
-        log.debug("start to fetching RSA public key from server");
+        log.debug("no cached RSA public key found, start to fetching RSA public key from server");
         HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
                 .build();
@@ -86,12 +97,7 @@ public class CryptoHttpClient {
             ensureSuccess(response, publicKeyEndpoint);
 
             PublicKeyResponse keyResponse = objectMapper.readValue(response.body(), PublicKeyResponse.class);
-            PublicKey parsedKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(
-                    new X509EncodedKeySpec(EncodingUtils.fromBase64(keyResponse.publicKeyBase64()))
-            );
-            this.cachedPublicKey = new CachedPublicKey(keyResponse.keyId(), parsedKey, keyResponse.expiresAtEpochMillis());
-            log.info("fetched RSA public key from server, keyId={}, caching it for future use", keyResponse.keyId());
-            return this.cachedPublicKey.toServerKeyInfo();
+            return cacheServerKeyInfo(keyResponse);
         } catch (IOException | InterruptedException e) {
             if (e instanceof InterruptedException) {
                 Thread.currentThread().interrupt();
@@ -101,10 +107,55 @@ public class CryptoHttpClient {
     }
 
     /**
-     * Fetches the server's RSA public key, returning the cached instance if still valid.
+     * Extracts and caches the latest public key included in the plugin's KEY_EXPIRED response.
      */
-    public PublicKey fetchServerPublicKey() throws GeneralSecurityException {
-        return fetchServerKeyInfo().publicKey();
+    public ServerKeyInfo getRefreshedKeyFromFailure(Throwable failure) throws GeneralSecurityException {
+        if (!(failure instanceof HttpStatusException httpFailure)
+                || httpFailure.statusCode != 400) {
+            return null;
+        }
+        JsonNode body;
+        try {
+            body = objectMapper.readTree(httpFailure.responseBody);
+        } catch (JsonProcessingException e) {
+            return null;
+        }
+        if (body == null || !KEY_EXPIRED_CODE.equals(body.path("code").asText())) {
+            return null;
+        }
+        try {
+            PublicKeyResponse keyResponse = objectMapper.treeToValue(body.path("data"), PublicKeyResponse.class);
+            if (keyResponse.publicKeyBase64() == null || keyResponse.publicKeyBase64().isBlank()
+                    || keyResponse.keyId() == null || keyResponse.keyId().isBlank()
+                    || keyResponse.expiresAtEpochMillis() <= System.currentTimeMillis()) {
+                throw new GeneralSecurityException("KEY_EXPIRED response contains invalid public key data");
+            }
+            log.warn("server returned KEY_EXPIRED response, refreshing cached RSA public key, keyId={}", keyResponse.keyId());
+            return cacheServerKeyInfo(keyResponse);
+        } catch (JsonProcessingException e) {
+            throw new GeneralSecurityException("Unable to parse public key data from KEY_EXPIRED response", e);
+        }
+    }
+
+    private ServerKeyInfo cacheServerKeyInfo(PublicKeyResponse keyResponse) throws GeneralSecurityException {
+        if (keyResponse == null || keyResponse.publicKeyBase64() == null
+                || keyResponse.publicKeyBase64().isBlank() || keyResponse.keyId() == null
+                || keyResponse.keyId().isBlank()
+                || keyResponse.expiresAtEpochMillis() <= System.currentTimeMillis()) {
+            throw new GeneralSecurityException("Server returned invalid or expired public key data");
+        }
+        try {
+            PublicKey parsedKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(
+                    new X509EncodedKeySpec(EncodingUtils.fromBase64(keyResponse.publicKeyBase64()))
+            );
+            this.cachedPublicKey = new CachedPublicKey(
+                    keyResponse.keyId(), parsedKey, keyResponse.expiresAtEpochMillis());
+            log.info("received RSA public key, keyId={}, expiresAt={}, caching it for future use", keyResponse.keyId(),
+                    DateUtils.toDate(keyResponse.expiresAtEpochMillis()));
+            return this.cachedPublicKey.toServerKeyInfo();
+        } catch (GeneralSecurityException | IllegalArgumentException e) {
+            throw new GeneralSecurityException("Invalid RSA public key received from server", e);
+        }
     }
 
     /**
@@ -172,8 +223,7 @@ public class CryptoHttpClient {
 
     private void ensureSuccess(HttpResponse<String> response, String path) {
         if (response.statusCode() != 200) {
-            throw new IllegalStateException("request path: " + path + " failed: status="
-                    + response.statusCode() + ", body=" + response.body());
+            throw new HttpStatusException(path, response.statusCode(), response.body());
         }
     }
 }

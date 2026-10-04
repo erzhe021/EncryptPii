@@ -8,7 +8,7 @@ usage() {
     '默认使用 kubectl exec 访问 docker-desktop 中的 vault/vault-0，无需端口转发。' \
     '默认令牌来自 vault/.local/rotation-token；VAULT_TOKEN 可显式覆盖。' \
     '密钥路径默认读取根目录 .env 中的 ENCRYPTPII_VAULT_SECRET_PATH。' \
-    '--http 使用本机 curl；VAULT_ADDR/VAULT_TOKEN 覆盖根目录 .env 配置。' \
+    '--http 使用本机 curl；必须设置 VAULT_TOKEN，VAULT_ADDR 可覆盖根目录 .env 地址。' \
     '目标密钥必须已存在；保留其他字段，使用 CAS 写入新的 RSA-2048 版本。' \
     '--dry-run 读取密钥并准备新密钥，但不写入 Vault。'
 }
@@ -82,12 +82,12 @@ if [[ "$transport" == k8s ]]; then
     exit 1
   fi
 else
-  vault_token="${VAULT_TOKEN:-${ENCRYPTPII_VAULT_TOKEN:-}}"
+  vault_token="${VAULT_TOKEN:-}"
 fi
 secret_path="${secret_path:-${ENCRYPTPII_VAULT_SECRET_PATH:-}}"
 
 if [[ -z "$vault_token" || ( "$transport" == http && ! "$vault_addr" =~ ^https?://[^[:space:]]+$ ) ]]; then
-  printf 'Set a valid VAULT_ADDR and a nonempty VAULT_TOKEN (or the matching ENCRYPTPII variables in the repository-root .env).\n' >&2
+  printf 'Set a valid VAULT_ADDR (or ENCRYPTPII_VAULT_ADDR in .env) and a nonempty VAULT_TOKEN.\n' >&2
   exit 1
 fi
 if [[ ! "$secret_path" =~ ^[A-Za-z0-9_-]+/data/[A-Za-z0-9/_-]+$ ]]; then

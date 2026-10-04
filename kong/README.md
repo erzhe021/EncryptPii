@@ -29,7 +29,25 @@ The request payload format is:
 
 The RSA operation uses OAEP with SHA-256 and MGF1-SHA-1, matching the Java SDK's `RSA/ECB/OAEPWithSHA-256AndMGF1Padding` default parameters. AES uses 256-bit GCM with a 12-byte IV and 128-bit tag. The response JSON has `ivBase64` and `encryptedDataBase64`, matching the SDK's `CipherResponsePayload`.
 
-The plugin loads key versions directly from Vault and caches parsed keys for 60 seconds per Kong worker. For non-active keys, it enforces `created_time + key_validity_millis + key_grace_period_millis`; keep those values aligned with the Spring server and keep Vault versions available through the grace window.
+The plugin loads key versions directly from Vault and caches parsed keys for up to 60 seconds per Kong worker. For a non-active key, the rotation time is the `created_time` of the next Vault KV v2 version, and the plugin enforces `rotation_time + key_grace_period_millis`. Keep Vault versions available through that grace window.
+
+Each worker removes expired private-key cache entries when accessing a private key and before inserting a fetched key; no cleanup timer runs. Cache expiry is capped by the 60-second TTL and the relevant key deadline. Active-key cache entries are also capped at one configured grace period from lookup so a cached key cannot bypass the post-rotation window. Cleanup removes references from both the cache and its eviction queue; it never deletes Vault versions. Idle workers retain expired entries until the next private-key access, and removing references does not guarantee an immediate secure memory wipe.
+
+If a request names a key version that does not exist or is past its grace deadline, Kong returns HTTP 400 with `code: "KEY_EXPIRED"`, the Chinese expiration message, and the latest public key in `data` before forwarding the request upstream. A key-alias mismatch instead returns `code: "INVALID_KEY"` without key data. Clients may update their cached key from `KEY_EXPIRED` and retry once; other validation/decryption errors must not trigger a retry.
+
+The expiration response shape is:
+
+```json
+{
+  "code": "KEY_EXPIRED",
+  "msg": "密钥版本已过期，请更新公钥。最新公钥参考data",
+  "data": {
+    "publicKeyBase64": "xxxxx",
+    "keyId": "rsa-ciam:2",
+    "expiresAtEpochMillis": 1735689600000
+  }
+}
+```
 
 ## Build and install scripts
 
@@ -37,7 +55,7 @@ All scripts live under `scripts/`:
 
 - `build-plugin.sh` builds `encryptpii-kong:3.7` and compiles both Lua files with the Kong image's LuaJIT.
 - `configure-routes.sh` idempotently creates or updates the upstream service, public-key route, three business routes, and their route-scoped plugin configurations through the Kong Admin API.
-- `install-to-kong.sh` checks local credentials, builds and starts Kong with the plugin enabled, waits for the Admin API, then configures the routes.
+- `install-to-kong.sh` delegates to `deploy-to-k8s.sh` to build and deploy Kong with Kubernetes Vault authentication.
 - `../vault/scripts/rotate-vault-key.sh` creates a new RSA-2048 key version at a specified existing Vault KV v2 secret, preserving other fields and all historical versions. It uses CAS to reject competing updates rather than overwriting them.
 
 明文演示使用独立 Service `encryptpii-server-plain`：Kong POST `/plain/server/normal` 保留路径透传至 Server `/plain/server/normal`（`strip_path:false`），不挂载任何插件。Client 仅保留 `/plain/client/normal` 明文入口，不获取公钥、不加解密；目标 URL 从 `application.yml` 的 `plain.server.endpoints.normal` 读取，为 `/plain/server/normal`，加密目标由 `crypto.server` 独立配置。Kubernetes 部署和 Admin API 配置脚本均安装这条独立路由，原有加密路由保持不变。不要将加密插件配置为全局或绑定到明文 Service，否则它仍会作用于该链路。明文链路仅用于本地演示。
@@ -53,19 +71,19 @@ Rotation defaults to `kubectl exec` against Kubernetes Vault in the `docker-desk
 
 The script reads the repository-root `.env`; `VAULT_ADDR` and `VAULT_TOKEN` override its Vault settings. When using the `.env` address, the rotation script maps `host.docker.internal` to `localhost` for execution on the host, preserving the scheme, port, and path. An explicit `VAULT_ADDR` is used unchanged; Kong's configuration is not modified. The path argument is optional when `ENCRYPTPII_VAULT_SECRET_PATH` is set. Use a dedicated rotation token with `read` and `update` permissions on the target data path; Kong's Kubernetes auth role remains read-only. Keys are stored as Base64 X.509 public-key DER and PKCS#8 private-key DER, matching the SDK. Temporary secret files have restrictive permissions and are removed on exit; no key or token is printed. This is a one-time rotation, not an automatic scheduler. If CAS fails, inspect the latest version before running again.
 
-Legacy Docker Compose installation (not the default Kubernetes workflow; requires a Vault token):
+Kubernetes installation (requires the Vault Kubernetes auth role and the Server gateway Secret to be provisioned):
 
 ```bash
 cp .env.example .env
-# Set ENCRYPTPII_VAULT_TOKEN and KONG_TO_ENCRYPTPII_AUTH_TOKEN in the root .env.
+# Set KONG_TO_ENCRYPTPII_AUTH_TOKEN and the crypto settings in the root .env.
 ./kong/scripts/install-to-kong.sh
 ```
 
-To rebuild the plugin image only, run `./scripts/build-plugin.sh`. To reapply route configuration without restarting Kong, run `./scripts/configure-routes.sh`.
+To rebuild the plugin image only, run `./kong/scripts/build-plugin.sh` from the repository root. To reapply the default Kubernetes configuration, run `./kong/scripts/deploy-to-k8s.sh`.
 
-The plugin scripts `build-plugin.sh`, `install-to-kong.sh`, and `configure-routes.sh` share `load-env.sh` to read settings from the repository-root `.env`, regardless of the current working directory. The Vault rotation script lives in `vault/scripts/rotate-vault-key.sh` and reads that same root `.env` through the shared loader. Exported environment variables take precedence over `.env`; required settings must be nonempty. Use literal `KEY=value` assignments, optionally surrounded by single or double quotes; shell commands and variable interpolation are not evaluated. The build and install scripts explicitly pass the root `.env` to Docker Compose. Changing route settings requires rerunning `configure-routes.sh`; for Kubernetes, redeploy Server followed by Kong after changing the shared auth token. For legacy Compose, restart/reinstall Kong and restart the host-run Server after changing it.
+The plugin scripts `build-plugin.sh`, `deploy-to-k8s.sh`, and `configure-routes.sh` share `load-env.sh` to read settings from the repository-root `.env`, regardless of the current working directory. The Vault rotation script lives in `vault/scripts/rotate-vault-key.sh` and reads that same root `.env` through the shared loader. Exported environment variables take precedence over `.env`; required settings must be nonempty. Use literal `KEY=value` assignments, optionally surrounded by single or double quotes; shell commands and variable interpolation are not evaluated. The build script uses Docker Compose only to build the image. Redeploy Kong after changing its declarative route settings, and redeploy Server followed by Kong after changing the shared auth token. `configure-routes.sh` is for a database-backed Kong running in Kubernetes with a ServiceAccount bound to the `encryptpii-kong` Vault role; it cannot update the DB-less Kubernetes deployment through the Admin API.
 
-The legacy installer requires Docker Compose, `curl`, `jq`, and Bash. The Compose setup uses Kong 3.7; pin and test the matching base image for other environments. The root `.env` now uses Kubernetes addresses. To use the legacy host-based setup, explicitly override `ENCRYPTPII_UPSTREAM_URL=http://host.docker.internal:9090` and `ENCRYPTPII_VAULT_ADDR=http://host.docker.internal:8200`, and provide the corresponding tokens. This installer is not used for Kubernetes deployments.
+The installer requires Docker Compose for image building, `kubectl`, `jq`, and Bash. The image uses Kong 3.7; pin and test the matching base image for other environments. Standalone Docker Compose runtime installation is no longer supported: the plugin requires a Kubernetes ServiceAccount JWT and an authorized Vault Kubernetes auth role.
 
 The script configures Kong only. The Spring server must also be started with `KONG_TO_ENCRYPTPII_AUTH_TOKEN` set to the same value used by Kong; otherwise its protected plaintext endpoints reject requests.
 
@@ -80,8 +98,9 @@ plugins:
   - name: sensitive-transport-crypto
     route: encrypted-api
     config:
-      vault_addr: http://host.docker.internal:8200
-      vault_token: "{vault://env/ENCRYPTPII_VAULT_TOKEN}"
+      vault_addr: http://vault.vault.svc.cluster.local:8200
+      vault_auth_role: encryptpii-kong
+      vault_kubernetes_jwt_path: /var/run/secrets/kubernetes.io/serviceaccount/token
       vault_secret_path: secret/data/sensitive-transport-crypto/rsa-ciam
       key_alias: rsa-ciam
       key_validity_millis: 60000
@@ -106,7 +125,7 @@ The local Kong instance is configured with these routes:
 | `/crypto/server/request-only` | POST | `/crypto/server/request-only` | Decrypt request |
 | `/crypto/server/response-only` | POST | `/crypto/server/response-only` | Decrypt session-key headers and encrypt response |
 
-For Kubernetes, grant the bound auth role only `read` access to `secret/data/sensitive-transport-crypto/rsa-ciam` and `secret/metadata/sensitive-transport-crypto/rsa-ciam`. For the legacy Compose workflow, configure a non-root Vault token and a random gateway token through your secret manager.
+Grant the bound Kubernetes auth role only `read` access to `secret/data/sensitive-transport-crypto/rsa-ciam` and `secret/metadata/sensitive-transport-crypto/rsa-ciam`. The plugin logs in with its ServiceAccount JWT and caches the returned short-lived Vault token; static Vault token configuration is not supported.
 
 Use brace-wrapped Kong secret references exactly as shown. Configure `KONG_TO_ENCRYPTPII_AUTH_TOKEN` with the same random secret for the Spring server and Kong. The server rejects internal plaintext routes if the token is unset or incorrect. Do not expose those internal routes directly to untrusted networks.
 

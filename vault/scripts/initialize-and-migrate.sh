@@ -17,7 +17,7 @@ if [[ ! "$secret_path" =~ ^secret/data/[A-Za-z0-9/_-]+$ ]]; then
   exit 1
 fi
 source_addr="${SOURCE_VAULT_ADDR:-http://localhost:8200}"
-source_token="${SOURCE_VAULT_TOKEN:-${ENCRYPTPII_VAULT_TOKEN:?}}"
+source_token="${SOURCE_VAULT_TOKEN:?Set SOURCE_VAULT_TOKEN for the source Vault migration}"
 metadata_path="secret/metadata/${secret_path#secret/data/}"
 source "$SCRIPT_DIR/common.sh"
 mkdir -p "$LOCAL_DIR"
