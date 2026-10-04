@@ -11,7 +11,7 @@ public final class CryptoSessionMaterialFactory {
     private CryptoSessionMaterialFactory() {
     }
 
-    public static SecretKey generateAesKey(SecureRandom secureRandom) throws NoSuchAlgorithmException {
+    public static SecretKey generateAesSessionKey(SecureRandom secureRandom) throws NoSuchAlgorithmException {
         KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS, secureRandom);
         return keyGenerator.generateKey();
