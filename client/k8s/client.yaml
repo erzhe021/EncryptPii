@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: encryptpii-client
+  namespace: encryptpii
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: encryptpii-client
+  template:
+    metadata:
+      labels:
+        app: encryptpii-client
+    spec:
+      automountServiceAccountToken: false
+      containers:
+        - name: client
+          image: encryptpii-client:local
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: CRYPTO_SERVER_BASE_URL
+              value: http://encryptpii-kong.kong.svc.cluster.local:8000
+            - name: LOGGING_LEVEL_COM_IKEA_CRYPTO
+              value: DEBUG
+          startupProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health
+              port: http
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 100m
+              memory: 256Mi
+            limits:
+              cpu: "1"
+              memory: 512Mi
+          securityContext:
+            runAsNonRoot: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: encryptpii-client
+  namespace: encryptpii
+spec:
+  type: LoadBalancer
+  selector:
+    app: encryptpii-client
+  ports:
+    - name: http
+      port: 18080
+      targetPort: http

@@ -1,0 +1,58 @@
+<view class="page">
+  <view class="hero">
+    <view class="eyebrow">ENCRYPT PII</view>
+    <view class="title">敏感数据传输演示</view>
+    <view class="subtitle">选择传输方式，观察 client 返回的请求、响应与耗时。</view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">传输模式</view>
+    <view class="mode-list">
+      <view
+        wx:for="{{modes}}"
+        wx:key="id"
+        class="mode-item {{mode === item.id ? 'mode-item-active' : ''}}"
+        data-mode="{{item.id}}"
+        bindtap="selectMode"
+      >
+        <view class="mode-title">{{item.title}}</view>
+        <view class="mode-description">{{item.description}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">{{usesPlainInput ? '请求数据' : '敏感数据'}}</view>
+    <block wx:if="{{usesPlainInput}}">
+      <view class="field-label">请求内容</view>
+      <textarea
+        class="field textarea"
+        value="{{plainData}}"
+        maxlength="500"
+        placeholder="输入请求内容"
+        bindinput="onPlainInput"
+      />
+    </block>
+    <block wx:else>
+      <view class="field-label">姓名</view>
+      <input class="field" value="{{name}}" placeholder="请输入姓名" data-field="name" maxlength="100" bindinput="onSensitiveInput" />
+      <view class="field-label">电话</view>
+      <input class="field" value="{{phone}}" placeholder="请输入电话" data-field="phone" type="text" maxlength="32" bindinput="onSensitiveInput" />
+      <view class="field-label">邮箱</view>
+      <input class="field" value="{{email}}" placeholder="请输入邮箱" data-field="email" type="text" maxlength="254" bindinput="onSensitiveInput" />
+      <view class="field-label">地址</view>
+      <input class="field" value="{{address}}" placeholder="请输入地址" data-field="address" maxlength="500" bindinput="onSensitiveInput" />
+    </block>
+
+    <button class="submit-button" loading="{{loading}}" disabled="{{loading}}" bindtap="submit">
+      {{loading ? '请求中…' : '发送请求'}}
+    </button>
+    <view class="privacy-note">请仅使用虚构数据进行演示。生产环境必须通过 HTTPS 访问。</view>
+  </view>
+
+  <view wx:if="{{error}}" class="message error">{{error}}</view>
+  <view wx:if="{{result}}" class="card result-card">
+    <view class="section-title">接口结果</view>
+    <text class="result" selectable>{{result}}</text>
+  </view>
+</view>

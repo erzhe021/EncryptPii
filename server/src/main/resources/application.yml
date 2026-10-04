@@ -1,13 +1,15 @@
 server:
   port: 9090
 
-ecdh:
-  crypto:
-    key-directory: ${user.dir}/server/src/main/resources/keys
+spring:
+  config:
+    import:
+      - optional:file:./.env[.properties]
 
-rsa:
-  crypto:
-    key-directory: ${user.dir}/server/src/main/resources/keys
+sensitive:
+  transport:
+    crypto:
+      kong-gateway-token: ${KONG_TO_ENCRYPTPII_AUTH_TOKEN:}
 
 logging:
   level:

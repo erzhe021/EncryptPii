@@ -42,3 +42,8 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+/.env
+/certs/
+/vault/.local/
+
+project.private.config.json
