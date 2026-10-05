@@ -114,11 +114,12 @@ ENCRYPTPII_MAX_BODY_BYTES=1048576
 `KONG_TLS_CERT_FILE` 和 `KONG_TLS_KEY_FILE` 是相对仓库根目录或绝对路径的 PEM 文件路径。证书必须包含客户端访问 Kong 时使用的 DNS 名称或 IP 地址；不要将证书私钥提交到 Git。部署脚本会在 `kong` namespace 创建或更新 `encryptpii-kong-tls` Secret，并挂载到 Kong。部署前需准备证书，例如本机端口转发测试可使用自签名 localhost 证书：
 
 ```bash
-mkdir -p certs
-openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
-  -keyout certs/kong.key -out certs/kong.crt \
-  -subj "/CN=localhost" -addext "subjectAltName=DNS:localhost"
+./scripts/create-kong-certificate.sh
 ```
+
+脚本生成 `certs/kong.crt` 和 `certs/kong.key`，有效期 365 天，SAN 包含 `localhost` 和 `local.kong.test`，私钥权限为 `600`。默认拒绝覆盖已有文件；确认需要重新签发时添加 `--force`。证书更换后需更新 Kong TLS Secret 并重启 Kong，客户端信任配置也需按需更新。
+
+若 `.env` 配置为默认的 `certs/kong.crt` 和 `certs/kong.key`，且两个文件均不存在，`deploy-to-k8s.sh` 会自动调用上述脚本生成证书，再写入 TLS Secret。已有证书不会被重新签发；仅缺少其中一个文件或自定义路径下文件缺失时，部署会报错，不会自动覆盖或生成。`install-to-kong.sh` 也使用同一部署流程。
 
 本机访问时将代理 HTTPS 端口转发到 `18443`：
 

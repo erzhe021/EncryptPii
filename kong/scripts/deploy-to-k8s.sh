@@ -27,12 +27,19 @@ tls_cert_file="$KONG_TLS_CERT_FILE"
 tls_key_file="$KONG_TLS_KEY_FILE"
 [[ "$tls_cert_file" = /* ]] || tls_cert_file="$REPO_DIR/$tls_cert_file"
 [[ "$tls_key_file" = /* ]] || tls_key_file="$REPO_DIR/$tls_key_file"
-if [[ ! -f "$tls_cert_file" || ! -f "$tls_key_file" ]]; then
-  printf '找不到 TLS 证书或私钥文件：请检查 KONG_TLS_CERT_FILE 和 KONG_TLS_KEY_FILE。\n' >&2
-  exit 1
-fi
 if [[ "$(kubectl config current-context)" != "docker-desktop" ]]; then
   printf 'This local deployment script requires the docker-desktop context.\n' >&2
+  exit 1
+fi
+if [[ "$tls_cert_file" == "$REPO_DIR/certs/kong.crt" &&
+      "$tls_key_file" == "$REPO_DIR/certs/kong.key" &&
+      ! -e "$tls_cert_file" && ! -L "$tls_cert_file" &&
+      ! -e "$tls_key_file" && ! -L "$tls_key_file" ]]; then
+  printf '默认 Kong TLS 证书和私钥均不存在，正在生成本地自签名证书。\n'
+  bash "$REPO_DIR/scripts/create-kong-certificate.sh"
+fi
+if [[ ! -f "$tls_cert_file" || ! -f "$tls_key_file" ]]; then
+  printf '找不到 TLS 证书或私钥文件：请检查 KONG_TLS_CERT_FILE 和 KONG_TLS_KEY_FILE。仅默认路径的两个文件均不存在时才会自动生成。\n' >&2
   exit 1
 fi
 kubectl -n encryptpii get secret encryptpii-gateway >/dev/null
