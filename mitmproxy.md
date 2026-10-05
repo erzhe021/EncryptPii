@@ -59,6 +59,9 @@ kubectl -n kong rollout status deployment/encryptpii-kong --timeout=180s
 
 ```bash
 kubectl -n kong port-forward service/encryptpii-kong 18443:8443
+
+#or run in background:
+nohup kubectl -n kong port-forward service/encryptpii-kong 18443:8443 > /dev/null 2>&1 &
 ```
 
 ## 4. 配置小程序访问地址
@@ -83,7 +86,24 @@ const KONG_BASE_URL = 'https://local.kong.test:18443';
 
 ```bash
 mitmweb -p 9080 --web-port 9081 \
-  --set ssl_verify_upstream_trusted_ca="$(pwd)/certs/kong.crt"
+  --set ssl_verify_upstream_trusted_ca="$(pwd)/certs/kong.crt" \
+  --set 'allow_hosts=^local\.kong\.test(:18443)?$'
+```
+
+也可以将配置写到~/.mitmproxy/config.yaml
+
+```yaml
+listen_port: 9080
+web_port: 9081
+ssl_verify_upstream_trusted_ca: /path/to/current-project/certs/kong.crt
+save_stream_file: ~/.mitmproxy/logs/mitm-flow.mitm
+allow_hosts:
+  - '^local\.kong\.test(:18443)?$'
+```
+
+仅执行mitmweb即可
+```bash
+mitmweb
 ```
 
 保持终端运行。该命令监听代理端口 `9080` 和管理页面端口 `9081`，并显式信任 Kong 自签名证书，验证 **mitmweb → Kong** 的 TLS 连接。因此，此抓包流程不需要执行 `trust-kong-certificate.sh`，也不需要使用 `ssl_insecure=true` 关闭上游校验。
@@ -92,30 +112,37 @@ mitmweb -p 9080 --web-port 9081 \
 
 只有不经代理、直接连接自签名 Kong，且客户端使用 macOS 系统信任库校验证书时，才可能需要运行 `./scripts/trust-kong-certificate.sh`。使用 `curl --cacert certs/kong.crt` 直接访问则无需系统钥匙串信任。
 
-## 6. 配置微信开发者工具并按需信任代理证书
+## 6. 配置微信开发者工具
 
 在微信开发者工具中：
 
-1. 本地调试若需要跳过域名和证书校验，打开 **详情 → 本地设置**，勾选 **不校验合法域名、web-view（业务域名）、TLS 版本以及 HTTPS 证书**。
+1. 打开 **详情 → 本地设置**，勾选 **不校验合法域名、web-view（业务域名）、TLS 版本以及 HTTPS 证书**。本教程使用 `local.kong.test` 本地域名，这一步是必要配置，不能用钥匙串中的证书信任替代。
 2. 打开 **设置 → 代理设置**，选择手动代理，填写 `127.0.0.1:9080` 并保存。
+3. 重启微信开发者工具，使配置生效。
 
-如果“不校验 HTTPS 证书”设置已生效，通常无需导入 mitmproxy CA，可直接重启开发者工具进入第 7 步。这个设置只影响客户端，不会关闭 mitmweb 对 Kong 的证书校验。
+去掉该勾选会同时启用合法域名、TLS 和证书等校验。`/etc/hosts` 只负责本机域名解析，不会把 `local.kong.test` 加入小程序管理后台的 `request` 合法域名配置。即使已经信任 mitmproxy CA，域名校验仍可能在发送请求前拒绝访问。对于本教程的本地配置，请保持该选项勾选。
 
-如果保留客户端证书校验，且尚未信任当前 mitmproxy CA，则需要让客户端信任 **微信开发者工具 → mitmweb** 这一段连接。首次启动 mitmweb 后会生成 `~/.mitmproxy/mitmproxy-ca-cert.pem`；对于使用 macOS 系统信任库的客户端，运行：
+钥匙串信任只对使用相应 macOS 信任配置的客户端有效，不能据此保证微信小程序运行时接受代理证书；具体行为取决于开发者工具版本和运行时。不要把“始终信任 mitmproxy CA”作为取消上述勾选的替代方案。
+
+上述设置只影响开发者工具的客户端校验，不会关闭 **mitmweb → Kong** 的证书校验；该连接仍由第 5 步的 `ssl_verify_upstream_trusted_ca` 配置验证。
+
+### 其他客户端需要校验证书时，才信任 mitmproxy CA
+
+本教程勾选“不校验…”后，无需额外运行 `trust-mitmproxy-certificate.sh`。如果还要让 Safari 等使用 macOS 系统信任库的客户端通过代理访问 HTTPS，且它们尚未信任当前 mitmproxy CA，可运行：
 
 ```bash
 ./scripts/trust-mitmproxy-certificate.sh
 ```
 
-不要在脚本前加 `sudo`，以免读取错误用户的证书目录；脚本会在导入系统钥匙串时请求管理员授权。也可以运行 `open ~/.mitmproxy/mitmproxy-ca-cert.pem`，手动导入“登录”钥匙串，在证书的“信任”中设置为“始终信任”。
+证书来自首次启动 mitmweb 后生成的 `~/.mitmproxy/mitmproxy-ca-cert.pem`。不要在脚本前加 `sudo`，以免读取错误用户的证书目录；脚本会在导入系统钥匙串时请求管理员授权。也可以运行 `open ~/.mitmproxy/mitmproxy-ca-cert.pem`，手动导入“登录”钥匙串，在证书的“信任”中设置为“始终信任”。导入后按需重启相应客户端。
 
-已信任当前 CA 时不必重复导入；CA 重新生成后才需按需重新信任。使用独立信任库的客户端需在自身配置中导入 CA。证书信任不能替代合法域名等其他校验配置。
-
-完成代理和必要的信任配置后，重启微信开发者工具，使配置生效。
+已信任当前 CA 时不必重复导入；CA 重新生成后才需按需重新信任。使用独立信任库的客户端需在自身配置中导入 CA。`curl` 是否使用系统信任库取决于其 TLS 后端，OpenSSL 命令也不能假定会读取钥匙串；显式指定 CA 更可靠。通过代理验证时应指定 mitmproxy CA，直接连接 Kong 时应指定 Kong 证书。
 
 ## 7. 发起请求并查看抓包结果
 
 在浏览器打开 [http://127.0.0.1:9081](http://127.0.0.1:9081)，然后在小程序页面触发普通传输或加密传输演示。
+
+管理页面使用 HTTP，打开它不需要信任 mitmproxy CA。
 
 在 mitmweb 中找到发往 `local.kong.test:18443` 的请求，点击查看请求方法、路径、请求头、请求体和响应内容。普通传输可查看业务明文；应用层加密模式中，被加密的请求或响应体仍然是密文，HTTPS 抓包不会自动解开应用层加密。
 
@@ -127,6 +154,7 @@ mitmweb -p 9080 --web-port 9081 \
 
 - **页面没有请求**：确认 mitmweb 和 `kubectl port-forward` 都在运行，并检查开发者工具代理地址是否为 `127.0.0.1:9080`。
 - **连接 Kong 失败**：确认 `/etc/hosts` 中有 `local.kong.test`，且 `wechat/config.js` 使用 `https://local.kong.test:18443`。
-- **无法连接代理**：检查 `~/.mitmproxy/config.yaml` 中的端口是否为 `9080` 和 `9081`，并确认没有其他程序占用这些端口。
-- **客户端提示不受信任的证书**：若经 mitmweb 访问 HTTPS 且客户端会校验证书，按第 6 步信任当前 mitmproxy CA，然后重启客户端。
+- **无法连接代理**：确认 mitmweb 按第 5 步监听 `9080` 和 `9081`，并确认没有其他程序占用这些端口。
+- **去掉“不校验…”后请求失败**：按第 6 步重新勾选并重启开发者工具。先查看控制台是否提示 `request` 合法域名错误；钥匙串中的证书信任无法替代域名配置。
+- **客户端提示不受信任的证书**：本教程中的微信开发者工具应先确认“不校验…”设置已生效；其他需要校验证书的客户端，可按第 6 步的可选说明信任当前 mitmproxy CA。不要假定系统钥匙串信任适用于所有客户端。
 - **mitmweb 报上游证书校验失败**：检查指定的 `certs/kong.crt` 是否与 Kong 当前证书一致、证书是否有效，以及 SAN 是否包含 `local.kong.test`。导入 mitmproxy CA 不能解决上游校验失败，信任 Kong 证书也不能修复 SAN 不匹配。
