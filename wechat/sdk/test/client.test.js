@@ -120,6 +120,12 @@ test('all modes preserve routing and interoperate with independent RSA/AES primi
     assert.deepEqual(detailed.data, expected);
     assert.equal(Boolean(detailed.cipherRequest), ['bidirectional', 'request-only'].includes(mode));
     assert.equal(Boolean(detailed.cipherResponse), ['bidirectional', 'response-only'].includes(mode));
+    if (mode === 'response-only') {
+      assert.equal(detailed.stcHeaders['X-STC-KEY-ID'], firstKey.info.keyId);
+      assert.ok(detailed.stcHeaders['X-STC-SESSION-KEY']);
+    } else {
+      assert.equal(detailed.stcHeaders, null);
+    }
     assert.equal(Object.hasOwn(detailed, 'sessionKey'), false);
     assert.equal(Object.hasOwn(detailed, 'request'), false);
     assert.ok(Object.values(detailed.timings).every((value) => value >= 0));
@@ -423,7 +429,7 @@ test('import is inert without a WeChat environment or random prewarming', () => 
   assert.equal(imported.status, 0, imported.stderr);
 });
 
-test('existing demo wrapper preserves the plaintext/ciphertext display contract', async () => {
+test('demo wrapper returns separate plaintext, ciphertext, and latency values', async () => {
   const previousWx = global.wx;
   const requests = [];
   const next = gateway(firstKey, requests, []);
@@ -442,16 +448,18 @@ test('existing demo wrapper preserves the plaintext/ciphertext display contract'
     const { callApi } = require('../../utils/api');
     const data = { name: '演示用户' };
     const result = await callApi('bidirectional', data);
-    assert.deepEqual(result.request.plain, data);
-    assert.deepEqual(result.response.plain, { code: '0', message: null, data });
-    assert.ok(result.request.cipher.encryptedDataBase64);
-    assert.ok(result.response.cipher.encryptedDataBase64);
-    assert.ok(result['latency in ms'].total >= 0);
+    assert.deepEqual(result.requestPlain, data);
+    assert.deepEqual(result.responsePlain, { code: '0', message: null, data });
+    assert.ok(result.requestCipher.encryptedDataBase64);
+    assert.ok(result.responseCipher.encryptedDataBase64);
+    assert.ok(result.latency.total >= 0);
     assert.equal(Object.hasOwn(result, 'sessionKey'), false);
     assert.ok(requests.every((request) => request.url.startsWith('https://')));
     const plain = await callApi('plain', data);
-    assert.deepEqual(plain.request, data);
-    assert.deepEqual(plain.response, { code: '0', message: null, data });
+    assert.deepEqual(plain.requestPlain, data);
+    assert.equal(plain.requestCipher, null);
+    assert.deepEqual(plain.responsePlain, { code: '0', message: null, data });
+    assert.equal(plain.responseCipher, null);
   } finally {
     if (previousWx === undefined) {
       delete global.wx;

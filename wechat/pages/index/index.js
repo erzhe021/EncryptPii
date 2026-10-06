@@ -38,6 +38,26 @@ function buildPayload(mode, data) {
   };
 }
 
+function formatResult(value) {
+  return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+}
+
+function isTransmittedField(mode, field) {
+  const transmittedFields = {
+    plain: ['requestPlain', 'responsePlain'],
+    bidirectional: ['requestCipher', 'responseCipher'],
+    'request-only': ['requestCipher', 'responsePlain'],
+    'response-only': ['requestPlain', 'responseCipher']
+  };
+  return transmittedFields[mode].includes(field);
+}
+
+function resultLabel(title, mode, field, value, direction) {
+  return isTransmittedField(mode, field) && value !== 'N/A'
+    ? `${title}（${direction}）`
+    : title;
+}
+
 Page({
   data: {
     modes: MODES,
@@ -50,7 +70,7 @@ Page({
     plainData: 'hello world',
     loading: false,
     error: '',
-    result: ''
+    result: null
   },
 
   selectMode(event) {
@@ -85,10 +105,27 @@ Page({
       return;
     }
 
-    this.setData({ loading: true, error: '', result: '' });
+    this.setData({ loading: true, error: '', result: null });
     try {
       const result = await callApi(mode, payload);
-      this.setData({ result: JSON.stringify(result, null, 2) });
+      const values = {
+        requestPlain: formatResult(mode === 'response-only'
+          ? { headers: result.stcHeaders, body: result.requestPlain }
+          : result.requestPlain),
+        requestCipher: result.requestCipher ? formatResult(result.requestCipher) : 'N/A',
+        responsePlain: formatResult(result.responsePlain),
+        responseCipher: result.responseCipher ? formatResult(result.responseCipher) : 'N/A',
+        latency: formatResult(result.latency)
+      };
+      this.setData({
+        result: {
+          ...values,
+          requestPlainLabel: resultLabel('请求明文', mode, 'requestPlain', values.requestPlain, '实发'),
+          requestCipherLabel: resultLabel('请求密文', mode, 'requestCipher', values.requestCipher, '实发'),
+          responsePlainLabel: resultLabel('响应明文', mode, 'responsePlain', values.responsePlain, '实收'),
+          responseCipherLabel: resultLabel('响应密文', mode, 'responseCipher', values.responseCipher, '实收')
+        }
+      });
     } catch (error) {
       const message = error.code === 'HTTP_ERROR'
         ? `请求失败（HTTP ${error.statusCode}）`

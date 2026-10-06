@@ -9,10 +9,12 @@ async function callApi(mode, input) {
   }
   const result = await client.sendDetailed({ mode, data: input });
   return {
-    request: result.cipherRequest ? { plain: input, cipher: result.cipherRequest } : input,
-    response: result.cipherResponse
-      ? { plain: result.data, cipher: result.cipherResponse } : result.data,
-    'latency in ms': result.timings
+    requestPlain: input,
+    requestCipher: result.cipherRequest,
+    responsePlain: result.data,
+    responseCipher: result.cipherResponse,
+    stcHeaders: result.stcHeaders,
+    latency: result.timings
   };
 }
 

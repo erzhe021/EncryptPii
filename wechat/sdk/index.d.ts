@@ -50,6 +50,7 @@ export interface DetailedResult<T> {
   data: T;
   cipherRequest: CipherRequest | null;
   cipherResponse: CipherResponse | null;
+  stcHeaders: { 'X-STC-KEY-ID': string; 'X-STC-SESSION-KEY': string } | null;
   timings: { total: number; encryption: number; http: number; decryption: number };
 }
 

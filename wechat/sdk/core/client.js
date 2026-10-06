@@ -134,6 +134,12 @@ function createClient(options) {
         data: response,
         cipherRequest: mode.encryptRequest ? body : null,
         cipherResponse: mode.decryptResponse ? raw : null,
+        stcHeaders: input.mode === 'response-only'
+          ? {
+            [KEY_ID_HEADER]: requestHeaders[KEY_ID_HEADER],
+            [SESSION_KEY_HEADER]: requestHeaders[SESSION_KEY_HEADER]
+          }
+          : null,
         timings: {
           total: finishedAt - startedAt,
           encryption: encrypted ? encryptionFinishedAt - encryptionStartedAt : 0,

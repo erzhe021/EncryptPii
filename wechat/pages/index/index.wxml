@@ -25,8 +25,8 @@
     <view class="section-title">{{usesPlainInput ? '请求数据' : '敏感数据'}}</view>
     <block wx:if="{{usesPlainInput}}">
       <view class="field-label">请求内容</view>
-      <textarea
-        class="field textarea"
+      <input
+        class="field"
         value="{{plainData}}"
         maxlength="500"
         placeholder="输入请求内容"
@@ -52,7 +52,26 @@
 
   <view wx:if="{{error}}" class="message error">{{error}}</view>
   <view wx:if="{{result}}" class="card result-card">
-    <view class="section-title">接口结果</view>
-    <text class="result" selectable>{{result}}</text>
+    <view class="section-title">请求响应明细</view>
+    <view class="result-block">
+      <view class="result-label">{{result.requestPlainLabel}}</view>
+      <text class="result-content" selectable>{{result.requestPlain}}</text>
+    </view>
+    <view class="result-block">
+      <view class="result-label">{{result.requestCipherLabel}}</view>
+      <text class="result-content" selectable>{{result.requestCipher}}</text>
+    </view>
+    <view class="result-block">
+      <view class="result-label">{{result.responseCipherLabel}}</view>
+      <text class="result-content" selectable>{{result.responseCipher}}</text>
+    </view>
+    <view class="result-block">
+      <view class="result-label">{{result.responsePlainLabel}}</view>
+      <text class="result-content" selectable>{{result.responsePlain}}</text>
+    </view>
+    <view class="result-block">
+      <view class="result-label">延迟(ms)</view>
+      <text class="result-content" selectable>{{result.latency}}</text>
+    </view>
   </view>
 </view>
