@@ -54,10 +54,10 @@ public class CryptoServerController {
                 new CryptoSessionContext(request.handshakeContext())
         );
         return new DemoSensitiveResponse(
-                "eric",
-                "13764641531",
-                "eric.zheng@ingka.ikea.com",
-                "上海市长宁区荟聚中心办公A楼",
+                "张三",
+                "11111111111",
+                "zhangsan@example.com",
+                "上海市长宁区某某广场办公A楼",
                 "response-only ecdh encryption, request request: " + request.request().data()
         );
     }
