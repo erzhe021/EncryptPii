@@ -41,8 +41,8 @@ public class CryptoController {
             @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
             @RequestBody(required = false) DemoPlainRequest request) {
         verifyGatewayToken(suppliedToken);
-        return Result.ok(new DemoSensitiveResponse("eric", "13764641531", "eric.zheng@ingka.ikea.com",
-                "上海市长宁区荟聚中心办公A楼", "This is response-only encryption demo"));
+        return Result.ok(new DemoSensitiveResponse("张三", "11111111111", "zhangsan@example.com",
+                "上海市长宁区某某广场办公A楼", "This is response-only encryption demo"));
     }
 
     private void verifyGatewayToken(String suppliedToken) {

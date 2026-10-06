@@ -47,7 +47,7 @@ class CryptoControllerTest {
         mockMvc.perform(post("/crypto/server/response-only")
                         .header("X-Crypto-Gateway-Token", GATEWAY_TOKEN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("eric"));
+                .andExpect(jsonPath("$.name").value("张三"));
     }
 
     @Test
