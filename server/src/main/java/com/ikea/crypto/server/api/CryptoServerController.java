@@ -61,8 +61,8 @@ public class CryptoServerController {
                 keyId, request == null ? "null" : request);
         SessionKeyTransport sessionTransport = new SessionKeyTransport(keyId, sessionKeyBase64);
         CryptoSessionContextAccessor.setCryptoSessionContext(CryptoSessionContext.responseOnly(sessionTransport));
-        return new DemoSensitiveResponse("eric", "13764641531", "eric.zheng@ingka.ikea.com",
-                "上海市长宁区荟聚中心办公A楼", "This is response-only encryption demo");
+        return new DemoSensitiveResponse("张三", "11111111111", "zhangsan@example.com",
+                "上海市长宁区某某广场办公A楼", "This is response-only encryption demo");
     }
 }
 
