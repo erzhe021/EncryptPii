@@ -1,6 +1,7 @@
 package com.ikea.crypto.client.core;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.client.constant.CryptoConstants;
@@ -177,16 +178,19 @@ public class CryptoHttpClient {
     }
 
     /**
-     * Sends request-only encrypted payload to the server, expecting a plaintext PlainResponse response.
+     * Sends request-only encrypted payload to the server, expecting a plaintext Result<DemoPlainResponse>.
      */
-    public DemoPlainResponse postRequestOnly(String path, CipherRequestPayload requestPayload) throws Exception {
+    public Result<DemoPlainResponse> postRequestOnly(
+            String path, CipherRequestPayload requestPayload) throws Exception {
         HttpResponse<String> response = sendJsonRequest(path, requestPayload);
-        return objectMapper.readValue(response.body(), DemoPlainResponse.class);
+        return objectMapper.readValue(response.body(), new TypeReference<>() {
+        });
     }
 
-    public DemoPlainResponse postPlain(String path, DemoPlainRequest request) throws Exception {
+    public Result<DemoPlainResponse> postPlain(String path, DemoPlainRequest request) throws Exception {
         HttpResponse<String> response = sendJsonRequest(path, request);
-        return objectMapper.readValue(response.body(), DemoPlainResponse.class);
+        return objectMapper.readValue(response.body(), new TypeReference<>() {
+        });
     }
 
     /**

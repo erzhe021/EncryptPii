@@ -28,6 +28,12 @@ export interface SendOptions {
   headers?: Record<string, string>;
 }
 
+export interface Result<T> {
+  code: string;
+  message: string | null;
+  data: T | null;
+}
+
 export interface CipherRequest {
   keyId: string;
   encryptedSessionKeyBase64: string;
@@ -48,9 +54,9 @@ export interface DetailedResult<T> {
 }
 
 export interface Client {
-  send<T = unknown>(options: SendOptions): Promise<T>;
+  send<T = unknown>(options: SendOptions): Promise<Result<T>>;
   /** Opt-in diagnostics for demos; contains ciphertext but never the session key. */
-  sendDetailed<T = unknown>(options: SendOptions): Promise<DetailedResult<T>>;
+  sendDetailed<T = unknown>(options: SendOptions): Promise<DetailedResult<Result<T>>>;
 }
 
 export type ErrorCode =

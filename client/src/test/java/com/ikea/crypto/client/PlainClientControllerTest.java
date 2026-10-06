@@ -32,7 +32,7 @@ class PlainClientControllerTest {
     private final List<ReceivedRequest> requests = new CopyOnWriteArrayList<>();
     private static final String REQUEST = "{\"data\":\"demo\"}";
     private static final String RESPONSE =
-            "{\"cardNumber\":\"demo\",\"memberTier\":1,\"points\":10,\"remarks\":\"plain\"}";
+            "{\"code\":\"0\",\"message\":null,\"data\":{\"cardNumber\":\"demo\",\"memberTier\":1,\"points\":10,\"remarks\":\"plain\"}}";
 
     private record ReceivedRequest(String path, String method, Map<String, List<String>> headers, String body) {
     }
@@ -87,10 +87,10 @@ class PlainClientControllerTest {
                         .contentType(MediaType.APPLICATION_JSON).content(REQUEST))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.request.data").value("demo"))
-                .andExpect(jsonPath("$.response.cardNumber").value("demo"))
-                .andExpect(jsonPath("$.response.memberTier").value(1))
-                .andExpect(jsonPath("$.response.points").value(10))
-                .andExpect(jsonPath("$.response.remarks").value("plain"))
+                .andExpect(jsonPath("$.response.data.cardNumber").value("demo"))
+                .andExpect(jsonPath("$.response.data.memberTier").value(1))
+                .andExpect(jsonPath("$.response.data.points").value(10))
+                .andExpect(jsonPath("$.response.data.remarks").value("plain"))
                 .andExpect(jsonPath("$['latency in ms'].total").value(greaterThanOrEqualTo(0)))
                 .andExpect(jsonPath("$['latency in ms'].http").value(greaterThanOrEqualTo(0)))
                 .andExpect(jsonPath("$['latency in ms'].encryption").value(0))

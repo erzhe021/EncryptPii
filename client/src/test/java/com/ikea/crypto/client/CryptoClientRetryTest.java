@@ -52,7 +52,7 @@ class CryptoClientRetryTest {
                                 System.currentTimeMillis() + 60_000))));
             } else {
                 respond(exchange, 200,
-                        "{\"cardNumber\":\"demo\",\"memberTier\":1,\"points\":10,\"remarks\":\"ok\"}");
+                        "{\"code\":\"0\",\"message\":null,\"data\":{\"cardNumber\":\"demo\",\"memberTier\":1,\"points\":10,\"remarks\":\"ok\"}}");
             }
         });
         server.start();

@@ -41,7 +41,8 @@ Validate deployment on real devices as well as the simulator.
 
 ## API
 
-`client.send({ mode, data, headers? })` returns only the business response.
+`client.send({ mode, data, headers? })` returns the server's
+`{ code, message, data }` result envelope. The business payload is in `data`.
 `data` must be JSON serializable. It is snapshotted before asynchronous work.
 
 | Mode | Request | Response |
@@ -52,7 +53,8 @@ Validate deployment on real devices as well as the simulator.
 | `response-only` | JSON + encrypted session key headers | Decrypted JSON |
 
 `client.sendDetailed(...)` is explicitly opt-in and returns
-`{ data, cipherRequest, cipherResponse, timings }` for demos. No plaintext request
+`{ data, cipherRequest, cipherResponse, timings }` for demos; `data` contains the
+same result envelope as `send()`. No plaintext request
 or session key is included. The business response can still contain sensitive
 information, so do not log this result in production. `total` includes key
 acquisition and retries; the other timings describe the successful attempt,

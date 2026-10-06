@@ -75,6 +75,10 @@ function encryptResponse(data, sessionKey) {
   return { ivBase64: iv.toString('base64'), encryptedDataBase64: encrypted.toString('base64') };
 }
 
+function result(data) {
+  return { code: '0', message: null, data };
+}
+
 function options(transport, extra) {
   return Object.assign({ baseUrl: 'https://kong.example.com', transport, randomBytes }, extra);
 }
@@ -87,7 +91,7 @@ function gateway(key, requests, sessions) {
     }
     const mode = request.url.split('/').pop();
     if (mode === 'normal') {
-      return { statusCode: 200, data: request.data };
+      return { statusCode: 200, data: result(request.data) };
     }
     const session = unwrapSession(
       mode === 'response-only' ? request.headers['X-STC-SESSION-KEY']
@@ -99,7 +103,7 @@ function gateway(key, requests, sessions) {
     const body = mode === 'response-only' ? request.data : decryptBody(request.data, session);
     return {
       statusCode: 200,
-      data: mode === 'request-only' ? body : encryptResponse(body, session)
+      data: mode === 'request-only' ? result(body) : encryptResponse(result(body), session)
     };
   };
 }
@@ -109,10 +113,11 @@ test('all modes preserve routing and interoperate with independent RSA/AES primi
   const sessions = [];
   const client = createClient(options(gateway(firstKey, requests, sessions)));
   const data = { name: '测试用户', nested: [null, 123, 'hello 🌍'] };
+  const expected = result(data);
   for (const mode of ['plain', 'bidirectional', 'request-only', 'response-only']) {
-    assert.deepEqual(await client.send({ mode, data }), data);
+    assert.deepEqual(await client.send({ mode, data }), expected);
     const detailed = await client.sendDetailed({ mode, data });
-    assert.deepEqual(detailed.data, data);
+    assert.deepEqual(detailed.data, expected);
     assert.equal(Boolean(detailed.cipherRequest), ['bidirectional', 'request-only'].includes(mode));
     assert.equal(Boolean(detailed.cipherResponse), ['bidirectional', 'response-only'].includes(mode));
     assert.equal(Object.hasOwn(detailed, 'sessionKey'), false);
@@ -131,12 +136,17 @@ test('plain requests do not require random support or fetch public keys', async 
       request(request) {
         count += 1;
         assert.equal(request.url, 'https://localhost:18443/plain/server/normal');
-        request.success({ statusCode: 200, data: { ok: true } });
+        request.success({ statusCode: 200, data: result({ ok: true }) });
       }
     }
   });
-  assert.deepEqual(await client.send({ mode: 'plain', data: {} }), { ok: true });
+  assert.deepEqual(await client.send({ mode: 'plain', data: {} }), result({ ok: true }));
   assert.equal(count, 1);
+});
+
+test('successful business responses must use the Result envelope', async () => {
+  const client = createClient(options(async () => ({ statusCode: 200, data: { ok: true } })));
+  await assert.rejects(client.send({ mode: 'plain', data: {} }), { code: 'INVALID_RESPONSE' });
 });
 
 test('concurrent encrypted calls share only key fetches, not session material', async () => {
@@ -145,7 +155,7 @@ test('concurrent encrypted calls share only key fetches, not session material', 
   const client = createClient(options(gateway(firstKey, requests, sessions)));
   const results = await Promise.all(Array.from({ length: 10 }, (_, index) =>
     client.send({ mode: 'bidirectional', data: { index } })));
-  assert.deepEqual(results, Array.from({ length: 10 }, (_, index) => ({ index })));
+  assert.deepEqual(results, Array.from({ length: 10 }, (_, index) => result({ index })));
   assert.equal(requests.filter((request) => request.method === 'GET').length, 1);
   assert.equal(new Set(sessions).size, 10);
 });
@@ -188,7 +198,7 @@ for (const mode of ['bidirectional', 'request-only', 'response-only']) {
       }
       return next(request);
     }));
-    assert.deepEqual(await client.send({ mode, data: { ok: true } }), { ok: true });
+    assert.deepEqual(await client.send({ mode, data: { ok: true } }), result({ ok: true }));
     assert.equal(posts, 2);
     assert.equal(gets, 1);
     assert.notEqual(originalSession, sessions[0]);
@@ -258,7 +268,7 @@ test('key fetching recovers from failure and expired keys are not cached', async
     return next(request);
   }));
   await assert.rejects(client.send({ mode: 'request-only', data: {} }), { code: 'INVALID_SERVER_KEY' });
-  assert.deepEqual(await client.send({ mode: 'request-only', data: { ok: true } }), { ok: true });
+  assert.deepEqual(await client.send({ mode: 'request-only', data: { ok: true } }), result({ ok: true }));
   assert.equal(gets, 2);
 });
 
@@ -279,7 +289,7 @@ test('body and headers are snapshotted before asynchronous key acquisition', asy
   data.value = 'changed';
   headers.Authorization = 'changed';
   release();
-  assert.deepEqual(await pending, { value: 'original' });
+  assert.deepEqual(await pending, result({ value: 'original' }));
 });
 
 test('invalid configuration, JSON and reserved headers fail explicitly', async () => {
@@ -311,7 +321,7 @@ test('authentication headers merge case-insensitively without mutating configura
       name.toLowerCase() === 'authorization').length, 1);
     assert.equal(request.headers['content-type'], 'application/json');
     assert.equal(request.timeoutMs, 1234);
-    return { statusCode: 200, data: {} };
+    return { statusCode: 200, data: result({}) };
   }, { headers, timeoutMs: 1234 }));
   headers.Authorization = 'mutated';
   await client.send({ mode: 'plain', data: {}, headers: { authorization: 'per-request' } });
@@ -338,7 +348,7 @@ test('missing, malformed or failing random sources never send encrypted POST', a
     const client = createClient(options(async (request) => {
       if (request.method === 'GET') return { statusCode: 200, data: firstKey.info };
       posts += 1;
-      return { statusCode: 200, data: {} };
+      return { statusCode: 200, data: result({}) };
     }, { randomBytes: source }));
     await assert.rejects(client.send({ mode: 'bidirectional', data: {} }), { code: 'RANDOM_UNAVAILABLE' });
     assert.equal(posts, 0);
@@ -388,7 +398,7 @@ test('SDK import and encryption do not replace or invoke Forge random functions'
   forge.random.getBytes = () => { throw new Error('implicit Forge random'); };
   try {
     const client = createClient(options(gateway(firstKey, [], [])));
-    assert.deepEqual(await client.send({ mode: 'bidirectional', data: {} }), {});
+    assert.deepEqual(await client.send({ mode: 'bidirectional', data: {} }), result({}));
   } finally {
     forge.random.getBytesSync = original;
     forge.random.getBytes = originalAsync;
@@ -433,7 +443,7 @@ test('existing demo wrapper preserves the plaintext/ciphertext display contract'
     const data = { name: '演示用户' };
     const result = await callApi('bidirectional', data);
     assert.deepEqual(result.request.plain, data);
-    assert.deepEqual(result.response.plain, data);
+    assert.deepEqual(result.response.plain, { code: '0', message: null, data });
     assert.ok(result.request.cipher.encryptedDataBase64);
     assert.ok(result.response.cipher.encryptedDataBase64);
     assert.ok(result['latency in ms'].total >= 0);
@@ -441,7 +451,7 @@ test('existing demo wrapper preserves the plaintext/ciphertext display contract'
     assert.ok(requests.every((request) => request.url.startsWith('https://')));
     const plain = await callApi('plain', data);
     assert.deepEqual(plain.request, data);
-    assert.deepEqual(plain.response, data);
+    assert.deepEqual(plain.response, { code: '0', message: null, data });
   } finally {
     if (previousWx === undefined) {
       delete global.wx;

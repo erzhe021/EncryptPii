@@ -1,5 +1,6 @@
 package com.ikea.crypto.client.api;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.client.constant.CryptoConstants;
 import com.ikea.crypto.client.core.CryptoClient;
@@ -75,8 +76,11 @@ public class CryptoClientController {
         long httpTime = System.currentTimeMillis();
 
         String decryptedServerResponse = cryptoClient.decrypt(responsePayload, encrypted.context());
-        DemoSensitiveResponse demoSensitiveResponse =
-                objectMapper.readValue(decryptedServerResponse, DemoSensitiveResponse.class);
+
+        Result<DemoSensitiveResponse> demoSensitiveResponse = objectMapper.readValue(
+                decryptedServerResponse,
+                new TypeReference<>() {
+                });
 
         long finish = System.currentTimeMillis();
 
@@ -105,7 +109,7 @@ public class CryptoClientController {
 
         long encryptedTime = System.currentTimeMillis();
 
-        DemoPlainResponse demoPlainResponse;
+        Result<DemoPlainResponse> demoPlainResponse;
         try {
             demoPlainResponse = cryptoHttpClient.postRequestOnly(requestOnlyPath, requestPayload);
         } catch (CryptoHttpClient.HttpStatusException failure) {
@@ -166,8 +170,10 @@ public class CryptoClientController {
 
         // Decrypt the response data using the session key and IV
         String decryptedResponseData = cryptoClient.decrypt(responsePayload, sessionKey);
-        DemoSensitiveResponse demoSensitiveResponse =
-                objectMapper.readValue(decryptedResponseData, DemoSensitiveResponse.class);
+        Result<DemoSensitiveResponse> demoSensitiveResponse = objectMapper.readValue(
+                decryptedResponseData,
+                new TypeReference<>() {
+                });
 
         return Map.of(
                 "request", demoPlainRequest == null ? "no data" : demoPlainRequest,

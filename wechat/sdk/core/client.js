@@ -19,6 +19,15 @@ function normalizeHeaders(headers = {}) {
   return normalized;
 }
 
+function parseResult(response) {
+  if (!response || typeof response !== 'object' || Array.isArray(response)
+    || typeof response.code !== 'string' || !Object.prototype.hasOwnProperty.call(response, 'data')
+    || (response.message !== null && typeof response.message !== 'string')) {
+    throw new SdkError('INVALID_RESPONSE', 'Server response is not a valid Result');
+  }
+  return response;
+}
+
 function createClient(options) {
   if (!options || typeof options.baseUrl !== 'string'
     || !/^https:\/\/(?:\[[0-9a-fA-F:]+\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[0-9]{1,5})?\/?$/.test(options.baseUrl)
@@ -116,7 +125,7 @@ function createClient(options) {
         continue;
       }
       const httpFinishedAt = Date.now();
-      const response = mode.decryptResponse ? crypto.decrypt(raw, session.sessionKey) : raw;
+      const response = parseResult(mode.decryptResponse ? crypto.decrypt(raw, session.sessionKey) : raw);
       const finishedAt = Date.now();
       if (!detailed) {
         return response;

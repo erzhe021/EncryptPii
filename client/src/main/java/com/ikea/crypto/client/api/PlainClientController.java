@@ -4,6 +4,7 @@ import com.ikea.crypto.client.core.CryptoHttpClient;
 import com.ikea.crypto.client.model.DemoPlainRequest;
 import com.ikea.crypto.client.model.DemoPlainResponse;
 import com.ikea.crypto.client.model.LatencyInMs;
+import com.ikea.crypto.client.model.Result;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -30,7 +31,7 @@ public class PlainClientController {
     @PostMapping("/normal")
     public Map<String, Object> normal(@RequestBody DemoPlainRequest request) throws Exception {
         long startTime = System.currentTimeMillis();
-        DemoPlainResponse response = cryptoHttpClient.postPlain(normalPath, request);
+        Result<DemoPlainResponse> response = cryptoHttpClient.postPlain(normalPath, request);
         long finish = System.currentTimeMillis();
         return Map.of(
                 "request", request,

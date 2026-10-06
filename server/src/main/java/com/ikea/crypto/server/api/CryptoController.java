@@ -1,16 +1,9 @@
 package com.ikea.crypto.server.api;
 
-import com.ikea.crypto.server.model.DemoPlainRequest;
-import com.ikea.crypto.server.model.DemoPlainResponse;
-import com.ikea.crypto.server.model.DemoSensitiveRequest;
-import com.ikea.crypto.server.model.DemoSensitiveResponse;
+import com.ikea.crypto.server.model.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestHeader;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
@@ -26,30 +19,30 @@ public class CryptoController {
     private String gatewayToken;
 
     @PostMapping("/bidirectional")
-    public DemoSensitiveResponse bidirectional(
+    public Result<DemoSensitiveResponse> bidirectional(
             @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
             @RequestBody DemoSensitiveRequest request) {
         verifyGatewayToken(suppliedToken);
-        return new DemoSensitiveResponse(request.name(), request.phone(), request.email(), request.address(),
-                "This is bidirectional encryption demo");
+        return Result.ok(new DemoSensitiveResponse(request.name(), request.phone(), request.email(), request.address(),
+                "This is bidirectional encryption demo"));
     }
 
     @PostMapping("/request-only")
-    public DemoPlainResponse requestOnly(
+    public Result<DemoPlainResponse> requestOnly(
             @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
             @RequestBody DemoSensitiveRequest request) {
         verifyGatewayToken(suppliedToken);
-        return new DemoPlainResponse("1234-5678-9012-3456", 3, 1500L,
-                "This is request-only encryption demo");
+        return Result.ok(new DemoPlainResponse("1234-5678-9012-3456", 3, 1500L,
+                "This is request-only encryption demo"));
     }
 
     @PostMapping("/response-only")
-    public DemoSensitiveResponse responseOnly(
+    public Result<DemoSensitiveResponse> responseOnly(
             @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
             @RequestBody(required = false) DemoPlainRequest request) {
         verifyGatewayToken(suppliedToken);
-        return new DemoSensitiveResponse("eric", "13764641531", "eric.zheng@ingka.ikea.com",
-                "上海市长宁区荟聚中心办公A楼", "This is response-only encryption demo");
+        return Result.ok(new DemoSensitiveResponse("eric", "13764641531", "eric.zheng@ingka.ikea.com",
+                "上海市长宁区荟聚中心办公A楼", "This is response-only encryption demo"));
     }
 
     private void verifyGatewayToken(String suppliedToken) {

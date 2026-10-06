@@ -22,6 +22,8 @@
 
 RSA/AES 实现使用 SDK 内置的 node-forge 浏览器 bundle，见 `sdk/lib/FORGE-LICENSE.txt`。会话密钥、IV 和 RSA OAEP seed 均按请求使用微信 `wx.getRandomValues` 获取；不再使用全局随机池或覆盖 Forge 随机函数。需使用支持该 API 的微信基础库。不要将真实个人信息提交到未受信任或未启用 HTTPS 的服务。
 
+Server 业务接口的成功响应统一使用 `{ code, message, data }` 格式。SDK 在普通和解密后的响应中都会保留此 `Result<T>` 包装，业务内容位于 `data`；不符合该格式的成功响应会被识别为无效响应。
+
 ## 共享 SDK
 
 独立 SDK 位于 `sdk/`，可单独打包发布到团队私有 npm 仓库，接入方式见 [SDK 文档](sdk/README.md)。核心逻辑不依赖 `wx`，微信适配器负责网络和安全随机数，每个客户端实例独立管理公钥缓存。

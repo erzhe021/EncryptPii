@@ -39,6 +39,10 @@ test('SDK request decrypts in JCA and JCA response decrypts in SDK', async () =>
       };
     }
   });
-  const data = { name: '测试用户', nested: { value: 'hello 🌍' } };
+  const data = {
+    code: '0',
+    message: null,
+    data: { name: '测试用户', nested: { value: 'hello 🌍' } }
+  };
   assert.deepEqual(await client.send({ mode: 'bidirectional', data }), data);
 });
