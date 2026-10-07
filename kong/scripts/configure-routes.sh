@@ -175,6 +175,14 @@ upsert_plugin "$request_only_route" true false body /crypto/server/request-only
 upsert_plugin "$response_only_route" false true header /crypto/server/response-only
 upsert_plugin "$public_key_route" false false body /crypto/server/public-key true
 
+for exception in client-exception system-exception business-exception; do
+  exception_path="/crypto/server/response-only/$exception"
+  exception_route="$(
+    upsert_route "encryptpii-response-only-$exception" "$exception_path" POST
+  )"
+  upsert_plugin "$exception_route" false true header "$exception_path"
+done
+
 api -X PUT "$ADMIN_URL/services/encryptpii-server-plain" \
   -H 'Content-Type: application/json' \
   --data-binary "$(jq -n --arg url "$UPSTREAM_URL" \
@@ -190,4 +198,4 @@ api -X PUT "$ADMIN_URL/routes/encryptpii-plain" \
     "path_handling":"v0"
   }' >/dev/null
 
-printf 'Configured the Vault-backed public-key route, three protected crypto routes, and a plugin-free plaintext route. ADMIN URL: %s\n' "$ADMIN_URL"
+printf 'Configured the Vault-backed public-key route, six protected crypto routes, and a plugin-free plaintext route. ADMIN URL: %s\n' "$ADMIN_URL"

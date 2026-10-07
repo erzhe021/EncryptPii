@@ -10,6 +10,18 @@ const MODES = Object.freeze({
   }),
   'response-only': Object.freeze({
     endpoint: '/crypto/server/response-only', encryptRequest: false, decryptResponse: true
+  }),
+  'response-only/client-exception': Object.freeze({
+    endpoint: '/crypto/server/response-only/client-exception',
+    encryptRequest: false, decryptResponse: true
+  }),
+  'response-only/system-exception': Object.freeze({
+    endpoint: '/crypto/server/response-only/system-exception',
+    encryptRequest: false, decryptResponse: true
+  }),
+  'response-only/business-exception': Object.freeze({
+    endpoint: '/crypto/server/response-only/business-exception',
+    encryptRequest: false, decryptResponse: true
   })
 });
 

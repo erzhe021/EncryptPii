@@ -1,6 +1,6 @@
 # EncryptPii 微信小程序
 
-此小程序提供普通传输、双向加密、请求加密和响应加密四种演示。小程序直接连接 Kong：从 Kong 获取 RSA 公钥，在本机执行 RSA-OAEP-SHA-256（MGF1-SHA-1）和 AES-256-GCM 加解密，再按 Kong 插件协议提交请求。
+此小程序提供普通传输、双向加密、请求加密和响应加密四种传输演示，以及响应加密的客户端异常、系统异常、业务异常三种请求。小程序直接连接 Kong：从 Kong 获取 RSA 公钥，在本机执行 RSA-OAEP-SHA-256（MGF1-SHA-1）和 AES-256-GCM 加解密，再按 Kong 插件协议提交请求。
 
 ## 配置与运行
 
@@ -17,6 +17,11 @@
 | 双向加密 | `POST /crypto/server/bidirectional` |
 | 请求加密 | `POST /crypto/server/request-only` |
 | 响应加密 | `POST /crypto/server/response-only` |
+| 客户端异常 | `POST /crypto/server/response-only/client-exception` |
+| 系统异常 | `POST /crypto/server/response-only/system-exception` |
+| 业务异常 | `POST /crypto/server/response-only/business-exception` |
+
+三种异常请求均使用明文请求内容输入框和响应加密请求头。客户端异常返回 HTTP 400，系统异常返回 HTTP 500，业务异常返回 HTTP 200 和业务错误码；页面仍展示请求明文、请求密文、响应密文、响应明文和延迟，未使用的密文项显示 `N/A`。
 
 请求加密模式与 Java SDK 使用相同的 RSA OAEP 摘要参数、AES-GCM IV 和认证标签格式。响应加密模式通过 `X-STC-KEY-ID` 和 `X-STC-SESSION-KEY` 请求头发送 RSA 加密的 AES 会话密钥。公钥在内存中缓存至过期；收到 `KEY_EXPIRED` 时刷新并最多重试一次。
 

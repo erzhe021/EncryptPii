@@ -1,4 +1,6 @@
-export type TransportMode = 'plain' | 'bidirectional' | 'request-only' | 'response-only';
+export type TransportMode = 'plain' | 'bidirectional' | 'request-only' | 'response-only'
+  | 'response-only/client-exception' | 'response-only/system-exception'
+  | 'response-only/business-exception';
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 export interface TransportRequest {
@@ -69,6 +71,8 @@ export class SdkError extends Error {
   constructor(code: ErrorCode, message: string, cause?: unknown);
   code: ErrorCode;
   cause?: unknown;
+  /** Opt-in diagnostics from sendDetailed, including failed HTTP responses. */
+  details?: DetailedResult<unknown>;
 }
 
 export class HttpError extends SdkError {

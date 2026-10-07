@@ -106,47 +106,74 @@ function createClient(options) {
         requestHeaders[SESSION_KEY_HEADER] = session.encryptedSessionKeyBase64;
       }
       let raw;
+      let httpError;
       try {
         raw = await request(mode.endpoint, { data: body, headers: requestHeaders });
       } catch (error) {
-        if (!encrypted || attempt !== 0 || !(error instanceof HttpError)
-          || error.statusCode !== 400 || !error.data || error.data.code !== 'KEY_EXPIRED'
-          || !error.data.data) {
+        if (!(error instanceof HttpError)) {
           throw error;
         }
-        try {
-          serverKey = keys.install(error.data.data);
-        } catch (cause) {
-          if (!(cause instanceof SdkError) || cause.code !== 'INVALID_SERVER_KEY') {
-            throw cause;
+        if (encrypted && attempt === 0 && error.statusCode === 400
+          && error.data && error.data.code === 'KEY_EXPIRED' && error.data.data) {
+          try {
+            serverKey = keys.install(error.data.data);
+            continue;
+          } catch (cause) {
+            if (!(cause instanceof SdkError) || cause.code !== 'INVALID_SERVER_KEY') {
+              throw cause;
+            }
           }
-          throw error;
         }
-        continue;
+        httpError = error;
+        raw = error.data;
       }
       const httpFinishedAt = Date.now();
-      const response = parseResult(mode.decryptResponse ? crypto.decrypt(raw, session.sessionKey) : raw);
-      const finishedAt = Date.now();
-      if (!detailed) {
-        return response;
-      }
-      return {
-        data: response,
+      // Gateway errors may be plaintext even when the endpoint encrypts responses.
+      const decryptResponse = mode.decryptResponse && (!httpError || (raw
+        && typeof raw === 'object'
+        && (Object.prototype.hasOwnProperty.call(raw, 'ivBase64')
+          || Object.prototype.hasOwnProperty.call(raw, 'encryptedDataBase64'))));
+      const details = {
+        data: null,
         cipherRequest: mode.encryptRequest ? body : null,
-        cipherResponse: mode.decryptResponse ? raw : null,
-        stcHeaders: input.mode === 'response-only'
+        cipherResponse: decryptResponse ? raw : null,
+        stcHeaders: mode.decryptResponse && !mode.encryptRequest
           ? {
             [KEY_ID_HEADER]: requestHeaders[KEY_ID_HEADER],
             [SESSION_KEY_HEADER]: requestHeaders[SESSION_KEY_HEADER]
           }
           : null,
         timings: {
-          total: finishedAt - startedAt,
+          total: 0,
           encryption: encrypted ? encryptionFinishedAt - encryptionStartedAt : 0,
           http: httpFinishedAt - encryptionFinishedAt,
-          decryption: mode.decryptResponse ? finishedAt - httpFinishedAt : 0
+          decryption: 0
         }
       };
+      let responseError;
+      try {
+        const response = decryptResponse ? crypto.decrypt(raw, session.sessionKey) : raw;
+        details.data = response;
+        if (!httpError) {
+          parseResult(response);
+        }
+      } catch (error) {
+        if (!(error instanceof SdkError)) {
+          throw error;
+        }
+        responseError = error;
+      }
+      const finishedAt = Date.now();
+      details.timings.total = finishedAt - startedAt;
+      details.timings.decryption = decryptResponse ? finishedAt - httpFinishedAt : 0;
+      const failure = responseError || httpError;
+      if (failure) {
+        if (detailed) {
+          failure.details = details;
+        }
+        throw failure;
+      }
+      return detailed ? details : details.data;
     }
     throw new SdkError('KEY_RETRY_FAILED', 'Server key retry failed');
   }

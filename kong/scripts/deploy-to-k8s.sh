@@ -102,7 +102,11 @@ jq -n \
         {name:"encryptpii-request-only",paths:["/crypto/server/request-only"],methods:["POST"],
          strip_path:false,plugins:[plugin(false;true;false;"body";"/crypto/server/request-only")]},
         {name:"encryptpii-response-only",paths:["/crypto/server/response-only"],methods:["POST"],
-         strip_path:false,plugins:[plugin(false;false;true;"header";"/crypto/server/response-only")]}
+         strip_path:false,plugins:[plugin(false;false;true;"header";"/crypto/server/response-only")]},
+        (["client-exception","system-exception","business-exception"][] as $exception |
+         ("/crypto/server/response-only/" + $exception) as $path |
+         {name:("encryptpii-response-only-" + $exception),paths:[$path],methods:["POST"],
+          strip_path:false,plugins:[plugin(false;false;true;"header";$path)]})
       ]
     }]
   }' > "$work_dir/kong.json"

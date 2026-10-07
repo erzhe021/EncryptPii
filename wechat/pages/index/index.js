@@ -4,11 +4,15 @@ const MODES = [
   { id: 'plain', title: '普通传输', description: '明文请求与响应' },
   { id: 'bidirectional', title: '双向加密', description: '请求和响应均加密' },
   { id: 'request-only', title: '请求加密', description: '仅加密敏感请求' },
-  { id: 'response-only', title: '响应加密', description: '仅加密敏感响应' }
+  { id: 'response-only', title: '响应加密', description: '仅加密敏感响应' },
+  { id: 'response-only/client-exception', title: '客户端异常', description: '响应加密，HTTP 400' },
+  { id: 'response-only/system-exception', title: '系统异常', description: '响应加密，HTTP 500' },
+  { id: 'response-only/business-exception', title: '业务异常', description: '响应加密，HTTP 200 业务错误' }
 ];
 
-// plain 与 response-only 复用「明文请求内容」输入形态，其余模式收集敏感字段
-const PLAIN_INPUT_MODES = ['plain', 'response-only'];
+function isResponseOnly(mode) {
+  return mode === 'response-only' || mode.startsWith('response-only/');
+}
 
 const ERROR_MESSAGES = {
   INVALID_ARGUMENT: '请检查服务地址和请求参数。',
@@ -23,7 +27,7 @@ const ERROR_MESSAGES = {
 };
 
 function usesPlainInput(mode) {
-  return PLAIN_INPUT_MODES.includes(mode);
+  return mode === 'plain' || isResponseOnly(mode);
 }
 
 function buildPayload(mode, data) {
@@ -49,7 +53,7 @@ function isTransmittedField(mode, field) {
     'request-only': ['requestCipher', 'responsePlain'],
     'response-only': ['requestPlain', 'responseCipher']
   };
-  return transmittedFields[mode].includes(field);
+  return transmittedFields[isResponseOnly(mode) ? 'response-only' : mode].includes(field);
 }
 
 function resultLabel(title, mode, field, value, direction) {
@@ -107,13 +111,22 @@ Page({
 
     this.setData({ loading: true, error: '', result: null });
     try {
-      const result = await callApi(mode, payload);
+      let result;
+      try {
+        result = await callApi(mode, payload);
+      } catch (error) {
+        if (!error.result) {
+          throw error;
+        }
+        result = error.result;
+        this.setData({ error: errorMessage(error) });
+      }
       const values = {
-        requestPlain: formatResult(mode === 'response-only'
+        requestPlain: formatResult(isResponseOnly(mode)
           ? { headers: result.stcHeaders, body: result.requestPlain }
           : result.requestPlain),
         requestCipher: result.requestCipher ? formatResult(result.requestCipher) : 'N/A',
-        responsePlain: formatResult(result.responsePlain),
+        responsePlain: result.responsePlain === null ? 'N/A' : formatResult(result.responsePlain),
         responseCipher: result.responseCipher ? formatResult(result.responseCipher) : 'N/A',
         latency: formatResult(result.latency)
       };
@@ -127,12 +140,15 @@ Page({
         }
       });
     } catch (error) {
-      const message = error.code === 'HTTP_ERROR'
-        ? `请求失败（HTTP ${error.statusCode}）`
-        : ERROR_MESSAGES[error.code] || '请求失败';
-      this.setData({ error: message });
+      this.setData({ error: errorMessage(error) });
     } finally {
       this.setData({ loading: false });
     }
   }
 });
+
+function errorMessage(error) {
+  return error.code === 'HTTP_ERROR'
+    ? `请求失败（HTTP ${error.statusCode}）`
+    : ERROR_MESSAGES[error.code] || '请求失败';
+}

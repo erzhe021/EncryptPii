@@ -1,5 +1,7 @@
 package com.ikea.crypto.server.api;
 
+import com.ikea.crypto.server.exception.BusinessException;
+import com.ikea.crypto.server.exception.SystemException;
 import com.ikea.crypto.server.model.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -43,6 +45,30 @@ public class CryptoController {
         verifyGatewayToken(suppliedToken);
         return Result.ok(new DemoSensitiveResponse("张三", "11111111111", "zhangsan@example.com",
                 "上海市长宁区某某广场办公A楼", "This is response-only encryption demo"));
+    }
+
+    @PostMapping("/response-only/client-exception")
+    public Result<DemoSensitiveResponse> responseOnlyClientException(
+            @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
+            @RequestBody(required = false) DemoPlainRequest request) {
+        verifyGatewayToken(suppliedToken);
+        throw new IllegalArgumentException("demo 4xx exception with sensitive info e.g. mobile: 11111111111");
+    }
+
+    @PostMapping("/response-only/system-exception")
+    public Result<DemoSensitiveResponse> responseOnlySystemException(
+            @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
+            @RequestBody(required = false) DemoPlainRequest request) {
+        verifyGatewayToken(suppliedToken);
+        throw new SystemException("demo 5xx exception with sensitive info e.g. mobile: 11111111111");
+    }
+
+    @PostMapping("/response-only/business-exception")
+    public Result<DemoSensitiveResponse> responseOnlyBizException(
+            @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
+            @RequestBody(required = false) DemoPlainRequest request) {
+        verifyGatewayToken(suppliedToken);
+        throw new BusinessException("code-123", "demo business exception with sensitive info e.g. mobile: 11111111111");
     }
 
     private void verifyGatewayToken(String suppliedToken) {

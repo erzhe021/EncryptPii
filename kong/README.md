@@ -28,8 +28,15 @@
 | `/crypto/server/bidirectional` | POST | 解密请求体，转发明文请求，并使用同一会话密钥加密响应 |
 | `/crypto/server/request-only` | POST | 解密请求体后转发明文响应 |
 | `/crypto/server/response-only` | POST | 从请求头解密会话密钥，转发请求，并加密响应 |
+| `/crypto/server/response-only/client-exception` | POST | 独立响应加密路由，转发到客户端异常接口（HTTP 400） |
+| `/crypto/server/response-only/system-exception` | POST | 独立响应加密路由，转发到系统异常接口（HTTP 500） |
+| `/crypto/server/response-only/business-exception` | POST | 独立响应加密路由，转发到业务异常接口（HTTP 200） |
 | `/crypto/server/public-key` | GET | Kong 从 Vault 获取当前公钥并直接响应，不转发到 Server |
 | `/plain/server/normal` | POST | 演示用明文路由；不挂载插件，保留路径转发到 Server |
+
+三个异常路由均配置 `decrypt_request=false`、`encrypt_response=true` 和
+`session_key_source=header`，其 `upstream_path` 分别指向对应异常接口。
+更长的子路径优先匹配，避免落入普通响应加密路由后被改写为 `/crypto/server/response-only`。
 
 加密请求体格式与 SDK 兼容：
 

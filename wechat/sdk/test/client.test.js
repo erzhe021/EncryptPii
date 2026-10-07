@@ -248,6 +248,180 @@ test('plain KEY_EXPIRED does not trigger encrypted retry', async () => {
   assert.equal(count, 1);
 });
 
+test('detailed HTTP failures retain diagnostics and decrypt error bodies in every mode', async () => {
+  for (const mode of ['plain', 'bidirectional', 'request-only', 'response-only']) {
+    for (const statusCode of [400, 500]) {
+      const data = { name: 'demo' };
+      const errorBody = { status: statusCode, error: 'Failure', message: 'demo error' };
+      let posts = 0;
+      let raw;
+      const client = createClient(options(async (request) => {
+        if (request.method === 'GET') return { statusCode: 200, data: firstKey.info };
+        posts += 1;
+        raw = errorBody;
+        if (mode === 'bidirectional' || mode === 'response-only') {
+          const session = unwrapSession(mode === 'response-only'
+            ? request.headers['X-STC-SESSION-KEY']
+            : request.data.encryptedSessionKeyBase64, firstKey);
+          raw = encryptResponse(errorBody, session);
+        }
+        return { statusCode, data: raw };
+      }));
+      await assert.rejects(client.sendDetailed({ mode, data }), (error) => {
+        assert.ok(error instanceof HttpError);
+        assert.equal(error.statusCode, statusCode);
+        assert.equal(error.data, raw);
+        assert.deepEqual(error.details.data, errorBody);
+        assert.equal(Boolean(error.details.cipherRequest),
+          ['bidirectional', 'request-only'].includes(mode));
+        assert.equal(error.details.cipherResponse,
+          ['bidirectional', 'response-only'].includes(mode) ? raw : null);
+        assert.equal(Boolean(error.details.stcHeaders), mode === 'response-only');
+        assert.ok(Object.values(error.details.timings).every((value) => value >= 0));
+        assert.equal(Object.hasOwn(error.details, 'sessionKey'), false);
+        return true;
+      });
+      assert.equal(posts, 1);
+      await assert.rejects(client.send({ mode, data }), (error) => {
+        assert.ok(error instanceof HttpError);
+        assert.equal(Object.hasOwn(error, 'details'), false);
+        return true;
+      });
+    }
+  }
+});
+
+test('encrypted modes display plaintext HTTP failures without attempting decryption', async () => {
+  for (const mode of ['bidirectional', 'response-only']) {
+    const errorBody = { message: 'gateway failure' };
+    const client = createClient(options(async (request) => request.method === 'GET'
+      ? { statusCode: 200, data: firstKey.info }
+      : { statusCode: 502, data: errorBody }));
+    await assert.rejects(client.sendDetailed({ mode, data: {} }), (error) => {
+      assert.equal(error.code, 'HTTP_ERROR');
+      assert.deepEqual(error.details.data, errorBody);
+      assert.equal(error.details.cipherResponse, null);
+      assert.equal(error.details.timings.decryption, 0);
+      return true;
+    });
+  }
+});
+
+test('failed error response authentication retains ciphertext without inventing plaintext', async () => {
+  const raw = { ivBase64: Buffer.alloc(12).toString('base64'),
+    encryptedDataBase64: Buffer.alloc(16).toString('base64') };
+  const client = createClient(options(async (request) => request.method === 'GET'
+    ? { statusCode: 200, data: firstKey.info }
+    : { statusCode: 500, data: raw }));
+  await assert.rejects(client.sendDetailed({ mode: 'bidirectional', data: {} }), (error) => {
+    assert.equal(error.code, 'DECRYPTION_FAILED');
+    assert.equal(error.details.data, null);
+    assert.equal(error.details.cipherResponse, raw);
+    assert.ok(error.details.cipherRequest);
+    assert.ok(error.details.timings.total >= 0);
+    return true;
+  });
+});
+
+test('response-only exception requests route, transport session headers and decrypt errors', async () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(require.resolve('../../pages/index/index.js'), 'utf8');
+  for (const [variant, statusCode] of [
+    ['client-exception', 400], ['system-exception', 500], ['business-exception', 200]
+  ]) {
+    const mode = `response-only/${variant}`;
+    const response = statusCode === 200
+      ? { code: 'code-123', message: 'business error', data: null }
+      : { status: statusCode, message: 'server error' };
+    let posts = 0;
+    const client = createClient(options(async (request) => {
+      if (request.method === 'GET') return { statusCode: 200, data: firstKey.info };
+      posts += 1;
+      assert.equal(request.url, `https://kong.example.com/crypto/server/${mode}`);
+      assert.deepEqual(request.data, { data: 'hello world' });
+      assert.equal(request.headers['X-STC-KEY-ID'], firstKey.info.keyId);
+      const session = unwrapSession(request.headers['X-STC-SESSION-KEY'], firstKey);
+      return { statusCode, data: encryptResponse(response, session) };
+    }));
+    let page;
+    vm.runInNewContext(source, {
+      require: () => ({
+        callApi: async (selectedMode, data) => {
+          let details;
+          let failure;
+          try {
+            details = await client.sendDetailed({ mode: selectedMode, data });
+          } catch (error) {
+            failure = error;
+            details = error.details;
+          }
+          const result = {
+            requestPlain: data, requestCipher: details.cipherRequest,
+            responsePlain: details.data, responseCipher: details.cipherResponse,
+            stcHeaders: details.stcHeaders, latency: details.timings
+          };
+          if (failure) {
+            failure.result = result;
+            throw failure;
+          }
+          return result;
+        }
+      }),
+      Page: (definition) => { page = definition; }
+    });
+    page.setData = function (values) { Object.assign(this.data, values); };
+    assert.ok(page.data.modes.some((entry) => entry.id === mode));
+    page.selectMode({ currentTarget: { dataset: { mode } } });
+    assert.equal(page.data.usesPlainInput, true);
+    await page.submit();
+    assert.equal(posts, 1);
+    assert.equal(page.data.error, statusCode === 200 ? '' : `请求失败（HTTP ${statusCode}）`);
+    assert.equal(page.data.loading, false);
+    assert.equal(page.data.result.requestCipher, 'N/A');
+    assert.ok(page.data.result.requestPlain.includes('X-STC-SESSION-KEY'));
+    assert.ok(page.data.result.responseCipher.includes('encryptedDataBase64'));
+    assert.deepEqual(JSON.parse(page.data.result.responsePlain), response);
+    assert.ok(JSON.parse(page.data.result.latency).total >= 0);
+    assert.equal(page.data.result.requestPlainLabel, '请求明文（实发）');
+    assert.equal(page.data.result.responseCipherLabel, '响应密文（实收）');
+  }
+});
+
+test('demo page renders all five sections alongside the HTTP failure message', async () => {
+  const fs = require('node:fs');
+  const source = fs.readFileSync(require.resolve('../../pages/index/index.js'), 'utf8');
+  for (const mode of ['plain', 'bidirectional', 'request-only', 'response-only']) {
+    let page;
+    const requestCipher = ['bidirectional', 'request-only'].includes(mode)
+      ? { encryptedDataBase64: 'request' } : null;
+    const responseCipher = ['bidirectional', 'response-only'].includes(mode)
+      ? { encryptedDataBase64: 'response' } : null;
+    const failure = new HttpError(500, {});
+    failure.result = {
+      requestPlain: { name: 'demo' }, requestCipher,
+      responsePlain: { status: 500, message: 'demo error' }, responseCipher,
+      stcHeaders: { 'X-STC-KEY-ID': 'first', 'X-STC-SESSION-KEY': 'wrapped' },
+      latency: { total: 10, encryption: 2, http: 7, decryption: 1 }
+    };
+    vm.runInNewContext(source, {
+      require: () => ({ callApi: async () => { throw failure; } }),
+      Page: (definition) => { page = definition; }
+    });
+    page.setData = function (values) { Object.assign(this.data, values); };
+    page.data.mode = mode;
+    await page.submit();
+    assert.equal(page.data.error, '请求失败（HTTP 500）');
+    assert.equal(page.data.loading, false);
+    assert.ok(page.data.result.requestPlain.includes('demo'));
+    assert.equal(page.data.result.requestCipher,
+      requestCipher ? JSON.stringify(requestCipher, null, 2) : 'N/A');
+    assert.equal(page.data.result.responseCipher,
+      responseCipher ? JSON.stringify(responseCipher, null, 2) : 'N/A');
+    assert.ok(page.data.result.responsePlain.includes('demo error'));
+    assert.ok(page.data.result.latency.includes('10'));
+  }
+});
+
 test('network failures have stable errors and are not retried', async () => {
   let posts = 0;
   const cause = new Error('timeout');
@@ -460,6 +634,18 @@ test('demo wrapper returns separate plaintext, ciphertext, and latency values', 
     assert.equal(plain.requestCipher, null);
     assert.deepEqual(plain.responsePlain, { code: '0', message: null, data });
     assert.equal(plain.responseCipher, null);
+    global.wx.request = (request) => {
+      request.success({ statusCode: 500, data: { status: 500, message: 'demo error' } });
+    };
+    await assert.rejects(callApi('plain', data), (error) => {
+      assert.equal(error.code, 'HTTP_ERROR');
+      assert.deepEqual(error.result.requestPlain, data);
+      assert.equal(error.result.requestCipher, null);
+      assert.equal(error.result.responseCipher, null);
+      assert.deepEqual(error.result.responsePlain, { status: 500, message: 'demo error' });
+      assert.ok(error.result.latency.total >= 0);
+      return true;
+    });
   } finally {
     if (previousWx === undefined) {
       delete global.wx;

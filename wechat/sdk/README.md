@@ -51,6 +51,9 @@ Validate deployment on real devices as well as the simulator.
 | `bidirectional` | Encrypted JSON | Decrypted JSON |
 | `request-only` | Encrypted JSON | JSON |
 | `response-only` | JSON + encrypted session key headers | Decrypted JSON |
+| `response-only/client-exception` | JSON + encrypted session key headers | Decrypted HTTP 400 error |
+| `response-only/system-exception` | JSON + encrypted session key headers | Decrypted HTTP 500 error |
+| `response-only/business-exception` | JSON + encrypted session key headers | Decrypted HTTP 200 business error |
 
 `client.sendDetailed(...)` is explicitly opt-in and returns
 `{ data, cipherRequest, cipherResponse, timings }` for demos; `data` contains the
@@ -59,6 +62,13 @@ or session key is included. The business response can still contain sensitive
 information, so do not log this result in production. `total` includes key
 acquisition and retries; the other timings describe the successful attempt,
 and `encryption` includes asynchronous random acquisition.
+
+HTTP failures still reject, but `sendDetailed()` attaches the final attempt's
+diagnostics as `error.details`. Its `data` contains the error body, decrypted
+when encrypted; plaintext gateway errors are returned unchanged. Error bodies
+need not use the business result envelope. Decryption failures also expose
+diagnostics, with `data: null` and the received ciphertext, and remain errors.
+These diagnostics may contain sensitive data and must not be logged by default.
 
 `createClient({ baseUrl, transport, randomBytes, timeoutMs?, headers? })` supports
 existing network stacks and future platform adapters:
