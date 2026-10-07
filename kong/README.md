@@ -19,18 +19,20 @@
 
 部署和配置脚本从仓库根目录读取 `.env`。环境变量优先于 `.env` 中的同名配置；`.env` 只解析字面量 `KEY=value`，不会执行 shell 命令或变量展开。
 
-## 请求处理
+## 路由与传输协议
 
-插件支持三种业务路由：
+### 接口映射
+
+插件支持双向加密、请求加密、响应加密三种模式，并提供三个响应加密异常演示接口：
 
 | 客户端路径 | 方法 | 处理方式 |
 | --- | --- | --- |
 | `/crypto/server/bidirectional` | POST | 从请求头解密会话密钥、解密请求体，转发明文请求，并使用同一会话密钥加密响应 |
 | `/crypto/server/request-only` | POST | 从请求头解密会话密钥、解密请求体后转发明文响应 |
 | `/crypto/server/response-only` | POST | 从请求头解密会话密钥，转发请求，并加密响应 |
-| `/crypto/server/response-only/client-exception` | POST | 独立响应加密路由，转发到客户端异常接口（HTTP 400） |
-| `/crypto/server/response-only/system-exception` | POST | 独立响应加密路由，转发到系统异常接口（HTTP 500） |
 | `/crypto/server/response-only/business-exception` | POST | 独立响应加密路由，转发到业务异常接口（HTTP 200） |
+| `/crypto/server/response-only/client-exception` | POST | 独立响应加密路由，转发到客户端异常接口（HTTP 400） |
+| `/crypto/server/response-only/system-exception` | POST | 独立响应加密路由，转发到服务端异常接口（HTTP 500） |
 | `/crypto/server/public-key` | GET | Kong 从 Vault 获取当前公钥并直接响应，不转发到 Server |
 | `/plain/server/normal` | POST | 演示用明文路由；不挂载插件，保留路径转发到 Server |
 
@@ -38,7 +40,16 @@
 `upstream_path` 分别指向对应异常接口。
 更长的子路径优先匹配，避免落入普通响应加密路由后被改写为 `/crypto/server/response-only`。
 
-所有加密模式均从 `X-STC-KEY-ID` 和 `X-STC-SESSION-KEY` 请求头读取密钥标识与 RSA 加密的会话密钥。请求加密模式的请求体只包含：
+### 统一请求头与请求体
+
+所有加密模式均使用以下请求头，不再支持旧版 Body 密钥传输：
+
+| 请求头 | 内容 |
+| --- | --- |
+| `X-STC-KEY-ID` | `<keyAlias>:<version>`，例如 `rsa-ciam:2` |
+| `X-STC-SESSION-KEY` | RSA 加密后的 AES 会话密钥的 Base64 字符串，不能传明文会话密钥 |
+
+双向加密和请求加密的请求体只包含以下两个字段；响应加密的请求体保持原业务明文结构，也可无请求体：
 
 ```json
 {
@@ -49,22 +60,57 @@
 
 RSA 使用 OAEP-SHA-256，MGF1 使用 SHA-1，以匹配 Java SDK 的 `RSA/ECB/OAEPWithSHA-256AndMGF1Padding` 默认参数。会话密钥为 256-bit AES，数据采用 GCM，IV 为 12 字节、认证标签为 16 字节。响应体包含 `ivBase64` 和 `encryptedDataBase64`。
 
-双向加密、请求加密和响应加密均要求这两个请求头。Kong 在所有加密路由转发上游前移除它们，并注入 `X-Crypto-Gateway-Token`。请求体中出现旧版 `keyId` 或 `encryptedSessionKeyBase64` 字段、或其他非协议字段时会明确返回 HTTP 400；不支持 body/header 混用或回退。Server 必须配置相同的 `KONG_TO_ENCRYPTPII_AUTH_TOKEN`，且不能将受保护的内部明文接口直接暴露给不可信网络。
+Kong 在所有加密路由转发上游前移除这两个请求头，并注入 `X-Crypto-Gateway-Token`。需要解密的请求体中出现旧版 `keyId` 或 `encryptedSessionKeyBase64` 字段、或其他非协议字段时会明确返回 HTTP 400；不支持 body/header 混用或回退。Server 必须配置相同的 `KONG_TO_ENCRYPTPII_AUTH_TOKEN`，且不能将受保护的内部明文接口直接暴露给不可信网络。
 
-## Vault 密钥与轮换
+### 响应与异常
 
-Vault KV v2 中每个版本应包含 Base64 编码的 X.509 公钥 DER 和 PKCS#8 私钥 DER，字段名分别为 `publicKey` 和 `privateKey`。SDK、Kong 与 Server 的密钥别名和 Vault 路径必须一致。客户端使用 `<keyAlias>:<version>` 作为 `keyId`。
+响应加密不以 HTTP 状态码为条件：取得会话密钥后，正常响应、HTTP 200 业务异常以及 HTTP 400/500 上游错误响应均会加密，保留对应的 HTTP 状态码。
+在取得会话密钥之前发生的网关错误（例如缺少请求头、密钥不可用或过期）仍可能返回明文错误体。客户端应保留错误状态，并根据实际响应格式处理解密。
 
-插件使用 Kong Pod 的 ServiceAccount JWT 登录 Vault Kubernetes auth，不在 Kubernetes Secret 中保存 Vault token。Vault 返回的短期 token 会在 Kong worker 内缓存；解析后的私钥也按 worker 缓存，最多缓存 60 秒，并受密钥有效期和宽限期约束。缓存过期清理在后续私钥访问时触发，不运行定时清理任务；移除缓存引用不代表内存内容已立即安全擦除。插件不会删除 Vault 中的密钥版本。
+## Vault 交互与密钥轮换
 
-当前版本在 `key_validity_millis` 有效期内可用；版本轮换后，旧版本根据 Vault KV v2 元数据中的下一版本 `created_time` 计算轮换时刻，并仅在 `key_grace_period_millis` 内继续接受。保留旧版本及其元数据至少覆盖客户端缓存与宽限期所需时间。
+### 身份认证与密钥读取
 
-请求引用不存在、不可用或已超过宽限期的版本时，网关返回 HTTP 400、`code: "KEY_EXPIRED"`，并附带最新公钥，客户端可刷新公钥后重试一次。响应示例：
+插件通过 **KV v2 HTTP API + Kubernetes auth** 访问 Vault，不使用 Vault Transit。RSA/AES 加解密在 Kong 内完成，Vault 负责保存版本化的 RSA 密钥，私钥会被读取到 Kong 内存。
+
+1. Kong Pod 读取 ServiceAccount JWT，调用 `POST /v1/auth/kubernetes/login`，以 `encryptpii-kong` role 换取短期 Vault token。
+2. 使用 token 读取 `secret/metadata/...`，获取当前版本、创建时间和版本可用状态。
+3. 从 `secret/data/...?version=<version>` 读取对应版本的公钥或私钥。Kong role 只需目标 data 和 metadata 路径的读取权限。
+
+KV v2 每个密钥版本应包含以下字段：
+
+| 字段 | 内容 |
+| --- | --- |
+| `publicKey` | Base64 编码的 X.509 公钥 DER |
+| `privateKey` | Base64 编码的 PKCS#8 私钥 DER |
+
+客户端使用 `<keyAlias>:<version>` 作为 `keyId`；客户端与 Kong 必须使用相同的别名和协议。Server 不直接访问 Vault。
+实现见 [`vault.lua`](plugins/sensitive-transport-crypto/vault.lua) 和 [`keys.lua`](plugins/sensitive-transport-crypto/keys.lua)。
+
+### 缓存与自动感知
+
+**同一路径内新增密钥版本后，Kong 无需重启或重新部署即可感知，但这是请求触发读取，不是 Vault 推送或后台轮询。**
+
+| 对象或场景 | 当前行为 |
+| --- | --- |
+| Vault token | 按 Kong worker 缓存；到租期的 80% 后，下次访问重新登录，不保存为静态 Kubernetes Secret |
+| 公钥接口 | 每次读取 Vault metadata 和当前版本公钥，没有插件侧公钥缓存；轮换后下一次调用即可取得新版本 |
+| 私钥 | 按 worker、密钥版本及相关配置缓存，最多 16 个条目；有效缓存可绕过 Vault 读取，最长 60 秒，且受有效期及宽限期约束 |
+| 新版本请求 | 缓存未命中时读取 metadata 和指定版本私钥，自动使用新密钥 |
+| 客户端公钥 | Java 客户端和小程序 SDK 缓存至返回的到期时间，或收到 `KEY_EXPIRED` 后刷新，不会因轮换立即切换版本 |
+
+私钥缓存的过期清理在后续私钥访问时触发，没有定时清理任务；移除引用不代表内存内容已立即安全擦除。缓存命中也意味着 Vault 中的删除或销毁不会立即反映到该 worker，不能将密钥轮换视为即时撤销机制。插件不会删除 Vault 中的密钥版本。
+
+### 有效期、宽限期与重试
+
+公钥到期时间为当前版本的 `created_time + key_validity_millis`。轮换后，旧版本的宽限截止时间为**下一版本的 `created_time + key_grace_period_millis`**。旧私钥缓存失效后的请求会重新检查版本元数据与宽限期；保留旧版本及其元数据至少覆盖客户端缓存与宽限期所需时间。
+
+请求引用不存在、不可用或已超过宽限期的版本时，网关返回 HTTP 400、`code: "KEY_EXPIRED"`；若可取得最新有效公钥，则附带公钥供客户端刷新，客户端使用新的会话材料最多重试一次。响应示例：
 
 ```json
 {
   "code": "KEY_EXPIRED",
-  "msg": "密钥版本已过期，请更新公钥。最新公钥参考data",
+  "msg": "密钥版本已过期，请更新。新版本在data字段里。",
   "data": {
     "publicKeyBase64": "xxxxx",
     "keyId": "rsa-ciam:2",
@@ -73,7 +119,9 @@ Vault KV v2 中每个版本应包含 Base64 编码的 X.509 公钥 DER 和 PKCS#
 }
 ```
 
-密钥别名不匹配返回 `code: "INVALID_KEY"`，不附带公钥数据。不要把其他校验或解密错误当作密钥过期并自动重试。无法从 Vault 获取当前公钥时，公钥接口或过期密钥响应会返回 HTTP 503。
+密钥别名不匹配返回 `code: "INVALID_KEY"`，不附带公钥数据。不要把其他校验或解密错误当作密钥过期并自动重试。无法从 Vault 获取当前有效公钥时，公钥接口或过期密钥响应会返回 HTTP 503。
+
+**自动感知不等于自动轮换**：仓库只提供一次性轮换脚本，没有定时调度。当前版本公钥到期却未生成新版本时，公钥接口返回 503，不会自动生成密钥。应在当前版本有效期内完成下一次轮换。
 
 以下时间线说明旧版本宽限期与客户端公钥缓存可能不同步的情况：
 
@@ -86,7 +134,20 @@ Vault KV v2 中每个版本应包含 Base64 编码的 X.509 公钥 DER 和 PKCS#
 | 08:20:55 | 版本 15 被拒绝，刷新版本 16 后重试成功 | 即使客户端缓存尚未过期，旧版本超过宽限期也会返回 `KEY_EXPIRED` |
 | 08:21:25 | 版本 16 的公钥缓存过期，刷新返回 503 | 客户端刷新失败，因此不会发送使用版本 16 加密的业务请求 |
 
-## 部署到 Kubernetes
+### 执行轮换
+
+轮换脚本在现有 KV v2 路径新增 RSA-2048 密钥版本，保留其他字段和历史版本，并通过 CAS 避免并发覆盖。先检查变更，再执行：
+
+```bash
+./vault/scripts/rotate-vault-key.sh --dry-run secret/data/sensitive-transport-crypto/rsa-ciam
+./vault/scripts/rotate-vault-key.sh secret/data/sensitive-transport-crypto/rsa-ciam
+```
+
+默认通过 `kubectl exec` 操作 `docker-desktop` context 中的 Vault，使用 `vault/.local/rotation-token` 或显式设置的 `VAULT_TOKEN`，不需要端口转发。轮换 token 仅需目标 data 路径的 `read` 和 `update` 权限，不要复用 Kong 的只读 role。外部 Vault 可使用 `--http`，并通过 `VAULT_ADDR`、`VAULT_TOKEN` 覆盖配置；CAS 失败时应先检查当前版本再决定是否重试。详细操作见 [Vault 文档](../vault/README.md)。
+
+## Kubernetes 部署
+
+### 前置条件与环境配置
 
 部署前准备：
 
@@ -126,14 +187,9 @@ ENCRYPTPII_MAX_BODY_BYTES=1048576
 
 若 `.env` 配置为默认的 `certs/kong.crt` 和 `certs/kong.key`，且两个文件均不存在，`deploy-to-k8s.sh` 会自动调用上述脚本生成证书，再写入 TLS Secret。已有证书不会被重新签发；仅缺少其中一个文件或自定义路径下文件缺失时，部署会报错，不会自动覆盖或生成。`install-to-kong.sh` 也使用同一部署流程。
 
-本机访问时将代理 HTTPS 端口转发到 `18443`：
-
-```bash
-kubectl -n kong port-forward service/encryptpii-kong 18443:8443
-curl --cacert certs/kong.crt https://localhost:18443/crypto/server/public-key
-```
-
 生产环境应使用受信任 CA 签发且 SAN 与实际域名匹配的证书，并通过安全的证书管理流程更新证书后重新部署 Kong。HTTP 代理端口 `8000` 仍然开放；如需强制 HTTPS，应在入口层禁用 HTTP 或配置 HTTP 到 HTTPS 重定向。Admin API 不应向不可信网络开放。
+
+### 构建与部署
 
 部署 Kong：
 
@@ -141,7 +197,7 @@ curl --cacert certs/kong.crt https://localhost:18443/crypto/server/public-key
 ./kong/scripts/deploy-to-k8s.sh
 ```
 
-该脚本会构建镜像（除非指定 `--skip-build`）、从 Server namespace 复制 `encryptpii-gateway` Secret、生成 DB-less 路由配置并部署 Kong。安装入口等价：
+该脚本会构建镜像（除非指定 `--skip-build`）、从 Server namespace 复制 `encryptpii-gateway` Secret、生成 DB-less 路由配置并部署 Kong。仅调整路由或配置且已有最新镜像时可使用 `--skip-build`；修改 Lua 插件后必须重新构建。安装入口等价：
 
 ```bash
 ./kong/scripts/install-to-kong.sh
@@ -153,7 +209,9 @@ curl --cacert certs/kong.crt https://localhost:18443/crypto/server/public-key
 ./kong/scripts/build-plugin.sh
 ```
 
-如需本机访问本地集群中的 Kong：
+### 本机访问
+
+转发本地集群中的 Kong 端口：
 
 ```bash
 kubectl -n kong port-forward service/encryptpii-kong 18443:8443 18000:8000 18001:8001 18002:8002
@@ -161,17 +219,27 @@ kubectl -n kong port-forward service/encryptpii-kong 18443:8443 18000:8000 18001
 
 Kong 的 HTTPS 代理、HTTP 代理、Admin API 和 Manager 分别通过本机端口 `18443`、`18000`、`18001` 和 `18002` 访问。Admin API 不应向不可信网络开放。
 
-## 路由与配置
+另开终端访问公钥接口：
+
+```bash
+curl --cacert certs/kong.crt https://localhost:18443/crypto/server/public-key
+```
+
+## 插件配置
+
+### DB-less 与数据库模式
 
 Kubernetes 部署脚本生成的 DB-less 配置包含上述加密路由和独立明文路由。明文演示路由仅用于本地演示：它绑定独立的 `encryptpii-server-plain` Service，不挂载加密插件，且以 `strip_path: false` 保留 `/plain/server/normal` 路径。不要将插件配置为全局插件或绑定到明文 Service。
 
-`configure-routes.sh` 适用于数据库模式下、可访问 Kong Admin API 的部署；它会幂等配置一个上游服务、四条加密路由及对应插件，并配置明文路由。它不用于当前 DB-less Kubernetes 部署。脚本需要 `.env` 中的 `KONG_ADMIN_URL`、`ENCRYPTPII_UPSTREAM_URL`、Vault 地址和密钥配置：
+`configure-routes.sh` 适用于数据库模式下、可访问 Kong Admin API 的部署；它会幂等配置一个加密上游服务、六条受保护业务路由及公钥路由，并配置独立的明文 Service 和路由。它不用于当前 DB-less Kubernetes 部署。脚本需要 `.env` 中的 `KONG_ADMIN_URL`、`ENCRYPTPII_UPSTREAM_URL`、Vault 地址和密钥配置：
 
 ```bash
 ./kong/scripts/configure-routes.sh
 ```
 
-插件配置示例（密钥引用应由部署环境安全提供）：
+### 配置示例与参数
+
+双向加密插件配置示例（密钥引用应由部署环境安全提供）：
 
 ```yaml
 plugins:
@@ -211,17 +279,6 @@ plugins:
 | `encrypt_response` | `false` | 是否加密响应体 |
 | `serve_public_key` | `false` | 是否由 Kong 直接提供公钥 |
 | `max_body_bytes` | `1048576` | 请求/响应加解密缓冲上限，最大 16 MiB |
-
-## 手动轮换密钥
-
-仓库提供的一次性轮换脚本会在现有 Vault KV v2 路径新增 RSA-2048 密钥版本，保留其他字段和历史版本，并通过 CAS 避免并发覆盖。先执行 dry run，再确认后轮换：
-
-```bash
-./vault/scripts/rotate-vault-key.sh --dry-run secret/data/sensitive-transport-crypto/rsa-ciam
-./vault/scripts/rotate-vault-key.sh secret/data/sensitive-transport-crypto/rsa-ciam
-```
-
-脚本默认通过 `kubectl exec` 在 `docker-desktop` context 的 Vault 中操作，使用 `vault/.local/rotation-token` 或显式设置的 `VAULT_TOKEN`，不需要端口转发。轮换 token 应单独创建，并仅授予目标 data 路径的 `read` 和 `update` 权限；不要复用 Kong 的只读 Kubernetes auth role。访问外部 Vault 时使用 `--http`；`VAULT_ADDR` 和 `VAULT_TOKEN` 可覆盖 `.env` 配置。若 CAS 失败，先检查 Vault 当前版本，再决定是否重新执行。轮换不是自动调度任务。
 
 ## 运维与安全
 

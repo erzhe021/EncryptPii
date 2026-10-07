@@ -30,6 +30,7 @@ import javax.crypto.spec.SecretKeySpec;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -189,6 +190,101 @@ class CryptoClientRetryTest {
             assertEquals(6, sessionHeaders.size());
             for (int attempt = 0; attempt < sessionHeaders.size(); attempt += 2) {
                 assertNotEquals(sessionHeaders.get(attempt), sessionHeaders.get(attempt + 1));
+            }
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
+    void responseOnlyExceptionEndpointsDecryptErrorsAndRetryExpiredKeysOnce() throws Exception {
+        var generator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
+        generator.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
+        KeyPair key = generator.generateKeyPair();
+        ObjectMapper mapper = new ObjectMapper();
+        var publicKey = new PublicKeyResponse(
+                EncodingUtils.toBase64(key.getPublic().getEncoded()),
+                "rsa-ciam:2", System.currentTimeMillis() + 60_000);
+        Map<String, AtomicInteger> attempts = new ConcurrentHashMap<>();
+        Map<String, List<String>> sessions = new ConcurrentHashMap<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            String path = exchange.getRequestURI().getPath();
+            if (path.endsWith("/public-key")) {
+                respond(exchange, 200, mapper.writeValueAsString(new PublicKeyResponse(
+                        publicKey.publicKeyBase64(), "rsa-ciam:1", publicKey.expiresAtEpochMillis())));
+                return;
+            }
+            String variant = path.substring(path.lastIndexOf('/') + 1);
+            String sessionHeader = exchange.getRequestHeaders().getFirst("X-STC-SESSION-KEY");
+            sessions.computeIfAbsent(variant, ignored -> new CopyOnWriteArrayList<>()).add(sessionHeader);
+            int attempt = attempts.computeIfAbsent(variant, ignored -> new AtomicInteger()).incrementAndGet();
+            var request = mapper.readTree(exchange.getRequestBody());
+            if (request != null && !request.isMissingNode()
+                    && (request.size() != 1 || !"demo".equals(request.path("data").asText()))) {
+                respond(exchange, 400, "{\"message\":\"invalid request body\"}");
+                return;
+            }
+            if (attempt == 1) {
+                respond(exchange, 400, mapper.writeValueAsString(
+                        Map.of("code", "KEY_EXPIRED", "data", publicKey)));
+                return;
+            }
+            if (!"rsa-ciam:2".equals(exchange.getRequestHeaders().getFirst("X-STC-KEY-ID"))) {
+                respond(exchange, 400, "{\"message\":\"wrong key version\"}");
+                return;
+            }
+            int status = switch (variant) {
+                case "client-exception" -> 400;
+                case "system-exception" -> 500;
+                default -> 200;
+            };
+            String body = status == 200
+                    ? "{\"code\":\"code-123\",\"message\":\"business error\",\"data\":null}"
+                    : "{\"status\":" + status + ",\"message\":\"sensitive error\"}";
+            try {
+                var sessionKey = SessionKeyService.decryptSessionKeyBase64(sessionHeader, key.getPrivate());
+                respond(exchange, status, mapper.writeValueAsString(encryptResponse(body, sessionKey)));
+            } catch (java.security.GeneralSecurityException failure) {
+                exchange.close();
+                throw new IllegalStateException(failure);
+            } catch (Exception failure) {
+                exchange.close();
+                throw new IllegalStateException(failure);
+            }
+        });
+        server.start();
+        try {
+            for (String variant : List.of("client-exception", "system-exception", "business-exception")) {
+                CryptoClientController controller = new CryptoClientController(
+                        "http://127.0.0.1:" + server.getAddress().getPort(),
+                        "/crypto/server/public-key", "/crypto/server/bidirectional",
+                        "/crypto/server/request-only", "/crypto/server/response-only");
+                MockMvc client = MockMvcBuilders.standaloneSetup(controller).build();
+                var request = post("/crypto/client/response-only/" + variant);
+                if (!"business-exception".equals(variant)) {
+                    request.contentType(MediaType.APPLICATION_JSON).content("{\"data\":\"demo\"}");
+                }
+                var response = client.perform(request).andExpect(status().isOk()).andReturn();
+                var details = mapper.readTree(response.getResponse().getContentAsString());
+                int expectedStatus = "client-exception".equals(variant) ? 400
+                        : "system-exception".equals(variant) ? 500 : 200;
+                assertEquals(expectedStatus, details.path("response").path("status").asInt());
+                assertEquals("rsa-ciam:2", details.path("request").path("headers").path("X-STC-KEY-ID").asText());
+                assertEquals(sessions.get(variant).get(1),
+                        details.path("request").path("headers").path("X-STC-SESSION-KEY").asText());
+                assertTrue(details.path("response").path("cipher").has("encryptedDataBase64"));
+                assertEquals(expectedStatus == 200 ? "business error" : "sensitive error",
+                        details.path("response").path("plain").path("message").asText());
+                if (expectedStatus == 200) {
+                    assertEquals("code-123", details.path("response").path("plain").path("code").asText());
+                    assertEquals("no data", details.path("request").path("plain").asText());
+                } else {
+                    assertEquals("demo", details.path("request").path("plain").path("data").asText());
+                }
+                assertTrue(details.has("latency in ms"));
+                assertEquals(2, attempts.get(variant).get());
+                assertNotEquals(sessions.get(variant).get(0), sessions.get(variant).get(1));
             }
         } finally {
             server.stop(0);

@@ -200,10 +200,21 @@ public class CryptoHttpClient {
      */
     public CipherResponsePayload postResponseOnly(
             String path, DemoPlainRequest request, SessionKeyTransport sessionTransport) throws Exception {
-        HttpRequest httpRequest = buildJsonRequest(serverBaseUri.resolve(path), request, sessionTransport);
-        HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+        HttpResponse<String> response = postResponseOnlyDetailed(path, request, sessionTransport);
         ensureSuccess(response, path);
         return objectMapper.readValue(response.body(), CipherResponsePayload.class);
+    }
+
+    public HttpResponse<String> postResponseOnlyDetailed(
+            String path, DemoPlainRequest request, SessionKeyTransport sessionTransport) throws Exception {
+        HttpRequest httpRequest = buildJsonRequest(serverBaseUri.resolve(path), request, sessionTransport);
+        return httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
+    }
+
+    public ServerKeyInfo getRefreshedKeyFromResponse(String path, HttpResponse<String> response)
+            throws GeneralSecurityException {
+        return getRefreshedKeyFromFailure(
+                new HttpStatusException(path, response.statusCode(), response.body()));
     }
 
     private HttpResponse<String> sendJsonRequest(String path, Object requestBody) throws Exception {

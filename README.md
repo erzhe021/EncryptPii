@@ -182,7 +182,17 @@ curl --fail-with-body -X POST \
 
 Client 还提供 `POST /crypto/client/request-only`，使用同样的敏感请求体；`POST /crypto/client/response-only` 可使用 `{"data":"demo"}` 请求体。加密演示响应包含实际发送的 STC 请求头、仅含 `ivBase64` 和 `encryptedDataBase64` 的请求密文体、明文和耗时等诊断数据。
 
-明文 Client 接口只有 `POST /plain/client/normal`，接受 `DemoPlainRequest`，通过 `CryptoHttpClient.postPlain` 复用 JSON 请求发送逻辑，不获取公钥、不加解密。成功响应直接返回包含 `request`、`response` 和 `latency in ms` 的 `Map<String, Object>`，其中 `response` 为反序列化后的 `DemoPlainResponse`，耗时结构与 Crypto Client 一致，`encryption`、`decryption` 均为 0，`total`、`http` 为明文调用耗时（毫秒）。与 Crypto Client 一致，上游非 200 响应抛出 `HttpStatusException`，不再透传上游状态码和错误响应体。Server 对应接口返回 `DemoPlainResponse`。
+响应加密还提供以下异常演示入口，均可使用 `{"data":"demo"}` 或不传请求体，通过 Kong 转发到同名的 `/crypto/server/response-only/...` 接口：
+
+| Client 接口 | 上游响应 |
+| --- | --- |
+| `POST /crypto/client/response-only/business-exception` | HTTP 200，业务错误码 |
+| `POST /crypto/client/response-only/client-exception` | HTTP 400，客户端异常 |
+| `POST /crypto/client/response-only/system-exception` | HTTP 500，服务端异常 |
+
+响应加密入口返回 HTTP 200 的诊断结果，原始上游状态记录在 `response.status`，响应密文及解密结果分别位于 `response.cipher`、`response.plain`。明文网关错误直接展示，密文项为 `N/A`；解密失败仍抛出异常，不伪造成功结果。公钥过期仅重试一次，重试后的请求头会反映在诊断结果中。异常接口路径由配置的 `crypto.server.endpoints.response-only` 加对应后缀生成。
+
+明文 Client 接口只有 `POST /plain/client/normal`，接受 `DemoPlainRequest`，通过 `CryptoHttpClient.postPlain` 复用 JSON 请求发送逻辑，不获取公钥、不加解密。成功响应直接返回包含 `request`、`response` 和 `latency in ms` 的 `Map<String, Object>`，其中 `response` 为反序列化后的 `DemoPlainResponse`，耗时结构与 Crypto Client 一致，`encryption`、`decryption` 均为 0，`total`、`http` 为明文调用耗时（毫秒）。此接口及请求加密、双向加密入口遇到上游非 200 响应仍抛出 `HttpStatusException`。Server 对应接口返回 `DemoPlainResponse`。
 
 ## Client 配置与 Kong 路由
 

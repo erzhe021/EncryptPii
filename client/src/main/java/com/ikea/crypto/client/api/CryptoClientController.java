@@ -16,6 +16,7 @@ import org.springframework.web.bind.annotation.RestController;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.net.URI;
+import java.net.http.HttpResponse;
 import java.util.Map;
 
 @RestController
@@ -145,6 +146,28 @@ public class CryptoClientController {
     @PostMapping("/response-only")
     public Map<String, Object> responseOnlyEncrypt(@RequestBody(required = false) DemoPlainRequest demoPlainRequest)
             throws Exception {
+        return responseOnly(demoPlainRequest, responseOnlyPath);
+    }
+
+    @PostMapping("/response-only/client-exception")
+    public Map<String, Object> responseOnlyClientException(
+            @RequestBody(required = false) DemoPlainRequest request) throws Exception {
+        return responseOnly(request, responseOnlyPath + "/client-exception");
+    }
+
+    @PostMapping("/response-only/system-exception")
+    public Map<String, Object> responseOnlySystemException(
+            @RequestBody(required = false) DemoPlainRequest request) throws Exception {
+        return responseOnly(request, responseOnlyPath + "/system-exception");
+    }
+
+    @PostMapping("/response-only/business-exception")
+    public Map<String, Object> responseOnlyBusinessException(
+            @RequestBody(required = false) DemoPlainRequest request) throws Exception {
+        return responseOnly(request, responseOnlyPath + "/business-exception");
+    }
+
+    private Map<String, Object> responseOnly(DemoPlainRequest demoPlainRequest, String path) throws Exception {
         long startTime = System.currentTimeMillis();
         String data = demoPlainRequest == null ? null : demoPlainRequest.data();
         log.debug("starting response-only RSA encryption with request data: {}", data);
@@ -157,40 +180,43 @@ public class CryptoClientController {
 
         long requestPrepared = System.currentTimeMillis();
 
-        CipherResponsePayload responsePayload;
-        try {
-            responsePayload =
-                    cryptoHttpClient.postResponseOnly(responseOnlyPath, demoPlainRequest, sessionTransport);
-        } catch (CryptoHttpClient.HttpStatusException failure) {
-            serverKeyInfo = cryptoHttpClient.getRefreshedKeyFromFailure(failure);
-            if (serverKeyInfo == null) {
-                throw failure;
-            }
+        HttpResponse<String> httpResponse =
+                cryptoHttpClient.postResponseOnlyDetailed(path, demoPlainRequest, sessionTransport);
+        serverKeyInfo = cryptoHttpClient.getRefreshedKeyFromResponse(path, httpResponse);
+        if (serverKeyInfo != null) {
             sessionKey = generateSessionKey();
             sessionTransport =
                     SessionKeyTransport.fromGeneratedKey(serverKeyInfo.keyId(), sessionKey, serverKeyInfo.publicKey());
-            responsePayload =
-                    cryptoHttpClient.postResponseOnly(responseOnlyPath, demoPlainRequest, sessionTransport);
+            httpResponse =
+                    cryptoHttpClient.postResponseOnlyDetailed(path, demoPlainRequest, sessionTransport);
         }
         long httpTime = System.currentTimeMillis();
 
-        // Decrypt the response data using the session key and IV
-        String decryptedResponseData = cryptoClient.decrypt(responsePayload, sessionKey);
-        Result<DemoSensitiveResponse> demoSensitiveResponse = objectMapper.readValue(
-                decryptedResponseData,
-                new TypeReference<>() {
-                });
+        var rawResponse = objectMapper.readTree(httpResponse.body());
+        boolean encryptedResponse = httpResponse.statusCode() == 200
+                || (rawResponse != null
+                && (rawResponse.has("ivBase64") || rawResponse.has("encryptedDataBase64")));
+        Object cipherResponse = "N/A";
+        var plainResponse = rawResponse;
+        if (encryptedResponse) {
+            CipherResponsePayload responsePayload =
+                    objectMapper.treeToValue(rawResponse, CipherResponsePayload.class);
+            plainResponse = objectMapper.readTree(cryptoClient.decrypt(responsePayload, sessionKey));
+            cipherResponse = responsePayload;
+        }
+        long finish = System.currentTimeMillis();
 
         return Map.of(
                 "request", Map.of(
                         "plain", demoPlainRequest == null ? "no data" : demoPlainRequest,
                         "headers", sessionHeaders(sessionTransport)),
-                "response", Map.of("plain", demoSensitiveResponse, "cipher", responsePayload),
+                "response", Map.of("plain", plainResponse == null ? "N/A" : plainResponse,
+                        "cipher", cipherResponse, "status", httpResponse.statusCode()),
                 "latency in ms", new LatencyInMs(
-                        (System.currentTimeMillis() - startTime),
+                        (finish - startTime),
                         (requestPrepared - startTime),
                         (httpTime - requestPrepared),
-                        (System.currentTimeMillis() - httpTime)
+                        (finish - httpTime)
                 )
         );
     }
