@@ -77,13 +77,12 @@ function createCrypto(randomBytes) {
     return {
       sessionKey,
       payload: {
-        keyId: serverKey.keyId,
-        encryptedSessionKeyBase64,
         ivBase64: forge.util.encode64(iv),
         encryptedDataBase64: forge.util.encode64(
           cipher.output.getBytes() + cipher.mode.tag.getBytes()
         )
-      }
+      },
+      encryptedSessionKeyBase64
     };
   }
 

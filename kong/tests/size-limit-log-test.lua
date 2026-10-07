@@ -34,7 +34,7 @@ kong = {
 ngx = { arg = {}, header = {} }
 
 local plugin = require "kong.plugins.sensitive-transport-crypto.handler"
-local config = { decrypt_request = true, session_key_source = "body", max_body_bytes = 4 }
+local config = { decrypt_request = true, max_body_bytes = 4 }
 
 headers["Content-Length"] = "5"
 local result = plugin:access(config)

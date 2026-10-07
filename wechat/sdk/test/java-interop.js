@@ -23,8 +23,10 @@ test('SDK request decrypts in JCA and JCA response decrypts in SDK', async () =>
         };
       }
       const payload = request.data;
+      assert.deepEqual(Object.keys(payload).sort(), ['encryptedDataBase64', 'ivBase64']);
+      assert.equal(request.headers['X-STC-KEY-ID'], 'java');
       const java = spawnSync('java', [path.join(__dirname, 'JavaInterop.java')], {
-        input: [privateKey, payload.encryptedSessionKeyBase64, payload.ivBase64,
+        input: [privateKey, request.headers['X-STC-SESSION-KEY'], payload.ivBase64,
           payload.encryptedDataBase64, ''].join('\n'),
         encoding: 'utf8',
         timeout: 30000

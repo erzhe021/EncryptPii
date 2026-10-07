@@ -40,3 +40,9 @@ docker run --rm \
   --entrypoint /usr/local/openresty/luajit/bin/luajit \
   encryptpii-kong:3.7 \
   /tmp/plugin-tests/size-limit-log-test.lua
+
+docker run --rm \
+  --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  --entrypoint /usr/local/openresty/luajit/bin/luajit \
+  encryptpii-kong:3.7 \
+  /tmp/plugin-tests/header-transport-test.lua

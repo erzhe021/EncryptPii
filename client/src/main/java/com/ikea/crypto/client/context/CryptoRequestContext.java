@@ -1,5 +1,7 @@
 package com.ikea.crypto.client.context;
 
+import com.ikea.crypto.client.model.SessionKeyTransport;
+
 import javax.crypto.SecretKey;
 
 /**
@@ -7,11 +9,13 @@ import javax.crypto.SecretKey;
  *
  * @param requestId  The unique identifier for the request.
  * @param sessionKey The session key used for encryption/decryption.
- * @param iv         The initialization vector used for encryption/decryption.
+ * @param iv                 The initialization vector used for encryption/decryption.
+ * @param sessionKeyTransport The RSA-wrapped session material sent in request headers.
  */
 public record CryptoRequestContext(
             String requestId,
             SecretKey sessionKey,
-            byte[] iv
+            byte[] iv,
+            SessionKeyTransport sessionKeyTransport
 ) {
 }

@@ -11,7 +11,7 @@ local INVALID_KEY_CODE = "INVALID_KEY"
 local CONTENT_TYPE_JSON = "application/json"
 
 -- The plugin supports the following features:
--- 1. Request Decryption: Decrypts incoming requests that are encrypted using a session key. The session key is provided in the request body or headers, depending on the configuration.
+-- 1. Request Decryption: Decrypts incoming requests using session material from the request headers.
 -- 2. Response Encryption: Encrypts outgoing responses using the same session key, ensuring that sensitive data remains protected during transit.
 -- 3. Public Key Serving: Provides an endpoint to serve the public key used for encrypting session keys, allowing clients to encrypt data before sending it to the server.
 local CryptoKongPlugin = {
@@ -67,38 +67,8 @@ function CryptoKongPlugin:access(config)
     })
   end
 
-  if config.decrypt_request and config.session_key_source ~= "body" then
-    kong.log.err("request decryption requires body session-key transport")
-    return json_error(500, "Invalid crypto plugin configuration")
-  end
-  if config.session_key_source == "header" and not config.encrypt_response then
-    kong.log.err("header session-key transport is only supported for response encryption")
-    return json_error(500, "Invalid crypto plugin configuration")
-  end
-  if config.encrypt_response and not config.decrypt_request and config.session_key_source ~= "header" then
-    kong.log.err("response encryption without request decryption requires header session-key transport")
-    return json_error(500, "Invalid crypto plugin configuration")
-  end
-
-  if config.session_key_source == "header" then
-    local session_key, session_err, error_status, key_error_code = crypto.decrypt_session_key(
-      config,
-      kong.request.get_header(KEY_ID_HEADER),
-      kong.request.get_header(SESSION_KEY_HEADER)
-    )
-    if not session_key then
-      kong.log.warn("Rejected response-only session key: ", session_err)
-      if key_error_code == "stale_key" then
-        return expired_key_response(config)
-      end
-      if key_error_code == "invalid_key_alias" then
-        return json_key_error(400, INVALID_KEY_CODE, "keyId中的keyAlias无效")
-      end
-      return json_error(error_status or 400, error_status and "Vault key is unavailable"
-        or "Invalid response-only session key")
-    end
-    kong.ctx.plugin.session_key = session_key
-  elseif config.decrypt_request then
+  local encrypted_request_body
+  if config.decrypt_request then
     local content_length = tonumber(kong.request.get_header("Content-Length"))
     if content_length and content_length > config.max_body_bytes then
       kong.log.warn("Encrypted request Content-Length exceeds the crypto plugin size limit: bytes=",
@@ -116,9 +86,40 @@ function CryptoKongPlugin:access(config)
         #body, ", limit=", config.max_body_bytes)
       return json_error(413, "Request body exceeds the crypto plugin size limit")
     end
+    encrypted_request_body = body
+  end
 
+  local session_key
+  if config.decrypt_request or config.encrypt_response then
+    local key_id = kong.request.get_header(KEY_ID_HEADER)
+    local encrypted_session_key = kong.request.get_header(SESSION_KEY_HEADER)
+    if type(key_id) ~= "string" or key_id == ""
+      or type(encrypted_session_key) ~= "string" or encrypted_session_key == "" then
+      return json_error(400, "X-STC-KEY-ID and X-STC-SESSION-KEY are required; body key transport is unsupported")
+    end
+    local session_err, error_status, key_error_code
+    session_key, session_err, error_status, key_error_code = crypto.decrypt_session_key(
+      config, key_id, encrypted_session_key
+    )
+    if not session_key then
+      kong.log.warn("Rejected request session key: ", session_err)
+      if key_error_code == "stale_key" then
+        return expired_key_response(config)
+      end
+      if key_error_code == "invalid_key_alias" then
+        return json_key_error(400, INVALID_KEY_CODE, "keyId中的keyAlias无效")
+      end
+      return json_error(error_status or 400, error_status and "Vault key is unavailable"
+        or "Invalid request session key")
+    end
+    if config.encrypt_response then
+      kong.ctx.plugin.session_key = session_key
+    end
+  end
+
+  if config.decrypt_request then
     local plaintext, decrypt_err, session_key, error_status, key_error_code =
-      crypto.decrypt_request_body(config, body)
+      crypto.decrypt_request_body(encrypted_request_body, session_key)
     if not plaintext then
       kong.log.warn("Rejected encrypted request: ", decrypt_err)
       if key_error_code == "stale_key" then
@@ -127,14 +128,15 @@ function CryptoKongPlugin:access(config)
       if key_error_code == "invalid_key_alias" then
         return json_key_error(400, INVALID_KEY_CODE, "keyId中的keyAlias无效")
       end
-      return json_error(error_status or 400, error_status and "Request decryption is unavailable"
-        or "Invalid or undecryptable encrypted request")
+      local message = "Invalid or undecryptable encrypted request"
+      if decrypt_err == "session key fields are forbidden in the request body; use X-STC-KEY-ID and X-STC-SESSION-KEY"
+        or decrypt_err == "request body may contain only ivBase64 and encryptedDataBase64" then
+        message = decrypt_err
+      end
+      return json_error(error_status or 400, error_status and "Request decryption is unavailable" or message)
     end
 
     kong.service.request.set_raw_body(plaintext)
-    if config.encrypt_response then
-      kong.ctx.plugin.session_key = session_key
-    end
   end
 
   kong.service.request.clear_header(SESSION_KEY_HEADER)

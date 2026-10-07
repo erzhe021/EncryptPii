@@ -58,7 +58,7 @@ function isTransmittedField(mode, field) {
 
 function resultLabel(title, mode, field, value, direction) {
   return isTransmittedField(mode, field) && value !== 'N/A'
-    ? `${title}（${direction}）`
+    ? `${title}(${direction})`
     : title;
 }
 
@@ -122,9 +122,8 @@ Page({
         this.setData({ error: errorMessage(error) });
       }
       const values = {
-        requestPlain: formatResult(isResponseOnly(mode)
-          ? { headers: result.stcHeaders, body: result.requestPlain }
-          : result.requestPlain),
+        requestHeaders: result.stcHeaders ? formatResult(result.stcHeaders) : null,
+        requestPlain: formatResult(result.requestPlain),
         requestCipher: result.requestCipher ? formatResult(result.requestCipher) : 'N/A',
         responsePlain: result.responsePlain === null ? 'N/A' : formatResult(result.responsePlain),
         responseCipher: result.responseCipher ? formatResult(result.responseCipher) : 'N/A',
@@ -133,10 +132,10 @@ Page({
       this.setData({
         result: {
           ...values,
-          requestPlainLabel: resultLabel('请求明文', mode, 'requestPlain', values.requestPlain, '实发'),
-          requestCipherLabel: resultLabel('请求密文', mode, 'requestCipher', values.requestCipher, '实发'),
-          responsePlainLabel: resultLabel('响应明文', mode, 'responsePlain', values.responsePlain, '实收'),
-          responseCipherLabel: resultLabel('响应密文', mode, 'responseCipher', values.responseCipher, '实收')
+          requestPlainLabel: resultLabel('请求体明文', mode, 'requestPlain', values.requestPlain, '实发'),
+          requestCipherLabel: resultLabel('请求体密文', mode, 'requestCipher', values.requestCipher, '实发'),
+          responsePlainLabel: resultLabel('响应体明文', mode, 'responsePlain', values.responsePlain, '实收'),
+          responseCipherLabel: resultLabel('响应体密文', mode, 'responseCipher', values.responseCipher, '实收')
         }
       });
     } catch (error) {

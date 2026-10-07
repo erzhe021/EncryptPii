@@ -48,15 +48,20 @@ Validate deployment on real devices as well as the simulator.
 | Mode | Request | Response |
 | --- | --- | --- |
 | `plain` | JSON | JSON |
-| `bidirectional` | Encrypted JSON | Decrypted JSON |
-| `request-only` | Encrypted JSON | JSON |
-| `response-only` | JSON + encrypted session key headers | Decrypted JSON |
-| `response-only/client-exception` | JSON + encrypted session key headers | Decrypted HTTP 400 error |
-| `response-only/system-exception` | JSON + encrypted session key headers | Decrypted HTTP 500 error |
-| `response-only/business-exception` | JSON + encrypted session key headers | Decrypted HTTP 200 business error |
+| `bidirectional` | Encrypted JSON + session-key headers | Decrypted JSON |
+| `request-only` | Encrypted JSON + session-key headers | JSON |
+| `response-only` | JSON + session-key headers | Decrypted JSON |
+| `response-only/client-exception` | JSON + session-key headers | Decrypted HTTP 400 error |
+| `response-only/system-exception` | JSON + session-key headers | Decrypted HTTP 500 error |
+| `response-only/business-exception` | JSON + session-key headers | Decrypted HTTP 200 business error |
+
+For encrypted modes, `X-STC-KEY-ID` and `X-STC-SESSION-KEY` are the only
+transport for key metadata and the RSA-wrapped AES session key. Encrypted
+request bodies contain only `ivBase64` and `encryptedDataBase64`; Kong rejects
+the old body-key protocol.
 
 `client.sendDetailed(...)` is explicitly opt-in and returns
-`{ data, cipherRequest, cipherResponse, timings }` for demos; `data` contains the
+`{ data, cipherRequest, cipherResponse, stcHeaders, timings }` for demos; `data` contains the
 same result envelope as `send()`. No plaintext request
 or session key is included. The business response can still contain sensitive
 information, so do not log this result in production. `total` includes key

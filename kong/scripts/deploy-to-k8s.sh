@@ -70,7 +70,7 @@ jq -n \
   --argjson grace "${ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS:?}" \
   --argjson max_body "${ENCRYPTPII_MAX_BODY_BYTES:?}" \
   '
-  def plugin($public; $decrypt; $encrypt; $source; $path):
+  def plugin($public; $decrypt; $encrypt; $path):
     {name:"sensitive-transport-crypto",config:{
       vault_addr:$vault_addr,vault_secret_path:$secret_path,key_alias:$alias,
       vault_auth_role:"encryptpii-kong",
@@ -78,7 +78,7 @@ jq -n \
       key_validity_millis:$validity,key_grace_period_millis:$grace,
       max_body_bytes:$max_body,serve_public_key:$public,
       decrypt_request:$decrypt,encrypt_response:$encrypt,
-      session_key_source:$source,upstream_path:$path}};
+      upstream_path:$path}};
   {
     _format_version:"3.0",
     services:[{
@@ -96,17 +96,17 @@ jq -n \
       url:"http://encryptpii-server.encryptpii.svc.cluster.local:9090",
       routes:[
         {name:"encryptpii-public-key",paths:["/crypto/server/public-key"],methods:["GET"],
-         strip_path:false,plugins:[plugin(true;false;false;"body";"/crypto/server/public-key")]},
+         strip_path:false,plugins:[plugin(true;false;false;"/crypto/server/public-key")]},
         {name:"encryptpii-bidirectional",paths:["/crypto/server/bidirectional"],methods:["POST"],
-         strip_path:false,plugins:[plugin(false;true;true;"body";"/crypto/server/bidirectional")]},
+         strip_path:false,plugins:[plugin(false;true;true;"/crypto/server/bidirectional")]},
         {name:"encryptpii-request-only",paths:["/crypto/server/request-only"],methods:["POST"],
-         strip_path:false,plugins:[plugin(false;true;false;"body";"/crypto/server/request-only")]},
+         strip_path:false,plugins:[plugin(false;true;false;"/crypto/server/request-only")]},
         {name:"encryptpii-response-only",paths:["/crypto/server/response-only"],methods:["POST"],
-         strip_path:false,plugins:[plugin(false;false;true;"header";"/crypto/server/response-only")]},
+         strip_path:false,plugins:[plugin(false;false;true;"/crypto/server/response-only")]},
         (["client-exception","system-exception","business-exception"][] as $exception |
          ("/crypto/server/response-only/" + $exception) as $path |
          {name:("encryptpii-response-only-" + $exception),paths:[$path],methods:["POST"],
-          strip_path:false,plugins:[plugin(false;false;true;"header";$path)]})
+          strip_path:false,plugins:[plugin(false;false;true;$path)]})
       ]
     }]
   }' > "$work_dir/kong.json"

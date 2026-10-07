@@ -25,8 +25,8 @@
 
 | 客户端路径 | 方法 | 处理方式 |
 | --- | --- | --- |
-| `/crypto/server/bidirectional` | POST | 解密请求体，转发明文请求，并使用同一会话密钥加密响应 |
-| `/crypto/server/request-only` | POST | 解密请求体后转发明文响应 |
+| `/crypto/server/bidirectional` | POST | 从请求头解密会话密钥、解密请求体，转发明文请求，并使用同一会话密钥加密响应 |
+| `/crypto/server/request-only` | POST | 从请求头解密会话密钥、解密请求体后转发明文响应 |
 | `/crypto/server/response-only` | POST | 从请求头解密会话密钥，转发请求，并加密响应 |
 | `/crypto/server/response-only/client-exception` | POST | 独立响应加密路由，转发到客户端异常接口（HTTP 400） |
 | `/crypto/server/response-only/system-exception` | POST | 独立响应加密路由，转发到系统异常接口（HTTP 500） |
@@ -34,16 +34,14 @@
 | `/crypto/server/public-key` | GET | Kong 从 Vault 获取当前公钥并直接响应，不转发到 Server |
 | `/plain/server/normal` | POST | 演示用明文路由；不挂载插件，保留路径转发到 Server |
 
-三个异常路由均配置 `decrypt_request=false`、`encrypt_response=true` 和
-`session_key_source=header`，其 `upstream_path` 分别指向对应异常接口。
+三个异常路由均配置 `decrypt_request=false`、`encrypt_response=true`，其
+`upstream_path` 分别指向对应异常接口。
 更长的子路径优先匹配，避免落入普通响应加密路由后被改写为 `/crypto/server/response-only`。
 
-加密请求体格式与 SDK 兼容：
+所有加密模式均从 `X-STC-KEY-ID` 和 `X-STC-SESSION-KEY` 请求头读取密钥标识与 RSA 加密的会话密钥。请求加密模式的请求体只包含：
 
 ```json
 {
-  "keyId": "rsa-ciam:1",
-  "encryptedSessionKeyBase64": "<RSA-OAEP ciphertext>",
   "ivBase64": "<12-byte IV>",
   "encryptedDataBase64": "<AES-GCM ciphertext followed by the 16-byte tag>"
 }
@@ -51,7 +49,7 @@
 
 RSA 使用 OAEP-SHA-256，MGF1 使用 SHA-1，以匹配 Java SDK 的 `RSA/ECB/OAEPWithSHA-256AndMGF1Padding` 默认参数。会话密钥为 256-bit AES，数据采用 GCM，IV 为 12 字节、认证标签为 16 字节。响应体包含 `ivBase64` 和 `encryptedDataBase64`。
 
-仅响应加密的路由从 `X-STC-KEY-ID` 和 `X-STC-SESSION-KEY` 请求头读取密钥标识与 RSA 加密的会话密钥。转发上游前插件会移除这两个请求头，并注入 `X-Crypto-Gateway-Token`。Server 必须配置相同的 `KONG_TO_ENCRYPTPII_AUTH_TOKEN`，且不能将受保护的内部明文接口直接暴露给不可信网络。
+双向加密、请求加密和响应加密均要求这两个请求头。Kong 在所有加密路由转发上游前移除它们，并注入 `X-Crypto-Gateway-Token`。请求体中出现旧版 `keyId` 或 `encryptedSessionKeyBase64` 字段、或其他非协议字段时会明确返回 HTTP 400；不支持 body/header 混用或回退。Server 必须配置相同的 `KONG_TO_ENCRYPTPII_AUTH_TOKEN`，且不能将受保护的内部明文接口直接暴露给不可信网络。
 
 ## Vault 密钥与轮换
 
@@ -191,11 +189,10 @@ plugins:
       upstream_auth_token: "{vault://env/KONG_TO_ENCRYPTPII_AUTH_TOKEN}"
       decrypt_request: true
       encrypt_response: true
-      session_key_source: body
       max_body_bytes: 1048576
 ```
 
-请求解密单向路由使用 `decrypt_request: true`、`encrypt_response: false`；仅响应加密路由使用 `decrypt_request: false`、`encrypt_response: true` 和 `session_key_source: header`。公钥路由使用 `serve_public_key: true`，由插件直接返回 Vault 中的当前公钥、`keyId` 和 `expiresAtEpochMillis`。
+请求解密单向路由使用 `decrypt_request: true`、`encrypt_response: false`；仅响应加密路由使用 `decrypt_request: false`、`encrypt_response: true`。所有这类加密路由都从固定的两个 STC 请求头读取会话材料。公钥路由使用 `serve_public_key: true`，由插件直接返回 Vault 中的当前公钥、`keyId` 和 `expiresAtEpochMillis`。
 
 主要配置项：
 
@@ -213,7 +210,6 @@ plugins:
 | `decrypt_request` | `false` | 是否解密请求体 |
 | `encrypt_response` | `false` | 是否加密响应体 |
 | `serve_public_key` | `false` | 是否由 Kong 直接提供公钥 |
-| `session_key_source` | `body` | 会话密钥来自请求体或请求头 |
 | `max_body_bytes` | `1048576` | 请求/响应加解密缓冲上限，最大 16 MiB |
 
 ## 手动轮换密钥

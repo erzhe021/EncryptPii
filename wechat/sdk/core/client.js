@@ -101,7 +101,7 @@ function createClient(options) {
       const encryptionFinishedAt = Date.now();
       const body = mode.encryptRequest ? session.payload : data;
       const requestHeaders = Object.assign({}, headers);
-      if (encrypted && !mode.encryptRequest) {
+      if (encrypted) {
         requestHeaders[KEY_ID_HEADER] = serverKey.keyId;
         requestHeaders[SESSION_KEY_HEADER] = session.encryptedSessionKeyBase64;
       }
@@ -137,7 +137,7 @@ function createClient(options) {
         data: null,
         cipherRequest: mode.encryptRequest ? body : null,
         cipherResponse: decryptResponse ? raw : null,
-        stcHeaders: mode.decryptResponse && !mode.encryptRequest
+        stcHeaders: encrypted
           ? {
             [KEY_ID_HEADER]: requestHeaders[KEY_ID_HEADER],
             [SESSION_KEY_HEADER]: requestHeaders[SESSION_KEY_HEADER]

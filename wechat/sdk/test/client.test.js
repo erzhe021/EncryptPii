@@ -93,13 +93,12 @@ function gateway(key, requests, sessions) {
     if (mode === 'normal') {
       return { statusCode: 200, data: result(request.data) };
     }
-    const session = unwrapSession(
-      mode === 'response-only' ? request.headers['X-STC-SESSION-KEY']
-        : request.data.encryptedSessionKeyBase64, key
-    );
+    const session = unwrapSession(request.headers['X-STC-SESSION-KEY'], key);
     sessions.push(session.toString('hex'));
-    assert.equal(mode === 'response-only' ? request.headers['X-STC-KEY-ID'] : request.data.keyId,
-      key.info.keyId);
+    assert.equal(request.headers['X-STC-KEY-ID'], key.info.keyId);
+    if (mode === 'bidirectional' || mode === 'request-only') {
+      assert.deepEqual(Object.keys(request.data).sort(), ['encryptedDataBase64', 'ivBase64']);
+    }
     const body = mode === 'response-only' ? request.data : decryptBody(request.data, session);
     return {
       statusCode: 200,
@@ -120,7 +119,7 @@ test('all modes preserve routing and interoperate with independent RSA/AES primi
     assert.deepEqual(detailed.data, expected);
     assert.equal(Boolean(detailed.cipherRequest), ['bidirectional', 'request-only'].includes(mode));
     assert.equal(Boolean(detailed.cipherResponse), ['bidirectional', 'response-only'].includes(mode));
-    if (mode === 'response-only') {
+    if (mode !== 'plain') {
       assert.equal(detailed.stcHeaders['X-STC-KEY-ID'], firstKey.info.keyId);
       assert.ok(detailed.stcHeaders['X-STC-SESSION-KEY']);
     } else {
@@ -197,8 +196,7 @@ for (const mode of ['bidirectional', 'request-only', 'response-only']) {
       posts += 1;
       if (posts === 1) {
         originalSession = unwrapSession(
-          mode === 'response-only' ? request.headers['X-STC-SESSION-KEY']
-            : request.data.encryptedSessionKeyBase64, firstKey
+          request.headers['X-STC-SESSION-KEY'], firstKey
         ).toString('hex');
         return { statusCode: 400, data: { code: 'KEY_EXPIRED', data: newKey.info } };
       }
@@ -260,9 +258,7 @@ test('detailed HTTP failures retain diagnostics and decrypt error bodies in ever
         posts += 1;
         raw = errorBody;
         if (mode === 'bidirectional' || mode === 'response-only') {
-          const session = unwrapSession(mode === 'response-only'
-            ? request.headers['X-STC-SESSION-KEY']
-            : request.data.encryptedSessionKeyBase64, firstKey);
+          const session = unwrapSession(request.headers['X-STC-SESSION-KEY'], firstKey);
           raw = encryptResponse(errorBody, session);
         }
         return { statusCode, data: raw };
@@ -276,7 +272,7 @@ test('detailed HTTP failures retain diagnostics and decrypt error bodies in ever
           ['bidirectional', 'request-only'].includes(mode));
         assert.equal(error.details.cipherResponse,
           ['bidirectional', 'response-only'].includes(mode) ? raw : null);
-        assert.equal(Boolean(error.details.stcHeaders), mode === 'response-only');
+        assert.equal(Boolean(error.details.stcHeaders), mode !== 'plain');
         assert.ok(Object.values(error.details.timings).every((value) => value >= 0));
         assert.equal(Object.hasOwn(error.details, 'sessionKey'), false);
         return true;
@@ -378,12 +374,13 @@ test('response-only exception requests route, transport session headers and decr
     assert.equal(page.data.error, statusCode === 200 ? '' : `请求失败（HTTP ${statusCode}）`);
     assert.equal(page.data.loading, false);
     assert.equal(page.data.result.requestCipher, 'N/A');
-    assert.ok(page.data.result.requestPlain.includes('X-STC-SESSION-KEY'));
+    assert.deepEqual(JSON.parse(page.data.result.requestPlain), { data: 'hello world' });
+    assert.ok(page.data.result.requestHeaders.includes('X-STC-SESSION-KEY'));
     assert.ok(page.data.result.responseCipher.includes('encryptedDataBase64'));
     assert.deepEqual(JSON.parse(page.data.result.responsePlain), response);
     assert.ok(JSON.parse(page.data.result.latency).total >= 0);
-    assert.equal(page.data.result.requestPlainLabel, '请求明文（实发）');
-    assert.equal(page.data.result.responseCipherLabel, '响应密文（实收）');
+    assert.equal(page.data.result.requestPlainLabel, '请求体明文(实发)');
+    assert.equal(page.data.result.responseCipherLabel, '响应体密文(实收)');
   }
 });
 
@@ -400,7 +397,8 @@ test('demo page renders all five sections alongside the HTTP failure message', a
     failure.result = {
       requestPlain: { name: 'demo' }, requestCipher,
       responsePlain: { status: 500, message: 'demo error' }, responseCipher,
-      stcHeaders: { 'X-STC-KEY-ID': 'first', 'X-STC-SESSION-KEY': 'wrapped' },
+      stcHeaders: mode === 'plain' ? null
+        : { 'X-STC-KEY-ID': 'first', 'X-STC-SESSION-KEY': 'wrapped' },
       latency: { total: 10, encryption: 2, http: 7, decryption: 1 }
     };
     vm.runInNewContext(source, {
@@ -413,6 +411,17 @@ test('demo page renders all five sections alongside the HTTP failure message', a
     assert.equal(page.data.error, '请求失败（HTTP 500）');
     assert.equal(page.data.loading, false);
     assert.ok(page.data.result.requestPlain.includes('demo'));
+    assert.deepEqual(JSON.parse(page.data.result.requestPlain), { name: 'demo' });
+    assert.equal(page.data.result.requestHeaders, mode === 'plain' ? null
+      : JSON.stringify(failure.result.stcHeaders, null, 2));
+    assert.equal(page.data.result.requestPlainLabel,
+      ['plain', 'response-only'].includes(mode) ? '请求体明文(实发)' : '请求体明文');
+    assert.equal(page.data.result.requestCipherLabel,
+      requestCipher ? '请求体密文(实发)' : '请求体密文');
+    assert.equal(page.data.result.responsePlainLabel,
+      responseCipher ? '响应体明文' : '响应体明文(实收)');
+    assert.equal(page.data.result.responseCipherLabel,
+      responseCipher ? '响应体密文(实收)' : '响应体密文');
     assert.equal(page.data.result.requestCipher,
       requestCipher ? JSON.stringify(requestCipher, null, 2) : 'N/A');
     assert.equal(page.data.result.responseCipher,
@@ -541,7 +550,7 @@ test('malformed, unauthenticated and non-JSON encrypted responses fail without r
     const client = createClient(options(async (request) => {
       if (request.method === 'GET') return { statusCode: 200, data: firstKey.info };
       posts += 1;
-      const session = unwrapSession(request.data.encryptedSessionKeyBase64, firstKey);
+      const session = unwrapSession(request.headers['X-STC-SESSION-KEY'], firstKey);
       let payload = encryptResponse({ ok: true }, session);
       if (failure === 'missing') payload = null;
       if (failure === 'base64') payload.encryptedDataBase64 = '*invalid*';

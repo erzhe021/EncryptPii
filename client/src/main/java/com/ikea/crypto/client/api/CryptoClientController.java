@@ -62,7 +62,8 @@ public class CryptoClientController {
 
         CipherResponsePayload responsePayload;
         try {
-            responsePayload = cryptoHttpClient.postBidirectional(bidirectionalPath, requestPayload);
+            responsePayload = cryptoHttpClient.postBidirectional(
+                    bidirectionalPath, requestPayload, encrypted.context().sessionKeyTransport());
         } catch (CryptoHttpClient.HttpStatusException failure) {
             serverKeyInfo = cryptoHttpClient.getRefreshedKeyFromFailure(failure);
             if (serverKeyInfo == null) {
@@ -70,7 +71,8 @@ public class CryptoClientController {
             }
             encrypted = cryptoClient.encrypt(plaintext, serverKeyInfo.keyId(), serverKeyInfo.publicKey());
             requestPayload = encrypted.payload();
-            responsePayload = cryptoHttpClient.postBidirectional(bidirectionalPath, requestPayload);
+            responsePayload = cryptoHttpClient.postBidirectional(
+                    bidirectionalPath, requestPayload, encrypted.context().sessionKeyTransport());
         }
 
         long httpTime = System.currentTimeMillis();
@@ -85,7 +87,8 @@ public class CryptoClientController {
         long finish = System.currentTimeMillis();
 
         return Map.of(
-                "request", Map.of("plain", demoSensitiveRequest, "cipher", requestPayload),
+                "request", Map.of("plain", demoSensitiveRequest, "cipher", requestPayload,
+                        "headers", sessionHeaders(encrypted.context().sessionKeyTransport())),
                 "response", Map.of("plain", demoSensitiveResponse, "cipher", responsePayload),
                 "latency in ms", new LatencyInMs(
                         (finish - startTime),
@@ -111,7 +114,8 @@ public class CryptoClientController {
 
         Result<DemoPlainResponse> demoPlainResponse;
         try {
-            demoPlainResponse = cryptoHttpClient.postRequestOnly(requestOnlyPath, requestPayload);
+            demoPlainResponse = cryptoHttpClient.postRequestOnly(
+                    requestOnlyPath, requestPayload, encrypted.context().sessionKeyTransport());
         } catch (CryptoHttpClient.HttpStatusException failure) {
             serverKeyInfo = cryptoHttpClient.getRefreshedKeyFromFailure(failure);
             if (serverKeyInfo == null) {
@@ -119,13 +123,15 @@ public class CryptoClientController {
             }
             encrypted = cryptoClient.encrypt(plaintext, serverKeyInfo.keyId(), serverKeyInfo.publicKey());
             requestPayload = encrypted.payload();
-            demoPlainResponse = cryptoHttpClient.postRequestOnly(requestOnlyPath, requestPayload);
+            demoPlainResponse = cryptoHttpClient.postRequestOnly(
+                    requestOnlyPath, requestPayload, encrypted.context().sessionKeyTransport());
         }
 
         long httpTime = System.currentTimeMillis();
 
         return Map.of(
-                "request", Map.of("plain", demoSensitiveRequest, "cipher", requestPayload),
+                "request", Map.of("plain", demoSensitiveRequest, "cipher", requestPayload,
+                        "headers", sessionHeaders(encrypted.context().sessionKeyTransport())),
                 "response", demoPlainResponse,
                 "latency in ms", new LatencyInMs(
                         (System.currentTimeMillis() - startTime),
@@ -176,7 +182,9 @@ public class CryptoClientController {
                 });
 
         return Map.of(
-                "request", demoPlainRequest == null ? "no data" : demoPlainRequest,
+                "request", Map.of(
+                        "plain", demoPlainRequest == null ? "no data" : demoPlainRequest,
+                        "headers", sessionHeaders(sessionTransport)),
                 "response", Map.of("plain", demoSensitiveResponse, "cipher", responsePayload),
                 "latency in ms", new LatencyInMs(
                         (System.currentTimeMillis() - startTime),
@@ -199,6 +207,13 @@ public class CryptoClientController {
         KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
         return keyGenerator.generateKey();
+    }
+
+    private Map<String, String> sessionHeaders(SessionKeyTransport sessionTransport) {
+        return Map.of(
+                CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID, sessionTransport.keyId(),
+                CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY,
+                sessionTransport.encryptedSessionKeyBase64());
     }
 
 }

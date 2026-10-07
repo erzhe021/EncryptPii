@@ -180,7 +180,7 @@ curl --fail-with-body -X POST \
   --data '{"data":"demo"}'
 ```
 
-Client 还提供 `POST /crypto/client/request-only`，使用同样的敏感请求体；`POST /crypto/client/response-only` 可使用 `{"data":"demo"}` 请求体。加密演示响应包含明文、密文和耗时等诊断数据。
+Client 还提供 `POST /crypto/client/request-only`，使用同样的敏感请求体；`POST /crypto/client/response-only` 可使用 `{"data":"demo"}` 请求体。加密演示响应包含实际发送的 STC 请求头、仅含 `ivBase64` 和 `encryptedDataBase64` 的请求密文体、明文和耗时等诊断数据。
 
 明文 Client 接口只有 `POST /plain/client/normal`，接受 `DemoPlainRequest`，通过 `CryptoHttpClient.postPlain` 复用 JSON 请求发送逻辑，不获取公钥、不加解密。成功响应直接返回包含 `request`、`response` 和 `latency in ms` 的 `Map<String, Object>`，其中 `response` 为反序列化后的 `DemoPlainResponse`，耗时结构与 Crypto Client 一致，`encryption`、`decryption` 均为 0，`total`、`http` 为明文调用耗时（毫秒）。与 Crypto Client 一致，上游非 200 响应抛出 `HttpStatusException`，不再透传上游状态码和错误响应体。Server 对应接口返回 `DemoPlainResponse`。
 
@@ -307,18 +307,16 @@ Vault KV v2 的每个 RSA 密钥版本包含：
 
 例如 `secret/data/sensitive-transport-crypto/rsa-ciam` 对应 metadata 路径 `secret/metadata/sensitive-transport-crypto/rsa-ciam`。建议按应用或安全边界隔离路径和别名。
 
-请求体加密格式：
+双向加密和请求加密模式的请求体只包含以下密文。所有加密模式均通过 `X-STC-KEY-ID` 和 `X-STC-SESSION-KEY` 请求头传递 keyId 和 RSA-OAEP 加密的 AES 会话密钥：
 
 ```json
 {
-  "keyId": "rsa-ciam:1",
-  "encryptedSessionKeyBase64": "<RSA-OAEP ciphertext>",
   "ivBase64": "<12-byte IV>",
   "encryptedDataBase64": "<AES-GCM ciphertext followed by the 16-byte authentication tag>"
 }
 ```
 
-RSA 使用 OAEP-SHA-256 和 MGF1-SHA-1，与 Java SDK 默认参数匹配。AES 使用 256-bit GCM、12 字节 IV 和 16 字节认证标签。仅响应加密模式通过 `X-STC-SESSION-KEY` 传递 RSA 加密的会话密钥，通过 `X-STC-KEY-ID` 传递密钥版本；Kong 转发前会移除这两个请求头。加密响应包含 `ivBase64` 和 `encryptedDataBase64`。
+RSA 使用 OAEP-SHA-256 和 MGF1-SHA-1，与 Java SDK 默认参数匹配。AES 使用 256-bit GCM、12 字节 IV 和 16 字节认证标签。旧版将 keyId 或加密会话密钥放在请求体中的协议不再支持；出现这些字段或其他额外字段时，Kong 返回 HTTP 400。Kong 转发上游前会移除两个会话头。加密响应包含 `ivBase64` 和 `encryptedDataBase64`。
 
 `KONG_TO_ENCRYPTPII_AUTH_TOKEN` 是独立于 RSA 密钥对的服务间认证密钥，密钥轮换不影响该 token。Server 加密接口在 token 未配置时返回 503，在调用方 token 缺失或不匹配时返回 403。轮换该 token 时，修改 `.env` 后先部署 Server，再部署 Kong，确保两端配置一致。
 

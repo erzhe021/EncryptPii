@@ -172,8 +172,9 @@ public class CryptoHttpClient {
     /**
      * Sends bidirectional encrypted request to the server, expecting an AesCipherPayload response.
      */
-    public CipherResponsePayload postBidirectional(String path, CipherRequestPayload requestPayload) throws Exception {
-        HttpResponse<String> response = sendJsonRequest(path, requestPayload);
+    public CipherResponsePayload postBidirectional(
+            String path, CipherRequestPayload requestPayload, SessionKeyTransport sessionKeyTransport) throws Exception {
+        HttpResponse<String> response = sendJsonRequest(path, requestPayload, sessionKeyTransport);
         return objectMapper.readValue(response.body(), CipherResponsePayload.class);
     }
 
@@ -181,8 +182,8 @@ public class CryptoHttpClient {
      * Sends request-only encrypted payload to the server, expecting a plaintext Result<DemoPlainResponse>.
      */
     public Result<DemoPlainResponse> postRequestOnly(
-            String path, CipherRequestPayload requestPayload) throws Exception {
-        HttpResponse<String> response = sendJsonRequest(path, requestPayload);
+            String path, CipherRequestPayload requestPayload, SessionKeyTransport sessionKeyTransport) throws Exception {
+        HttpResponse<String> response = sendJsonRequest(path, requestPayload, sessionKeyTransport);
         return objectMapper.readValue(response.body(), new TypeReference<>() {
         });
     }
@@ -199,45 +200,41 @@ public class CryptoHttpClient {
      */
     public CipherResponsePayload postResponseOnly(
             String path, DemoPlainRequest request, SessionKeyTransport sessionTransport) throws Exception {
-        HttpRequest httpRequest = buildSessionKeyRequest(serverBaseUri.resolve(path), request, sessionTransport);
+        HttpRequest httpRequest = buildJsonRequest(serverBaseUri.resolve(path), request, sessionTransport);
         HttpResponse<String> response = httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
         ensureSuccess(response, path);
         return objectMapper.readValue(response.body(), CipherResponsePayload.class);
     }
 
     private HttpResponse<String> sendJsonRequest(String path, Object requestBody) throws Exception {
+        return sendJsonRequest(path, requestBody, null);
+    }
+
+    private HttpResponse<String> sendJsonRequest(
+            String path, Object requestBody, SessionKeyTransport sessionKeyTransport) throws Exception {
         log.debug("【call api】start to call server endpoint to send json request: {}", path);
-        HttpRequest request = buildJsonRequest(serverBaseUri.resolve(path), requestBody);
+        HttpRequest request = buildJsonRequest(serverBaseUri.resolve(path), requestBody, sessionKeyTransport);
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         ensureSuccess(response, path);
         return response;
     }
 
     private HttpRequest buildJsonRequest(URI endpoint, Object requestBody) throws JsonProcessingException {
-        HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint)
-                .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
-        if (requestBody == null) {
-            return builder.POST(HttpRequest.BodyPublishers.noBody()).build();
-        } else {
-            return builder.POST(HttpRequest.BodyPublishers.ofString(objectMapper.writeValueAsString(requestBody))).build();
-        }
+        return buildJsonRequest(endpoint, requestBody, null);
     }
 
-    private HttpRequest buildSessionKeyRequest(
-            URI endpoint, DemoPlainRequest request, SessionKeyTransport sessionKeyTransport)
+    private HttpRequest buildJsonRequest(
+            URI endpoint, Object requestBody, SessionKeyTransport sessionKeyTransport)
             throws JsonProcessingException {
-
         HttpRequest.Builder builder = HttpRequest.newBuilder(endpoint)
                 .header(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
-
-        HttpRequest.Builder transportBuilder = sessionKeyTransport.apply(builder);
-
-        if (request != null) {
-            return transportBuilder.POST(HttpRequest.BodyPublishers.ofString(
-                    objectMapper.writeValueAsString(request))).build();
-        } else {
-            return transportBuilder.POST(HttpRequest.BodyPublishers.noBody()).build();
+        HttpRequest.Builder requestBuilder = sessionKeyTransport == null
+                ? builder : sessionKeyTransport.apply(builder);
+        if (requestBody == null) {
+            return requestBuilder.POST(HttpRequest.BodyPublishers.noBody()).build();
         }
+        return requestBuilder.POST(HttpRequest.BodyPublishers.ofString(
+                objectMapper.writeValueAsString(requestBody))).build();
     }
 
     private void ensureSuccess(HttpResponse<String> response, String path) {

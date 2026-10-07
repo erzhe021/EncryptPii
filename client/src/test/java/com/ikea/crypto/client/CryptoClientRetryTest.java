@@ -3,7 +3,10 @@ package com.ikea.crypto.client;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.client.api.CryptoClientController;
 import com.ikea.crypto.client.constant.CryptoConstants;
+import com.ikea.crypto.client.crypto.SessionKeyService;
+import com.ikea.crypto.client.model.CipherResponsePayload;
 import com.ikea.crypto.client.model.PublicKeyResponse;
+import com.ikea.crypto.client.util.EncodingUtils;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.Test;
@@ -13,12 +16,20 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.io.IOException;
 import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
+import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -34,6 +45,7 @@ class CryptoClientRetryTest {
         AtomicInteger keyRequests = new AtomicInteger();
         AtomicInteger encryptedRequests = new AtomicInteger();
         List<String> requestKeyIds = new CopyOnWriteArrayList<>();
+        List<String> requestSessionKeys = new CopyOnWriteArrayList<>();
         ObjectMapper objectMapper = new ObjectMapper();
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/crypto/server/public-key", exchange -> {
@@ -43,7 +55,12 @@ class CryptoClientRetryTest {
         });
         server.createContext("/crypto/server/request-only", exchange -> {
             var payload = objectMapper.readTree(exchange.getRequestBody());
-            requestKeyIds.add(payload.path("keyId").asText());
+            requestKeyIds.add(exchange.getRequestHeaders().getFirst("X-STC-KEY-ID"));
+            requestSessionKeys.add(exchange.getRequestHeaders().getFirst("X-STC-SESSION-KEY"));
+            if (payload.size() != 2 || payload.has("keyId") || payload.has("encryptedSessionKeyBase64")) {
+                respond(exchange, 400, "{\"code\":\"INVALID_BODY\"}");
+                return;
+            }
             if (encryptedRequests.incrementAndGet() == 1) {
                 respond(exchange, 400, objectMapper.writeValueAsString(java.util.Map.of(
                         "code", "KEY_EXPIRED",
@@ -74,9 +91,120 @@ class CryptoClientRetryTest {
             assertEquals(1, keyRequests.get());
             assertEquals(2, encryptedRequests.get());
             assertEquals(List.of("rsa-ciam:1", "rsa-ciam:2"), requestKeyIds);
+            assertEquals(2, requestSessionKeys.size());
+            assertNotEquals(requestSessionKeys.get(0), requestSessionKeys.get(1));
         } finally {
             server.stop(0);
         }
+    }
+
+    @Test
+    void allEncryptedModesRetryWithFreshSessionMaterialInHeaders() throws Exception {
+        var keyGenerator = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
+        keyGenerator.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
+        KeyPair firstKey = keyGenerator.generateKeyPair();
+        KeyPair secondKey = keyGenerator.generateKeyPair();
+        ObjectMapper objectMapper = new ObjectMapper();
+        Map<String, AtomicInteger> modeAttempts = new ConcurrentHashMap<>();
+        List<String> keyIds = new CopyOnWriteArrayList<>();
+        List<String> sessionHeaders = new CopyOnWriteArrayList<>();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/", exchange -> {
+            String path = exchange.getRequestURI().getPath();
+            if (path.endsWith("/public-key")) {
+                respond(exchange, 200, objectMapper.writeValueAsString(
+                        new PublicKeyResponse(
+                                java.util.Base64.getEncoder().encodeToString(firstKey.getPublic().getEncoded()),
+                                "rsa-ciam:1", System.currentTimeMillis() + 60_000)));
+                return;
+            }
+            int attempt = modeAttempts.computeIfAbsent(path, ignored -> new AtomicInteger()).incrementAndGet();
+            String keyId = exchange.getRequestHeaders().getFirst("X-STC-KEY-ID");
+            String encryptedSessionKey = exchange.getRequestHeaders().getFirst("X-STC-SESSION-KEY");
+            keyIds.add(keyId);
+            sessionHeaders.add(encryptedSessionKey);
+            var body = objectMapper.readTree(exchange.getRequestBody());
+            if ("/crypto/server/bidirectional".equals(path) || "/crypto/server/request-only".equals(path)) {
+                if (body.size() != 2 || body.has("keyId") || body.has("encryptedSessionKeyBase64")) {
+                    respond(exchange, 400, "{\"code\":\"INVALID_BODY\"}");
+                    return;
+                }
+            }
+            if (attempt == 1) {
+                respond(exchange, 400, objectMapper.writeValueAsString(Map.of(
+                        "code", "KEY_EXPIRED",
+                        "msg", "expired",
+                        "data", new PublicKeyResponse(
+                                java.util.Base64.getEncoder().encodeToString(secondKey.getPublic().getEncoded()),
+                                "rsa-ciam:2", System.currentTimeMillis() + 60_000))));
+                return;
+            }
+            var privateKey = "rsa-ciam:1".equals(keyId) ? firstKey.getPrivate() : secondKey.getPrivate();
+            javax.crypto.SecretKey sessionKey;
+            try {
+                sessionKey = SessionKeyService.decryptSessionKeyBase64(encryptedSessionKey, privateKey);
+            } catch (java.security.GeneralSecurityException failure) {
+                exchange.close();
+                throw new IllegalStateException(failure);
+            }
+            if ("/crypto/server/request-only".equals(path)) {
+                respond(exchange, 200,
+                        "{\"code\":\"0\",\"message\":null,\"data\":{\"cardNumber\":\"demo\",\"memberTier\":1,\"points\":10,\"remarks\":\"ok\"}}");
+                return;
+            }
+            CipherResponsePayload encryptedResponse;
+            try {
+                encryptedResponse = encryptResponse(
+                        "{\"code\":\"0\",\"message\":null,\"data\":{\"name\":\"name\",\"phone\":\"phone\",\"email\":\"email\",\"address\":\"address\",\"extraInfo\":\"ok\"}}",
+                        sessionKey);
+            } catch (Exception failure) {
+                exchange.close();
+                throw new IllegalStateException(failure);
+            }
+            respond(exchange, 200, objectMapper.writeValueAsString(encryptedResponse));
+        });
+        server.start();
+        try {
+            String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+            String sensitiveRequest =
+                    "{\"name\":\"demo\",\"phone\":\"123\",\"email\":\"demo@example.com\",\"address\":\"demo\"}";
+
+            for (String mode : List.of("bidirectional", "request-only", "response-only")) {
+                CryptoClientController controller = new CryptoClientController(
+                        baseUrl,
+                        "/crypto/server/public-key",
+                        "/crypto/server/bidirectional",
+                        "/crypto/server/request-only",
+                        "/crypto/server/response-only");
+                MockMvc client = MockMvcBuilders.standaloneSetup(controller).build();
+                String body = "response-only".equals(mode) ? "{\"data\":\"demo\"}" : sensitiveRequest;
+                client.perform(post("/crypto/client/" + mode)
+                                .contentType(MediaType.APPLICATION_JSON)
+                                .content(body))
+                        .andExpect(status().isOk());
+            }
+
+            assertEquals(List.of("rsa-ciam:1", "rsa-ciam:2", "rsa-ciam:1",
+                    "rsa-ciam:2", "rsa-ciam:1", "rsa-ciam:2"), keyIds);
+            assertEquals(6, sessionHeaders.size());
+            for (int attempt = 0; attempt < sessionHeaders.size(); attempt += 2) {
+                assertNotEquals(sessionHeaders.get(attempt), sessionHeaders.get(attempt + 1));
+            }
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    private static CipherResponsePayload encryptResponse(String plaintext, javax.crypto.SecretKey sessionKey)
+            throws Exception {
+        byte[] iv = new byte[CryptoConstants.GCM_IV_LENGTH_BYTES];
+        new java.security.SecureRandom().nextBytes(iv);
+        Cipher cipher = Cipher.getInstance(CryptoConstants.TRANSFORMATION_AES);
+        cipher.init(Cipher.ENCRYPT_MODE, sessionKey,
+                new GCMParameterSpec(CryptoConstants.GCM_TAG_LENGTH_BITS, iv));
+        return new CipherResponsePayload(
+                EncodingUtils.toBase64(iv),
+                EncodingUtils.toBase64(cipher.doFinal(plaintext.getBytes(StandardCharsets.UTF_8))));
     }
 
     private static void respond(HttpExchange exchange, int status, String body) throws IOException {

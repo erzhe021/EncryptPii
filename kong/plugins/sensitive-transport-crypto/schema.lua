@@ -30,7 +30,6 @@ return {
           { decrypt_request = { type = "boolean", default = false } },
           { encrypt_response = { type = "boolean", default = false } },
           { serve_public_key = { type = "boolean", default = false } },
-          { session_key_source = { type = "string", default = "body", one_of = { "body", "header" } } },
           { max_body_bytes = { type = "integer", default = DEFAULT_MAX_BODY_BYTES, between = { 1, MAX_BODY_BYTES } } },
         },
       },

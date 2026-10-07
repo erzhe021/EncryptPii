@@ -38,23 +38,25 @@ class CryptoClientTest {
     void testEncryptAndDecrypt() throws Exception {
         String originalData = "Hello RSA Encrypted World";
 
-        CryptoClient.EncryptionResult result = cryptoClient.encrypt(originalData, serverKeyPair.getPublic());
+        CryptoClient.EncryptionResult result = cryptoClient.encrypt(
+                originalData, "rsa-ciam:1", serverKeyPair.getPublic());
 
         CipherRequestPayload payload = result.payload();
+        CryptoRequestContext context = result.context();
         assertNotNull(payload);
-        assertNotNull(payload.encryptedSessionKeyBase64());
+        assertNotNull(context);
         assertNotNull(payload.ivBase64());
         assertNotNull(payload.encryptedDataBase64());
+        assertEquals("rsa-ciam:1", context.sessionKeyTransport().keyId());
+        assertNotNull(context.sessionKeyTransport().encryptedSessionKeyBase64());
 
-        CryptoRequestContext context = result.context();
-        assertNotNull(context);
         assertNotNull(context.requestId());
         assertNotNull(context.sessionKey());
         assertNotNull(context.iv());
 
         // Server decrypts session key using server RSA private key
         SecretKey recoveredSessionKey = SessionKeyService.decryptSessionKeyBase64(
-                payload.encryptedSessionKeyBase64(),
+                context.sessionKeyTransport().encryptedSessionKeyBase64(),
                 serverKeyPair.getPrivate()
         );
         assertArrayEquals(context.sessionKey().getEncoded(), recoveredSessionKey.getEncoded());
@@ -85,7 +87,8 @@ class CryptoClientTest {
     @Test
     void testDecryptFailsWithTamperedData() throws Exception {
         String originalData = "Sensitive Data";
-        CryptoClient.EncryptionResult result = cryptoClient.encrypt(originalData, serverKeyPair.getPublic());
+        CryptoClient.EncryptionResult result = cryptoClient.encrypt(
+                originalData, "rsa-ciam:1", serverKeyPair.getPublic());
 
         byte[] responseIv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
         String encryptedResponse = AesGcmCipher.encryptAsBase64("Response", result.context().sessionKey(), responseIv);

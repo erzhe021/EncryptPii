@@ -62,10 +62,19 @@ function Crypto.decrypt_session_key(config, key_id, encrypted_session_key_base64
   return session_key
 end
 
-function Crypto.decrypt_request_body(config, body)
+function Crypto.decrypt_request_body(body, session_key)
   local payload, err = cjson.decode(body)
   if not payload or type(payload) ~= "table" then
     return nil, err or "request body must be a JSON object"
+  end
+
+  if payload.keyId ~= nil or payload.encryptedSessionKeyBase64 ~= nil then
+    return nil, "session key fields are forbidden in the request body; use X-STC-KEY-ID and X-STC-SESSION-KEY"
+  end
+  for field in pairs(payload) do
+    if field ~= "ivBase64" and field ~= "encryptedDataBase64" then
+      return nil, "request body may contain only ivBase64 and encryptedDataBase64"
+    end
   end
 
   local iv, iv_err = decode_base64(payload.ivBase64, "ivBase64")
@@ -85,10 +94,8 @@ function Crypto.decrypt_request_body(config, body)
     return nil, "encryptedDataBase64 is too short"
   end
 
-  local session_key, rsa_err, key_status, key_error_code =
-    Crypto.decrypt_session_key(config, payload.keyId, payload.encryptedSessionKeyBase64)
-  if not session_key then
-    return nil, rsa_err, nil, key_status, key_error_code
+  if type(session_key) ~= "string" or #session_key ~= AES_KEY_BYTES then
+    return nil, "decrypted session key must be 32 bytes"
   end
 
   local ciphertext = encrypted_data:sub(1, -GCM_TAG_BYTES - 1)

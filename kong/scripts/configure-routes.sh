@@ -102,9 +102,8 @@ upsert_plugin() {
   local route_id="$1"
   local decrypt_request="$2"
   local encrypt_response="$3"
-  local session_key_source="$4"
-  local upstream_path="$5"
-  local serve_public_key="${6:-false}"
+  local upstream_path="$4"
+  local serve_public_key="${5:-false}"
   local config plugin_json existing_plugin_id
 
   config="$(
@@ -119,7 +118,6 @@ upsert_plugin() {
       --argjson decrypt_request "$decrypt_request" \
       --argjson encrypt_response "$encrypt_response" \
       --argjson serve_public_key "$serve_public_key" \
-      --arg session_key_source "$session_key_source" \
       '{
         vault_addr:$vault_addr,
         vault_auth_role:"encryptpii-kong",
@@ -132,7 +130,6 @@ upsert_plugin() {
         decrypt_request:$decrypt_request,
         encrypt_response:$encrypt_response,
         serve_public_key:$serve_public_key,
-        session_key_source:$session_key_source,
         max_body_bytes:$max_body_bytes
       }'
   )"
@@ -170,17 +167,17 @@ response_only_route="$(
   upsert_route encryptpii-response-only /crypto/server/response-only POST
 )"
 
-upsert_plugin "$bidirectional_route" true true body /crypto/server/bidirectional
-upsert_plugin "$request_only_route" true false body /crypto/server/request-only
-upsert_plugin "$response_only_route" false true header /crypto/server/response-only
-upsert_plugin "$public_key_route" false false body /crypto/server/public-key true
+upsert_plugin "$bidirectional_route" true true /crypto/server/bidirectional
+upsert_plugin "$request_only_route" true false /crypto/server/request-only
+upsert_plugin "$response_only_route" false true /crypto/server/response-only
+upsert_plugin "$public_key_route" false false /crypto/server/public-key true
 
 for exception in client-exception system-exception business-exception; do
   exception_path="/crypto/server/response-only/$exception"
   exception_route="$(
     upsert_route "encryptpii-response-only-$exception" "$exception_path" POST
   )"
-  upsert_plugin "$exception_route" false true header "$exception_path"
+  upsert_plugin "$exception_route" false true "$exception_path"
 done
 
 api -X PUT "$ADMIN_URL/services/encryptpii-server-plain" \

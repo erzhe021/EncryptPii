@@ -37,8 +37,6 @@ export interface Result<T> {
 }
 
 export interface CipherRequest {
-  keyId: string;
-  encryptedSessionKeyBase64: string;
   ivBase64: string;
   encryptedDataBase64: string;
 }

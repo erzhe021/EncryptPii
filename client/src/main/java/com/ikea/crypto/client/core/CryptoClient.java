@@ -3,9 +3,9 @@ package com.ikea.crypto.client.core;
 import com.ikea.crypto.client.context.CryptoRequestContext;
 import com.ikea.crypto.client.crypto.AesGcmCipher;
 import com.ikea.crypto.client.crypto.CryptoSessionMaterialFactory;
-import com.ikea.crypto.client.crypto.SessionKeyService;
 import com.ikea.crypto.client.model.CipherRequestPayload;
 import com.ikea.crypto.client.model.CipherResponsePayload;
+import com.ikea.crypto.client.model.SessionKeyTransport;
 import com.ikea.crypto.client.util.EncodingUtils;
 import lombok.extern.slf4j.Slf4j;
 
@@ -31,13 +31,12 @@ public class CryptoClient {
     public record EncryptionResult(CipherRequestPayload payload, CryptoRequestContext context) {
     }
 
-    public EncryptionResult encrypt(String data, PublicKey serverPublicKey) throws GeneralSecurityException {
-        return encrypt(data, null, serverPublicKey);
-    }
-
     public EncryptionResult encrypt(String data, String keyId, PublicKey serverPublicKey) throws GeneralSecurityException {
         if (serverPublicKey == null) {
             throw new IllegalArgumentException("serverPublicKey cannot be null");
+        }
+        if (keyId == null || keyId.isBlank()) {
+            throw new IllegalArgumentException("keyId cannot be null or blank");
         }
 
         log.debug("start to generate client session key");
@@ -46,20 +45,20 @@ public class CryptoClient {
 
         String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(data, sessionKey, iv);
 
-        String encryptedSessionKeyBase64 = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, serverPublicKey);
+        SessionKeyTransport sessionKeyTransport =
+                SessionKeyTransport.fromGeneratedKey(keyId, sessionKey, serverPublicKey);
 
         log.debug("put session key in context for future decryption");
         return new EncryptionResult(
                 new CipherRequestPayload(
-                        keyId,
-                        encryptedSessionKeyBase64,
                         EncodingUtils.toBase64(iv),
                         encryptedDataBase64
                 ),
                 new CryptoRequestContext(
                         UUID.randomUUID().toString(),
                         sessionKey,
-                        iv
+                        iv,
+                        sessionKeyTransport
                 )
         );
     }

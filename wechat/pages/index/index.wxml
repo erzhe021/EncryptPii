@@ -53,6 +53,10 @@
   <view wx:if="{{error}}" class="message error">{{error}}</view>
   <view wx:if="{{result}}" class="card result-card">
     <view class="section-title">请求响应明细</view>
+    <view wx:if="{{result.requestHeaders}}" class="result-block">
+      <view class="result-label">请求头(实发)</view>
+      <text class="result-content" selectable>{{result.requestHeaders}}</text>
+    </view>
     <view class="result-block">
       <view class="result-label">{{result.requestPlainLabel}}</view>
       <text class="result-content" selectable>{{result.requestPlain}}</text>
