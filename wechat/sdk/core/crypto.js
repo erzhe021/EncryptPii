@@ -29,8 +29,8 @@ function createCrypto(randomBytes) {
       throw new SdkError('RANDOM_UNAVAILABLE', 'Random source returned invalid bytes');
     }
     let binary = '';
-    for (let index = 0; index < bytes.length; index += 1) {
-      binary += String.fromCharCode(bytes[index]);
+    for (const element of bytes) {
+      binary += String.fromCodePoint(element);
     }
     return binary;
   }
@@ -38,10 +38,9 @@ function createCrypto(randomBytes) {
   function publicKey(serverKey) {
     if (cachedBase64 !== serverKey.publicKeyBase64) {
       try {
-        const parsed = forge.pki.publicKeyFromAsn1(
-          forge.asn1.fromDer(decodeBase64(serverKey.publicKeyBase64))
+          cachedPublicKey = forge.pki.publicKeyFromAsn1(
+            forge.asn1.fromDer(decodeBase64(serverKey.publicKeyBase64))
         );
-        cachedPublicKey = parsed;
         cachedBase64 = serverKey.publicKeyBase64;
       } catch (cause) {
         throw new SdkError('INVALID_SERVER_KEY', 'Cannot parse server public key', cause);

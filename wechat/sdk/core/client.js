@@ -3,6 +3,8 @@ const { MODES, KEY_ID_HEADER, SESSION_KEY_HEADER } = require('./protocol');
 const { createKeyManager } = require('./key-manager');
 const { createCrypto } = require('./crypto');
 
+const hasOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+
 function normalizeHeaders(headers = {}) {
   if (!headers || typeof headers !== 'object' || Array.isArray(headers)) {
     throw new SdkError('INVALID_ARGUMENT', 'Headers must be an object');
@@ -21,11 +23,35 @@ function normalizeHeaders(headers = {}) {
 
 function parseResult(response) {
   if (!response || typeof response !== 'object' || Array.isArray(response)
-    || typeof response.code !== 'string' || !Object.prototype.hasOwnProperty.call(response, 'data')
+      || typeof response.code !== 'string' || !hasOwn(response, 'data')
     || (response.message !== null && typeof response.message !== 'string')) {
     throw new SdkError('INVALID_RESPONSE', 'Server response is not a valid Result');
   }
   return response;
+}
+
+function serializeData(data) {
+  try {
+    const serialized = JSON.stringify(data);
+    if (serialized === undefined) {
+      throw new Error('Data is not JSON serializable');
+    }
+    return serialized;
+  } catch (cause) {
+    throw new SdkError('INVALID_ARGUMENT', 'Data must be JSON serializable', cause);
+  }
+}
+
+function isCipherEnvelope(value) {
+  return Boolean(value) && typeof value === 'object'
+    && (hasOwn(value, 'ivBase64') || hasOwn(value, 'encryptedDataBase64'));
+}
+
+function isKeyExpiredHttpError(error) {
+  return Boolean(error) && typeof error === 'object'
+    && error.statusCode === 400
+    && Boolean(error.data) && typeof error.data === 'object'
+    && error.data.code === 'KEY_EXPIRED' && Boolean(error.data.data);
 }
 
 function createClient(options) {
@@ -52,9 +78,9 @@ function createClient(options) {
         method: requestOptions.method || 'POST',
         data: requestOptions.data,
         timeoutMs,
-        headers: Object.assign(
-          { 'content-type': 'application/json' }, defaultHeaders, requestOptions.headers
-        )
+        headers: {
+          'content-type': 'application/json', ...defaultHeaders, ...requestOptions.headers
+        }
       });
     } catch (cause) {
       if (cause instanceof SdkError) {
@@ -73,21 +99,90 @@ function createClient(options) {
 
   const keys = createKeyManager(request);
 
+  // Performs one full attempt (encryption, transport, decryption) and never
+  // throws for HTTP or response-shape failures; the caller decides on retries.
+  async function sendOnce(mode, serialized, data, headers, serverKey, startedAt) {
+    const encrypted = mode.encryptRequest || mode.decryptResponse;
+    const encryptionStartedAt = Date.now();
+    const session = encrypted
+      ? await crypto.prepare(serialized, serverKey, mode.encryptRequest) : null;
+    const encryptionFinishedAt = Date.now();
+    const body = mode.encryptRequest ? session.payload : data;
+    const requestHeaders = Object.assign({}, headers);
+    if (encrypted) {
+      requestHeaders[KEY_ID_HEADER] = serverKey.keyId;
+      requestHeaders[SESSION_KEY_HEADER] = session.encryptedSessionKeyBase64;
+    }
+
+    let raw;
+    let httpError = null;
+    try {
+      raw = await request(mode.endpoint, { data: body, headers: requestHeaders });
+    } catch (error) {
+      if (!(error instanceof HttpError)) {
+        throw error;
+      }
+      httpError = error;
+      raw = error.data;
+    }
+    const httpFinishedAt = Date.now();
+
+    // Gateway errors may be plaintext even when the endpoint encrypts responses.
+    const decryptResponse = mode.decryptResponse && (!httpError || isCipherEnvelope(raw));
+    let value = raw;
+    let responseError = null;
+    if (decryptResponse) {
+      try {
+        value = crypto.decrypt(raw, session.sessionKey);
+      } catch (error) {
+        if (!(error instanceof SdkError)) {
+          throw error;
+        }
+        responseError = error;
+        value = null;
+      }
+    }
+    if (!responseError && !httpError) {
+      try {
+        parseResult(value);
+      } catch (error) {
+        if (!(error instanceof SdkError)) {
+          throw error;
+        }
+        responseError = error;
+      }
+    }
+
+    const finishedAt = Date.now();
+    const details = {
+      data: value,
+      encryptRequest: mode.encryptRequest,
+      decryptResponse: mode.decryptResponse,
+      cipherRequest: mode.encryptRequest ? body : null,
+      cipherResponse: decryptResponse ? raw : null,
+      stcHeaders: encrypted
+        ? {
+          [KEY_ID_HEADER]: requestHeaders[KEY_ID_HEADER],
+          [SESSION_KEY_HEADER]: requestHeaders[SESSION_KEY_HEADER]
+        }
+        : null,
+      timings: {
+        total: finishedAt - startedAt,
+        encryption: encrypted ? encryptionFinishedAt - encryptionStartedAt : 0,
+        http: httpFinishedAt - encryptionFinishedAt,
+        decryption: decryptResponse ? finishedAt - httpFinishedAt : 0
+      }
+    };
+    return { details, httpError, responseError };
+  }
+
   async function execute(input, detailed) {
-    if (!input || !Object.prototype.hasOwnProperty.call(MODES, input.mode)) {
+    if (!input || !hasOwn(MODES, input.mode)) {
       throw new SdkError('INVALID_ARGUMENT', 'Unknown transport mode');
     }
     const mode = MODES[input.mode];
     const headers = normalizeHeaders(input.headers);
-    let serialized;
-    try {
-      serialized = JSON.stringify(input.data);
-      if (serialized === undefined) {
-        throw new Error('Data is not JSON serializable');
-      }
-    } catch (cause) {
-      throw new SdkError('INVALID_ARGUMENT', 'Data must be JSON serializable', cause);
-    }
+    const serialized = serializeData(input.data);
     // Snapshot the body so asynchronous key acquisition and retry use the same input.
     const data = JSON.parse(serialized);
     const startedAt = Date.now();
@@ -95,77 +190,18 @@ function createClient(options) {
     let serverKey = encrypted ? await keys.get(headers) : null;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
-      const encryptionStartedAt = Date.now();
-      const session = encrypted
-        ? await crypto.prepare(serialized, serverKey, mode.encryptRequest) : null;
-      const encryptionFinishedAt = Date.now();
-      const body = mode.encryptRequest ? session.payload : data;
-      const requestHeaders = Object.assign({}, headers);
-      if (encrypted) {
-        requestHeaders[KEY_ID_HEADER] = serverKey.keyId;
-        requestHeaders[SESSION_KEY_HEADER] = session.encryptedSessionKeyBase64;
-      }
-      let raw;
-      let httpError;
-      try {
-        raw = await request(mode.endpoint, { data: body, headers: requestHeaders });
-      } catch (error) {
-        if (!(error instanceof HttpError)) {
-          throw error;
-        }
-        if (encrypted && attempt === 0 && error.statusCode === 400
-          && error.data && error.data.code === 'KEY_EXPIRED' && error.data.data) {
-          try {
-            serverKey = keys.install(error.data.data);
-            continue;
-          } catch (cause) {
-            if (!(cause instanceof SdkError) || cause.code !== 'INVALID_SERVER_KEY') {
-              throw cause;
-            }
+      const { details, httpError, responseError } =
+        await sendOnce(mode, serialized, data, headers, serverKey, startedAt);
+      if (httpError && encrypted && attempt === 0 && isKeyExpiredHttpError(httpError)) {
+        try {
+          serverKey = keys.install(httpError.data.data);
+          continue;
+        } catch (cause) {
+          if (!(cause instanceof SdkError) || cause.code !== 'INVALID_SERVER_KEY') {
+            throw cause;
           }
         }
-        httpError = error;
-        raw = error.data;
       }
-      const httpFinishedAt = Date.now();
-      // Gateway errors may be plaintext even when the endpoint encrypts responses.
-      const decryptResponse = mode.decryptResponse && (!httpError || (raw
-        && typeof raw === 'object'
-        && (Object.prototype.hasOwnProperty.call(raw, 'ivBase64')
-          || Object.prototype.hasOwnProperty.call(raw, 'encryptedDataBase64'))));
-      const details = {
-        data: null,
-        cipherRequest: mode.encryptRequest ? body : null,
-        cipherResponse: decryptResponse ? raw : null,
-        stcHeaders: encrypted
-          ? {
-            [KEY_ID_HEADER]: requestHeaders[KEY_ID_HEADER],
-            [SESSION_KEY_HEADER]: requestHeaders[SESSION_KEY_HEADER]
-          }
-          : null,
-        timings: {
-          total: 0,
-          encryption: encrypted ? encryptionFinishedAt - encryptionStartedAt : 0,
-          http: httpFinishedAt - encryptionFinishedAt,
-          decryption: 0
-        }
-      };
-      let responseError;
-      try {
-        const response = decryptResponse ? crypto.decrypt(raw, session.sessionKey) : raw;
-        details.data = response;
-        if (!httpError) {
-          parseResult(response);
-        }
-      } catch (error) {
-        if (!(error instanceof SdkError)) {
-          throw error;
-        }
-        responseError = error;
-      }
-      const finishedAt = Date.now();
-      details.timings.total = finishedAt - startedAt;
-      details.timings.decryption = decryptResponse ? finishedAt - httpFinishedAt : 0;
       const failure = responseError || httpError;
       if (failure) {
         if (detailed) {

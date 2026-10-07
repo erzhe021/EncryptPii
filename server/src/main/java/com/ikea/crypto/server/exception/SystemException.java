@@ -1,7 +1,10 @@
 package com.ikea.crypto.server.exception;
 
+import java.io.Serial;
+
 public class SystemException extends RuntimeException {
 
+    @Serial
     private static final long serialVersionUID = 1731380962258365686L;
 
     private static final String MSG_INTERNAL_SERVER_ERROR = "服务器开小差了，请稍后再试";

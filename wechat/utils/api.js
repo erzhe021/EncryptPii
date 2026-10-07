@@ -3,19 +3,11 @@ const { KONG_BASE_URL } = require('../config');
 
 let client;
 
-async function callApi(mode, input) {
+function getClient() {
   if (!client) {
     client = createWechatClient({ baseUrl: KONG_BASE_URL });
   }
-  try {
-    const result = await client.sendDetailed({ mode, data: input });
-    return formatDetails(input, result);
-  } catch (error) {
-    if (error.details) {
-      error.result = formatDetails(input, error.details);
-    }
-    throw error;
-  }
+  return client;
 }
 
 function formatDetails(input, result) {
@@ -24,9 +16,23 @@ function formatDetails(input, result) {
     requestCipher: result.cipherRequest,
     responsePlain: result.data,
     responseCipher: result.cipherResponse,
-    stcHeaders: result.stcHeaders,
-    latency: result.timings
+    requestHeaders: result.stcHeaders,
+    latency: result.timings,
+    encryptRequest: result.encryptRequest,
+    decryptResponse: result.decryptResponse
   };
+}
+
+// Always resolves to { ok, error, details } so the page never inspects
+// mutated Error objects; details is null when the failure produced none.
+async function callApi(mode, input) {
+  try {
+    const details = await getClient().sendDetailed({ mode, data: input });
+    return { ok: true, error: null, details: formatDetails(input, details) };
+  } catch (error) {
+    const details = error.details ? formatDetails(input, error.details) : null;
+    return { ok: false, error, details };
+  }
 }
 
 module.exports = { callApi };

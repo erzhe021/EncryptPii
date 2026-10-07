@@ -1,5 +1,6 @@
 package com.ikea.crypto.client.api;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.client.constant.CryptoConstants;
@@ -221,7 +222,7 @@ public class CryptoClientController {
         );
     }
 
-    private String toJsonString(DemoSensitiveRequest data) throws Exception {
+    private String toJsonString(DemoSensitiveRequest data) throws JsonProcessingException {
         if (data == null) {
             throw new IllegalArgumentException("UserRequest cannot be null or empty");
         }

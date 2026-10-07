@@ -256,10 +256,11 @@ test('detailed HTTP failures retain diagnostics and decrypt error bodies in ever
       const client = createClient(options(async (request) => {
         if (request.method === 'GET') return { statusCode: 200, data: firstKey.info };
         posts += 1;
-        raw = errorBody;
+          const payload = errorBody;
+          raw = payload;
         if (mode === 'bidirectional' || mode === 'response-only') {
           const session = unwrapSession(request.headers['X-STC-SESSION-KEY'], firstKey);
-          raw = encryptResponse(errorBody, session);
+            raw = encryptResponse(payload, session);
         }
         return { statusCode, data: raw };
       }));
@@ -354,13 +355,12 @@ test('response-only exception requests route, transport session headers and decr
           const result = {
             requestPlain: data, requestCipher: details.cipherRequest,
             responsePlain: details.data, responseCipher: details.cipherResponse,
-            stcHeaders: details.stcHeaders, latency: details.timings
+            requestHeaders: details.stcHeaders, latency: details.timings,
+            encryptRequest: details.encryptRequest, decryptResponse: details.decryptResponse
           };
-          if (failure) {
-            failure.result = result;
-            throw failure;
-          }
-          return result;
+          return failure
+            ? { ok: false, error: failure, details: result }
+            : { ok: true, error: null, details: result };
         }
       }),
       Page: (definition) => { page = definition; }
@@ -393,16 +393,19 @@ test('demo page renders all five sections alongside the HTTP failure message', a
       ? { encryptedDataBase64: 'request' } : null;
     const responseCipher = ['bidirectional', 'response-only'].includes(mode)
       ? { encryptedDataBase64: 'response' } : null;
+    const encryptRequest = ['bidirectional', 'request-only'].includes(mode);
+    const decryptResponse = ['bidirectional', 'response-only'].includes(mode);
     const failure = new HttpError(500, {});
-    failure.result = {
+    const details = {
       requestPlain: { name: 'demo' }, requestCipher,
       responsePlain: { status: 500, message: 'demo error' }, responseCipher,
-      stcHeaders: mode === 'plain' ? null
+      requestHeaders: mode === 'plain' ? null
         : { 'X-STC-KEY-ID': 'first', 'X-STC-SESSION-KEY': 'wrapped' },
-      latency: { total: 10, encryption: 2, http: 7, decryption: 1 }
+      latency: { total: 10, encryption: 2, http: 7, decryption: 1 },
+      encryptRequest, decryptResponse
     };
     vm.runInNewContext(source, {
-      require: () => ({ callApi: async () => { throw failure; } }),
+      require: () => ({ callApi: async () => ({ ok: false, error: failure, details }) }),
       Page: (definition) => { page = definition; }
     });
     page.setData = function (values) { Object.assign(this.data, values); };
@@ -413,7 +416,7 @@ test('demo page renders all five sections alongside the HTTP failure message', a
     assert.ok(page.data.result.requestPlain.includes('demo'));
     assert.deepEqual(JSON.parse(page.data.result.requestPlain), { name: 'demo' });
     assert.equal(page.data.result.requestHeaders, mode === 'plain' ? null
-      : JSON.stringify(failure.result.stcHeaders, null, 2));
+      : JSON.stringify(details.requestHeaders, null, 2));
     assert.equal(page.data.result.requestPlainLabel,
       ['plain', 'response-only'].includes(mode) ? '请求体明文(实发)' : '请求体明文');
     assert.equal(page.data.result.requestCipherLabel,
@@ -553,14 +556,13 @@ test('malformed, unauthenticated and non-JSON encrypted responses fail without r
       const session = unwrapSession(request.headers['X-STC-SESSION-KEY'], firstKey);
       let payload = encryptResponse({ ok: true }, session);
       if (failure === 'missing') payload = null;
-      if (failure === 'base64') payload.encryptedDataBase64 = '*invalid*';
-      if (failure === 'iv') payload.ivBase64 = Buffer.alloc(1).toString('base64');
-      if (failure === 'tag') {
+      else if (failure === 'base64') payload.encryptedDataBase64 = '*invalid*';
+      else if (failure === 'iv') payload.ivBase64 = Buffer.alloc(1).toString('base64');
+      else if (failure === 'tag') {
         const bytes = Buffer.from(payload.encryptedDataBase64, 'base64');
         bytes[bytes.length - 1] ^= 1;
         payload.encryptedDataBase64 = bytes.toString('base64');
-      }
-      if (failure === 'json') {
+      } else if (failure === 'json') {
         const iv = nodeCrypto.randomBytes(12);
         const cipher = nodeCrypto.createCipheriv('aes-256-gcm', session, iv);
         payload = {
@@ -630,7 +632,9 @@ test('demo wrapper returns separate plaintext, ciphertext, and latency values', 
   try {
     const { callApi } = require('../../utils/api');
     const data = { name: '演示用户' };
-    const result = await callApi('bidirectional', data);
+    const outcome = await callApi('bidirectional', data);
+    assert.equal(outcome.ok, true);
+    const result = outcome.details;
     assert.deepEqual(result.requestPlain, data);
     assert.deepEqual(result.responsePlain, { code: '0', message: null, data });
     assert.ok(result.requestCipher.encryptedDataBase64);
@@ -639,22 +643,22 @@ test('demo wrapper returns separate plaintext, ciphertext, and latency values', 
     assert.equal(Object.hasOwn(result, 'sessionKey'), false);
     assert.ok(requests.every((request) => request.url.startsWith('https://')));
     const plain = await callApi('plain', data);
-    assert.deepEqual(plain.requestPlain, data);
-    assert.equal(plain.requestCipher, null);
-    assert.deepEqual(plain.responsePlain, { code: '0', message: null, data });
-    assert.equal(plain.responseCipher, null);
+    assert.equal(plain.ok, true);
+    assert.deepEqual(plain.details.requestPlain, data);
+    assert.equal(plain.details.requestCipher, null);
+    assert.deepEqual(plain.details.responsePlain, { code: '0', message: null, data });
+    assert.equal(plain.details.responseCipher, null);
     global.wx.request = (request) => {
       request.success({ statusCode: 500, data: { status: 500, message: 'demo error' } });
     };
-    await assert.rejects(callApi('plain', data), (error) => {
-      assert.equal(error.code, 'HTTP_ERROR');
-      assert.deepEqual(error.result.requestPlain, data);
-      assert.equal(error.result.requestCipher, null);
-      assert.equal(error.result.responseCipher, null);
-      assert.deepEqual(error.result.responsePlain, { status: 500, message: 'demo error' });
-      assert.ok(error.result.latency.total >= 0);
-      return true;
-    });
+    const failure = await callApi('plain', data);
+    assert.equal(failure.ok, false);
+    assert.equal(failure.error.code, 'HTTP_ERROR');
+    assert.deepEqual(failure.details.requestPlain, data);
+    assert.equal(failure.details.requestCipher, null);
+    assert.equal(failure.details.responseCipher, null);
+    assert.deepEqual(failure.details.responsePlain, { status: 500, message: 'demo error' });
+    assert.ok(failure.details.latency.total >= 0);
   } finally {
     if (previousWx === undefined) {
       delete global.wx;

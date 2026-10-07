@@ -163,8 +163,7 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
         StringBuilder resultBuilder = new StringBuilder();
         List<ObjectError> errors = result.getAllErrors();
         for (ObjectError error : errors) {
-            if (error instanceof FieldError) {
-                FieldError fieldError = (FieldError) error;
+            if (error instanceof FieldError fieldError) {
                 String fieldName = fieldError.getField();
                 String fieldErrMsg = fieldError.getDefaultMessage();
                 resultBuilder.append(fieldName).append(" ").append(fieldErrMsg);

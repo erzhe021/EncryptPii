@@ -1,6 +1,10 @@
 const { SdkError } = require('../core/errors');
 const { createClient } = require('../core/client');
 
+function globalPlatform() {
+  return typeof wx !== 'undefined' ? wx : null;
+}
+
 function createWechatAdapter(platform) {
   if (!platform || typeof platform.request !== 'function') {
     throw new SdkError('INVALID_ARGUMENT', 'A WeChat request API is required');
@@ -22,14 +26,14 @@ function createWechatAdapter(platform) {
   }
   function randomBytes(length) {
     return new Promise((resolve, reject) => {
-      if (typeof platform.getRandomValues !== 'function') {
+      if (!platform || typeof platform.getRandomValues !== 'function') {
         reject(new SdkError('RANDOM_UNAVAILABLE', 'Upgrade WeChat to support secure randomness'));
         return;
       }
       platform.getRandomValues({
         length,
         success(response) {
-          const values = response && response.randomValues;
+          const values = response ? response.randomValues : undefined;
           let bytes;
           if (Object.prototype.toString.call(values) === '[object ArrayBuffer]') {
             bytes = new Uint8Array(values);
@@ -52,8 +56,7 @@ function createWechatAdapter(platform) {
 }
 
 function createWechatClient(options) {
-  const platform = options && options.platform
-    ? options.platform : (typeof wx !== 'undefined' ? wx : undefined);
+  const platform = (options && options.platform) || globalPlatform();
   const adapter = createWechatAdapter(platform);
   return createClient(Object.assign({}, options, adapter));
 }

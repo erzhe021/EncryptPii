@@ -17,6 +17,17 @@ docker run --rm \
   -e '
     local files = {
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/handler.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/access.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/response.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/errors.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/protocol.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/size_limit.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/key_cache.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/key_parser.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/key_version_policy.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/vault_auth.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/vault_location.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/vault_request.lua",
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/vault.lua",
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/keys.lua",
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/crypto.lua",

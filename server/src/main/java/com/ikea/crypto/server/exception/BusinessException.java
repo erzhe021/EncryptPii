@@ -2,8 +2,11 @@ package com.ikea.crypto.server.exception;
 
 import lombok.Getter;
 
+import java.io.Serial;
+
 public class BusinessException extends RuntimeException {
 
+    @Serial
     private static final long serialVersionUID = 7426845416694457839L;
 
     @Getter

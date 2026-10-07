@@ -1,6 +1,13 @@
 const { SdkError } = require('./errors');
 const { PUBLIC_KEY_PATH } = require('./protocol');
 
+// Refresh cached keys slightly before expiry so requests never race the deadline.
+const KEY_REFRESH_MARGIN_MS = 30000;
+
+function isUsable(key) {
+  return Boolean(key) && key.expiresAtEpochMillis - KEY_REFRESH_MARGIN_MS > Date.now();
+}
+
 function createKeyManager(request) {
   let cached = null;
   let fetching = null;
@@ -21,14 +28,14 @@ function createKeyManager(request) {
   }
 
   function get(headers) {
-    if (cached && cached.expiresAtEpochMillis > Date.now()) {
+    if (isUsable(cached)) {
       return Promise.resolve(cached);
     }
     if (!fetching) {
       fetching = request(PUBLIC_KEY_PATH, { method: 'GET', headers })
         .then((key) => {
           // A concurrent KEY_EXPIRED response may already have installed a newer key.
-          if (cached && cached.expiresAtEpochMillis > Date.now()) {
+          if (isUsable(cached)) {
             return cached;
           }
           return install(key);

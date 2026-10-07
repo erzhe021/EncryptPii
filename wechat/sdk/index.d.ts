@@ -48,6 +48,9 @@ export interface CipherResponse {
 
 export interface DetailedResult<T> {
   data: T;
+  /** Protocol flags of the selected mode; the demo uses them to label what was actually sent. */
+  encryptRequest: boolean;
+  decryptResponse: boolean;
   cipherRequest: CipherRequest | null;
   cipherResponse: CipherResponse | null;
   stcHeaders: { 'X-STC-KEY-ID': string; 'X-STC-SESSION-KEY': string } | null;

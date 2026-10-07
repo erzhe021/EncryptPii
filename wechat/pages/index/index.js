@@ -10,10 +10,6 @@ const MODES = [
   { id: 'response-only/system-exception', title: '响应加密(服务端异常)', description: 'HTTP 500 服务端异常' }
 ];
 
-function isResponseOnly(mode) {
-  return mode === 'response-only' || mode.startsWith('response-only/');
-}
-
 const ERROR_MESSAGES = {
   INVALID_ARGUMENT: '请检查服务地址和请求参数。',
   NETWORK_ERROR: '网络请求失败，请检查网络连接。',
@@ -25,6 +21,10 @@ const ERROR_MESSAGES = {
   INVALID_RESPONSE: '服务响应格式无效。',
   KEY_RETRY_FAILED: '公钥刷新后重试失败。'
 };
+
+function isResponseOnly(mode) {
+  return mode === 'response-only' || mode.startsWith('response-only/');
+}
 
 function usesPlainInput(mode) {
   return mode === 'plain' || isResponseOnly(mode);
@@ -46,20 +46,34 @@ function formatResult(value) {
   return typeof value === 'string' ? value : JSON.stringify(value, null, 2);
 }
 
-function isTransmittedField(mode, field) {
-  const transmittedFields = {
-    plain: ['requestPlain', 'responsePlain'],
-    bidirectional: ['requestCipher', 'responseCipher'],
-    'request-only': ['requestCipher', 'responsePlain'],
-    'response-only': ['requestPlain', 'responseCipher']
-  };
-  return transmittedFields[isResponseOnly(mode) ? 'response-only' : mode].includes(field);
+// The SDK reports whether each direction was encrypted; only transmitted
+// bodies are labeled with their direction.
+function resultLabel(title, transmitted, value, direction) {
+  return transmitted && value !== 'N/A' ? `${title}(${direction})` : title;
 }
 
-function resultLabel(title, mode, field, value, direction) {
-  return isTransmittedField(mode, field) && value !== 'N/A'
-    ? `${title}(${direction})`
-    : title;
+function buildResult(details) {
+  const values = {
+    requestHeaders: details.requestHeaders ? formatResult(details.requestHeaders) : null,
+    requestPlain: formatResult(details.requestPlain),
+    requestCipher: details.requestCipher ? formatResult(details.requestCipher) : 'N/A',
+    responsePlain: details.responsePlain === null ? 'N/A' : formatResult(details.responsePlain),
+    responseCipher: details.responseCipher ? formatResult(details.responseCipher) : 'N/A',
+    latency: formatResult(details.latency)
+  };
+  return {
+    ...values,
+    requestPlainLabel: resultLabel('请求体明文', !details.encryptRequest, values.requestPlain, '实发'),
+    requestCipherLabel: resultLabel('请求体密文', details.encryptRequest, values.requestCipher, '实发'),
+    responsePlainLabel: resultLabel('响应体明文', !details.decryptResponse, values.responsePlain, '实收'),
+    responseCipherLabel: resultLabel('响应体密文', details.decryptResponse, values.responseCipher, '实收')
+  };
+}
+
+function errorMessage(error) {
+  return error.code === 'HTTP_ERROR'
+    ? `请求失败（HTTP ${error.statusCode}）`
+    : ERROR_MESSAGES[error.code] || '请求失败';
 }
 
 Page({
@@ -83,7 +97,7 @@ Page({
       mode,
       usesPlainInput: usesPlainInput(mode),
       error: '',
-      result: ''
+      result: null
     });
   },
 
@@ -111,33 +125,13 @@ Page({
 
     this.setData({ loading: true, error: '', result: null });
     try {
-      let result;
-      try {
-        result = await callApi(mode, payload);
-      } catch (error) {
-        if (!error.result) {
-          throw error;
-        }
-        result = error.result;
-        this.setData({ error: errorMessage(error) });
+      const outcome = await callApi(mode, payload);
+      if (!outcome.ok) {
+        this.setData({ error: errorMessage(outcome.error) });
       }
-      const values = {
-        requestHeaders: result.stcHeaders ? formatResult(result.stcHeaders) : null,
-        requestPlain: formatResult(result.requestPlain),
-        requestCipher: result.requestCipher ? formatResult(result.requestCipher) : 'N/A',
-        responsePlain: result.responsePlain === null ? 'N/A' : formatResult(result.responsePlain),
-        responseCipher: result.responseCipher ? formatResult(result.responseCipher) : 'N/A',
-        latency: formatResult(result.latency)
-      };
-      this.setData({
-        result: {
-          ...values,
-          requestPlainLabel: resultLabel('请求体明文', mode, 'requestPlain', values.requestPlain, '实发'),
-          requestCipherLabel: resultLabel('请求体密文', mode, 'requestCipher', values.requestCipher, '实发'),
-          responsePlainLabel: resultLabel('响应体明文', mode, 'responsePlain', values.responsePlain, '实收'),
-          responseCipherLabel: resultLabel('响应体密文', mode, 'responseCipher', values.responseCipher, '实收')
-        }
-      });
+      if (outcome.details) {
+        this.setData({ result: buildResult(outcome.details) });
+      }
     } catch (error) {
       this.setData({ error: errorMessage(error) });
     } finally {
@@ -145,9 +139,3 @@ Page({
     }
   }
 });
-
-function errorMessage(error) {
-  return error.code === 'HTTP_ERROR'
-    ? `请求失败（HTTP ${error.statusCode}）`
-    : ERROR_MESSAGES[error.code] || '请求失败';
-}

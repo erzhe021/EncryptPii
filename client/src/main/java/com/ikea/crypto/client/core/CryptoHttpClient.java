@@ -46,9 +46,10 @@ public class CryptoHttpClient {
     private final URI serverBaseUri;
     private final ObjectMapper objectMapper;
     private final String publicKeyEndpoint;
+    private final Object publicKeyCacheLock = new Object();
 
-    // Cache the fetched RSA public key and its parsed PublicKey instance to avoid unnecessary network calls.
-    private volatile CachedPublicKey cachedPublicKey;
+    // All cache reads and writes are guarded by publicKeyCacheLock.
+    private CachedPublicKey cachedPublicKey;
 
     public record ServerKeyInfo(String keyId, PublicKey publicKey, long expiresAtEpochMillis) {
     }
@@ -81,22 +82,27 @@ public class CryptoHttpClient {
         if (publicKeyEndpoint == null) {
             throw new IllegalStateException("Public key endpoint is not configured");
         }
-        CachedPublicKey currentCache = this.cachedPublicKey;
-        if (currentCache != null) {
-            if (currentCache.isValid()) {
-                log.debug("use cached RSA public key which is still valid, keyId={}, expiresAt={}",
-                        currentCache.keyId(),
-                        DateUtils.toDate(currentCache.expiresAtEpochMillis()));
-                return currentCache.toServerKeyInfo();
+        synchronized (publicKeyCacheLock) {
+            CachedPublicKey currentCache = this.cachedPublicKey;
+            if (currentCache != null) {
+                if (currentCache.isValid()) {
+                    log.debug("use cached RSA public key which is still valid, keyId={}, expiresAt={}",
+                            currentCache.keyId(),
+                            DateUtils.toDate(currentCache.expiresAtEpochMillis()));
+                    return currentCache.toServerKeyInfo();
+                } else {
+                    log.warn("cached RSA public key is expired, keyId={}, expiresAt={}",
+                            currentCache.keyId(),
+                            DateUtils.toDate(currentCache.expiresAtEpochMillis()));
+                }
             } else {
-                log.warn("cached RSA public key is expired, keyId={}, expiresAt={}",
-                        currentCache.keyId(),
-                        DateUtils.toDate(currentCache.expiresAtEpochMillis()));
+                log.debug("no cached RSA public key found");
             }
-        } else {
-            log.debug("no cached RSA public key found");
+            return fetchAndCacheServerKeyInfo();
         }
+    }
 
+    private ServerKeyInfo fetchAndCacheServerKeyInfo() throws GeneralSecurityException {
         log.debug("start to fetching RSA public key from server");
         HttpRequest request = HttpRequest.newBuilder(serverBaseUri.resolve(publicKeyEndpoint))
                 .GET()
@@ -108,10 +114,10 @@ public class CryptoHttpClient {
 
             PublicKeyResponse keyResponse = objectMapper.readValue(response.body(), PublicKeyResponse.class);
             return cacheServerKeyInfo(keyResponse);
-        } catch (IOException | InterruptedException e) {
-            if (e instanceof InterruptedException) {
-                Thread.currentThread().interrupt();
-            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new GeneralSecurityException("Failed to fetch RSA public key from server", e);
+        } catch (IOException e) {
             throw new GeneralSecurityException("Failed to fetch RSA public key from server", e);
         }
     }
@@ -149,6 +155,12 @@ public class CryptoHttpClient {
     }
 
     private ServerKeyInfo cacheServerKeyInfo(PublicKeyResponse keyResponse) throws GeneralSecurityException {
+        synchronized (publicKeyCacheLock) {
+            return parseAndCacheServerKeyInfo(keyResponse);
+        }
+    }
+
+    private ServerKeyInfo parseAndCacheServerKeyInfo(PublicKeyResponse keyResponse) throws GeneralSecurityException {
         if (keyResponse == null || keyResponse.publicKeyBase64() == null
                 || keyResponse.publicKeyBase64().isBlank() || keyResponse.keyId() == null
                 || keyResponse.keyId().isBlank()
@@ -159,11 +171,12 @@ public class CryptoHttpClient {
             PublicKey parsedKey = KeyFactory.getInstance(CryptoConstants.ALGORITHM_RSA).generatePublic(
                     new X509EncodedKeySpec(EncodingUtils.fromBase64(keyResponse.publicKeyBase64()))
             );
-            this.cachedPublicKey = new CachedPublicKey(
+            CachedPublicKey newCache = new CachedPublicKey(
                     keyResponse.keyId(), parsedKey, keyResponse.expiresAtEpochMillis());
+            this.cachedPublicKey = newCache;
             log.info("received RSA public key, keyId={}, expiresAt={}, caching it for future use", keyResponse.keyId(),
                     DateUtils.toDate(keyResponse.expiresAtEpochMillis()));
-            return this.cachedPublicKey.toServerKeyInfo();
+            return newCache.toServerKeyInfo();
         } catch (GeneralSecurityException | IllegalArgumentException e) {
             throw new GeneralSecurityException("Invalid RSA public key received from server", e);
         }
@@ -199,14 +212,16 @@ public class CryptoHttpClient {
      * expecting an AesCipherPayload response.
      */
     public CipherResponsePayload postResponseOnly(
-            String path, DemoPlainRequest request, SessionKeyTransport sessionTransport) throws Exception {
+            String path, DemoPlainRequest request, SessionKeyTransport sessionTransport)
+            throws IOException, InterruptedException {
         HttpResponse<String> response = postResponseOnlyDetailed(path, request, sessionTransport);
         ensureSuccess(response, path);
         return objectMapper.readValue(response.body(), CipherResponsePayload.class);
     }
 
     public HttpResponse<String> postResponseOnlyDetailed(
-            String path, DemoPlainRequest request, SessionKeyTransport sessionTransport) throws Exception {
+            String path, DemoPlainRequest request, SessionKeyTransport sessionTransport)
+            throws IOException, InterruptedException {
         HttpRequest httpRequest = buildJsonRequest(serverBaseUri.resolve(path), request, sessionTransport);
         return httpClient.send(httpRequest, HttpResponse.BodyHandlers.ofString());
     }
@@ -228,10 +243,6 @@ public class CryptoHttpClient {
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         ensureSuccess(response, path);
         return response;
-    }
-
-    private HttpRequest buildJsonRequest(URI endpoint, Object requestBody) throws JsonProcessingException {
-        return buildJsonRequest(endpoint, requestBody, null);
     }
 
     private HttpRequest buildJsonRequest(

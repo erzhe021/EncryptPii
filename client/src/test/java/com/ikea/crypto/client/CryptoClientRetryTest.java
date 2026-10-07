@@ -14,6 +14,8 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
+import javax.crypto.Cipher;
+import javax.crypto.spec.GCMParameterSpec;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
@@ -24,13 +26,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.crypto.Cipher;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -125,12 +122,12 @@ class CryptoClientRetryTest {
             keyIds.add(keyId);
             sessionHeaders.add(encryptedSessionKey);
             var body = objectMapper.readTree(exchange.getRequestBody());
-            if ("/crypto/server/bidirectional".equals(path) || "/crypto/server/request-only".equals(path)) {
-                if (body.size() != 2 || body.has("keyId") || body.has("encryptedSessionKeyBase64")) {
+            if (("/crypto/server/bidirectional".equals(path) || "/crypto/server/request-only".equals(path))
+                    && (body.size() != 2 || body.has("keyId") || body.has("encryptedSessionKeyBase64"))) {
                     respond(exchange, 400, "{\"code\":\"INVALID_BODY\"}");
                     return;
                 }
-            }
+
             if (attempt == 1) {
                 respond(exchange, 400, objectMapper.writeValueAsString(Map.of(
                         "code", "KEY_EXPIRED",
@@ -245,9 +242,6 @@ class CryptoClientRetryTest {
             try {
                 var sessionKey = SessionKeyService.decryptSessionKeyBase64(sessionHeader, key.getPrivate());
                 respond(exchange, status, mapper.writeValueAsString(encryptResponse(body, sessionKey)));
-            } catch (java.security.GeneralSecurityException failure) {
-                exchange.close();
-                throw new IllegalStateException(failure);
             } catch (Exception failure) {
                 exchange.close();
                 throw new IllegalStateException(failure);
