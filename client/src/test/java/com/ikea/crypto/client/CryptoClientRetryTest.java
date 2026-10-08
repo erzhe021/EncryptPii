@@ -76,6 +76,7 @@ class CryptoClientRetryTest {
             CryptoClientController controller = new CryptoClientController(
                     baseUrl,
                     "/crypto/server/public-key",
+                    1000,
                     "/crypto/server/bidirectional",
                     "/crypto/server/request-only",
                     "/crypto/server/response-only");
@@ -171,6 +172,7 @@ class CryptoClientRetryTest {
                 CryptoClientController controller = new CryptoClientController(
                         baseUrl,
                         "/crypto/server/public-key",
+                        1000,
                         "/crypto/server/bidirectional",
                         "/crypto/server/request-only",
                         "/crypto/server/response-only");
@@ -252,7 +254,7 @@ class CryptoClientRetryTest {
             for (String variant : List.of("client-exception", "system-exception", "business-exception")) {
                 CryptoClientController controller = new CryptoClientController(
                         "http://127.0.0.1:" + server.getAddress().getPort(),
-                        "/crypto/server/public-key", "/crypto/server/bidirectional",
+                        "/crypto/server/public-key", 1000, "/crypto/server/bidirectional",
                         "/crypto/server/request-only", "/crypto/server/response-only");
                 MockMvc client = MockMvcBuilders.standaloneSetup(controller).build();
                 var request = post("/crypto/client/response-only/" + variant);

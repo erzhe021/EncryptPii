@@ -4,5 +4,6 @@
 const KONG_BASE_URL = 'https://local.kong.test:18443'; // pass through mitmproxy, refer to mitmproxy.md
 
 module.exports = {
-  KONG_BASE_URL
+  KONG_BASE_URL,
+  KEY_REFRESH_MARGIN_MS: 30000 // 30 seconds
 };

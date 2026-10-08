@@ -1,11 +1,14 @@
 const { createWechatClient } = require('../sdk/index');
-const { KONG_BASE_URL } = require('../config');
+const { KONG_BASE_URL, KEY_REFRESH_MARGIN_MS } = require('../config');
 
 let client;
 
 function getClient() {
   if (!client) {
-    client = createWechatClient({ baseUrl: KONG_BASE_URL });
+    client = createWechatClient({
+      baseUrl: KONG_BASE_URL,
+      keyRefreshMarginMs: KEY_REFRESH_MARGIN_MS
+    });
   }
   return client;
 }

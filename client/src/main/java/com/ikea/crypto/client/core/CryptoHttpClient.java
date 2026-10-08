@@ -46,6 +46,7 @@ public class CryptoHttpClient {
     private final URI serverBaseUri;
     private final ObjectMapper objectMapper;
     private final String publicKeyEndpoint;
+    private final long keyRefreshMarginMillis;
     private final Object publicKeyCacheLock = new Object();
 
     // All cache reads and writes are guarded by publicKeyCacheLock.
@@ -55,8 +56,8 @@ public class CryptoHttpClient {
     }
 
     private record CachedPublicKey(String keyId, PublicKey publicKey, long expiresAtEpochMillis) {
-        boolean isValid() {
-            return System.currentTimeMillis() < expiresAtEpochMillis;
+        boolean isValid(long refreshMarginMillis) {
+            return System.currentTimeMillis() < expiresAtEpochMillis - refreshMarginMillis;
         }
 
         ServerKeyInfo toServerKeyInfo() {
@@ -65,10 +66,18 @@ public class CryptoHttpClient {
     }
 
     public CryptoHttpClient(URI serverBaseUri, String publicKeyEndpoint) {
+        this(serverBaseUri, publicKeyEndpoint, 1000);
+    }
+
+    public CryptoHttpClient(URI serverBaseUri, String publicKeyEndpoint, long keyRefreshMarginMillis) {
+        if (keyRefreshMarginMillis < 0) {
+            throw new IllegalArgumentException("keyRefreshMarginMillis must be non-negative");
+        }
         this.httpClient = HttpClient.newHttpClient();
         this.serverBaseUri = serverBaseUri;
         this.objectMapper = new ObjectMapper();
         this.publicKeyEndpoint = publicKeyEndpoint;
+        this.keyRefreshMarginMillis = keyRefreshMarginMillis;
     }
 
     public CryptoHttpClient(URI serverBaseUri) {
@@ -85,7 +94,7 @@ public class CryptoHttpClient {
         synchronized (publicKeyCacheLock) {
             CachedPublicKey currentCache = this.cachedPublicKey;
             if (currentCache != null) {
-                if (currentCache.isValid()) {
+                if (currentCache.isValid(keyRefreshMarginMillis)) {
                     log.debug("use cached RSA public key which is still valid, keyId={}, expiresAt={}",
                             currentCache.keyId(),
                             DateUtils.toDate(currentCache.expiresAtEpochMillis()));

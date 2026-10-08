@@ -5,6 +5,7 @@ crypto:
   server:
     base-url: https://encryptpii-kong.kong.svc.cluster.local:8443  #run in k8s
 #    base-url: https://local.kong.test:18443 #run locally, need to trust kong or mitmproxy certificates
+    key-refresh-margin-ms: ${CRYPTO_SERVER_KEY_REFRESH_MARGIN_MS:1000}
     endpoints:
       public-key: /crypto/server/public-key
       bidirectional: /crypto/server/bidirectional

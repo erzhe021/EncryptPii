@@ -165,6 +165,30 @@ test('concurrent encrypted calls share only key fetches, not session material', 
   assert.equal(new Set(sessions).size, 10);
 });
 
+test('key refresh margin is configurable and zero uses the cached key until expiry', async () => {
+  const nearExpiryKey = {
+    ...firstKey,
+    info: { ...firstKey.info, expiresAtEpochMillis: Date.now() + 60000 }
+  };
+  let earlyRefreshGets = 0;
+  const earlyRefreshClient = createClient(options(async (request) => {
+    if (request.method === 'GET') earlyRefreshGets += 1;
+    return gateway(nearExpiryKey, [], [])(request);
+  }, { keyRefreshMarginMs: 120000 }));
+  await earlyRefreshClient.send({ mode: 'request-only', data: {} });
+  await earlyRefreshClient.send({ mode: 'request-only', data: {} });
+  assert.equal(earlyRefreshGets, 2);
+
+  let noEarlyRefreshGets = 0;
+  const noEarlyRefreshClient = createClient(options(async (request) => {
+    if (request.method === 'GET') noEarlyRefreshGets += 1;
+    return gateway(nearExpiryKey, [], [])(request);
+  }, { keyRefreshMarginMs: 0 }));
+  await noEarlyRefreshClient.send({ mode: 'request-only', data: {} });
+  await noEarlyRefreshClient.send({ mode: 'request-only', data: {} });
+  assert.equal(noEarlyRefreshGets, 1);
+});
+
 test('clients with the same keyId keep keys and configuration isolated', async () => {
   const sameId = { ...secondKey, info: { ...secondKey.info, keyId: firstKey.info.keyId } };
   const requestsA = [];
@@ -487,6 +511,7 @@ test('body and headers are snapshotted before asynchronous key acquisition', asy
 test('invalid configuration, JSON and reserved headers fail explicitly', async () => {
   const transport = async () => { throw new Error('should not send'); };
   for (const extra of [{ baseUrl: 'http://kong.example.com' }, { timeoutMs: 0 },
+    { keyRefreshMarginMs: -1 }, { keyRefreshMarginMs: Infinity },
     { baseUrl: 'https://host\\unexpected' }, { headers: 'not an object' },
     { headers: { Authorization: 'token\r\nInjected: value' } },
     { headers: { 'X-STC-Key-Id': 'override' } }, { headers: { 'X-STC-Session-Key': 'override' } }]) {

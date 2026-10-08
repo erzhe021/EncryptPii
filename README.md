@@ -226,6 +226,7 @@ Client 上游 URL 位于 `client/src/main/resources/application.yml`：
 crypto:
   server:
     base-url: http://encryptpii-kong.kong.svc.cluster.local:8000
+    key-refresh-margin-ms: ${CRYPTO_SERVER_KEY_REFRESH_MARGIN_MS:1000}
     endpoints:
       public-key: /crypto/server/public-key
       bidirectional: /crypto/server/bidirectional
@@ -239,6 +240,8 @@ plain:
 ```
 
 `crypto.server` 用于加密调用，`plain.server` 用于明文调用。`PLAIN_SERVER_BASE_URL` 可单独覆盖明文地址；`CRYPTO_SERVER_BASE_URL` 覆盖加密地址，若没有单独覆盖，明文地址也随之变化。Controller 不硬编码上游 URL。
+
+`crypto.server.key-refresh-margin-ms` 控制客户端在公钥到期前多少毫秒停止使用缓存并在下一次加密请求前获取新公钥，默认 1000 毫秒；可通过 `CRYPTO_SERVER_KEY_REFRESH_MARGIN_MS` 覆盖，设为 `0` 表示到期才刷新。此刷新是请求触发的按需行为，不是后台轮询。
 
 | Kong 路径 | 方法 | Server 目标 | 行为 |
 | --- | --- | --- | --- |

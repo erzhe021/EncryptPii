@@ -88,6 +88,32 @@ class CryptoHttpClientTest {
     }
 
     @Test
+    void refreshesCachedPublicKeyWhenItEntersConfiguredMargin() throws Exception {
+        AtomicInteger requests = new AtomicInteger();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+        server.createContext("/public-key", exchange -> {
+            requests.incrementAndGet();
+            long expiresAt = System.currentTimeMillis() + 60_000;
+            String response = "{\"publicKeyBase64\":\""
+                    + java.util.Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded())
+                    + "\",\"keyId\":\"rsa-ciam:1\",\"expiresAtEpochMillis\":" + expiresAt + "}";
+            respond(exchange, 200, response);
+        });
+        server.start();
+        try {
+            cryptoHttpClient = new CryptoHttpClient(
+                    URI.create("http://127.0.0.1:" + server.getAddress().getPort()),
+                    "/public-key",
+                    120_000);
+            cryptoHttpClient.fetchServerKeyInfo();
+            cryptoHttpClient.fetchServerKeyInfo();
+            assertEquals(2, requests.get());
+        } finally {
+            server.stop(0);
+        }
+    }
+
+    @Test
     void recognizesOnlyTheExplicitStaleKeyError() throws Exception {
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/stale-key", exchange -> respond(exchange,

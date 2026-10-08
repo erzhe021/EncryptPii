@@ -35,6 +35,7 @@ public class CryptoClientController {
     public CryptoClientController(
             @Value("${crypto.server.base-url}") String serverBaseUrl,
             @Value("${crypto.server.endpoints.public-key}") String publicKeyPath,
+            @Value("${crypto.server.key-refresh-margin-ms}") long keyRefreshMarginMillis,
             @Value("${crypto.server.endpoints.bidirectional}") String bidirectionalPath,
             @Value("${crypto.server.endpoints.request-only}") String requestOnlyPath,
             @Value("${crypto.server.endpoints.response-only}") String responseOnlyPath
@@ -44,7 +45,8 @@ public class CryptoClientController {
         this.requestOnlyPath = requestOnlyPath;
         this.responseOnlyPath = responseOnlyPath;
         this.cryptoClient = new CryptoClient();
-        this.cryptoHttpClient = new CryptoHttpClient(URI.create(serverBaseUrl), publicKeyPath);
+        this.cryptoHttpClient = new CryptoHttpClient(
+                URI.create(serverBaseUrl), publicKeyPath, keyRefreshMarginMillis);
     }
 
     @PostMapping("/bidirectional")
