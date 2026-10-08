@@ -317,7 +317,7 @@ Vault KV v2 的每个 RSA 密钥版本包含：
 
 例如 `secret/data/sensitive-transport-crypto/rsa-ciam` 对应 metadata 路径 `secret/metadata/sensitive-transport-crypto/rsa-ciam`。建议按应用或安全边界隔离路径和别名。
 
-双向加密和请求加密模式的请求体只包含以下密文。所有加密模式均通过 `X-STC-KEY-ID` 和 `X-STC-SESSION-KEY` 请求头传递 keyId 和 RSA-OAEP 加密的 AES 会话密钥：
+双向加密和请求加密模式的请求体只包含以下密文。所有加密模式均通过 `X-STC-Key-Id` 和 `X-STC-Session-Key` 请求头传递 keyId 和 RSA-OAEP 加密的 AES 会话密钥：
 
 ```json
 {

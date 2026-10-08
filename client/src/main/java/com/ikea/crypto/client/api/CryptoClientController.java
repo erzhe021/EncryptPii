@@ -194,9 +194,8 @@ public class CryptoClientController {
         long httpTime = System.currentTimeMillis();
 
         var rawResponse = objectMapper.readTree(httpResponse.body());
-        boolean encryptedResponse = httpResponse.statusCode() == 200
-                || (rawResponse != null
-                && (rawResponse.has("ivBase64") || rawResponse.has("encryptedDataBase64")));
+        boolean encryptedResponse = "true".equalsIgnoreCase(
+                httpResponse.headers().firstValue(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_ENCRYPTED).orElse(null));
         Object cipherResponse = "N/A";
         var plainResponse = rawResponse;
         if (encryptedResponse) {

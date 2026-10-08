@@ -93,9 +93,9 @@ function gateway(key, requests, sessions) {
     if (mode === 'normal') {
       return { statusCode: 200, data: result(request.data) };
     }
-    const session = unwrapSession(request.headers['X-STC-SESSION-KEY'], key);
+    const session = unwrapSession(request.headers['X-STC-Session-Key'], key);
     sessions.push(session.toString('hex'));
-    assert.equal(request.headers['X-STC-KEY-ID'], key.info.keyId);
+    assert.equal(request.headers['X-STC-Key-Id'], key.info.keyId);
     if (mode === 'bidirectional' || mode === 'request-only') {
       assert.deepEqual(Object.keys(request.data).sort(), ['encryptedDataBase64', 'ivBase64']);
     }
@@ -120,8 +120,8 @@ test('all modes preserve routing and interoperate with independent RSA/AES primi
     assert.equal(Boolean(detailed.cipherRequest), ['bidirectional', 'request-only'].includes(mode));
     assert.equal(Boolean(detailed.cipherResponse), ['bidirectional', 'response-only'].includes(mode));
     if (mode !== 'plain') {
-      assert.equal(detailed.stcHeaders['X-STC-KEY-ID'], firstKey.info.keyId);
-      assert.ok(detailed.stcHeaders['X-STC-SESSION-KEY']);
+      assert.equal(detailed.stcHeaders['X-STC-Key-Id'], firstKey.info.keyId);
+      assert.ok(detailed.stcHeaders['X-STC-Session-Key']);
     } else {
       assert.equal(detailed.stcHeaders, null);
     }
@@ -196,7 +196,7 @@ for (const mode of ['bidirectional', 'request-only', 'response-only']) {
       posts += 1;
       if (posts === 1) {
         originalSession = unwrapSession(
-          request.headers['X-STC-SESSION-KEY'], firstKey
+          request.headers['X-STC-Session-Key'], firstKey
         ).toString('hex');
         return { statusCode: 400, data: { code: 'KEY_EXPIRED', data: newKey.info } };
       }
@@ -259,7 +259,7 @@ test('detailed HTTP failures retain diagnostics and decrypt error bodies in ever
           const payload = errorBody;
           raw = payload;
         if (mode === 'bidirectional' || mode === 'response-only') {
-          const session = unwrapSession(request.headers['X-STC-SESSION-KEY'], firstKey);
+          const session = unwrapSession(request.headers['X-STC-Session-Key'], firstKey);
             raw = encryptResponse(payload, session);
         }
         return { statusCode, data: raw };
@@ -336,8 +336,8 @@ test('response-only exception requests route, transport session headers and decr
       posts += 1;
       assert.equal(request.url, `https://kong.example.com/crypto/server/${mode}`);
       assert.deepEqual(request.data, { data: 'hello world' });
-      assert.equal(request.headers['X-STC-KEY-ID'], firstKey.info.keyId);
-      const session = unwrapSession(request.headers['X-STC-SESSION-KEY'], firstKey);
+      assert.equal(request.headers['X-STC-Key-Id'], firstKey.info.keyId);
+      const session = unwrapSession(request.headers['X-STC-Session-Key'], firstKey);
       return { statusCode, data: encryptResponse(response, session) };
     }));
     let page;
@@ -375,7 +375,7 @@ test('response-only exception requests route, transport session headers and decr
     assert.equal(page.data.loading, false);
     assert.equal(page.data.result.requestCipher, 'N/A');
     assert.deepEqual(JSON.parse(page.data.result.requestPlain), { data: 'hello world' });
-    assert.ok(page.data.result.requestHeaders.includes('X-STC-SESSION-KEY'));
+    assert.ok(page.data.result.requestHeaders.includes('X-STC-Session-Key'));
     assert.ok(page.data.result.responseCipher.includes('encryptedDataBase64'));
     assert.deepEqual(JSON.parse(page.data.result.responsePlain), response);
     assert.ok(JSON.parse(page.data.result.latency).total >= 0);
@@ -400,7 +400,7 @@ test('demo page renders all five sections alongside the HTTP failure message', a
       requestPlain: { name: 'demo' }, requestCipher,
       responsePlain: { status: 500, message: 'demo error' }, responseCipher,
       requestHeaders: mode === 'plain' ? null
-        : { 'X-STC-KEY-ID': 'first', 'X-STC-SESSION-KEY': 'wrapped' },
+        : { 'X-STC-Key-Id': 'first', 'X-STC-Session-Key': 'wrapped' },
       latency: { total: 10, encryption: 2, http: 7, decryption: 1 },
       encryptRequest, decryptResponse
     };
@@ -489,7 +489,7 @@ test('invalid configuration, JSON and reserved headers fail explicitly', async (
   for (const extra of [{ baseUrl: 'http://kong.example.com' }, { timeoutMs: 0 },
     { baseUrl: 'https://host\\unexpected' }, { headers: 'not an object' },
     { headers: { Authorization: 'token\r\nInjected: value' } },
-    { headers: { 'x-stc-key-id': 'override' } }, { headers: { 'X-STC-SESSION-KEY': 'override' } }]) {
+    { headers: { 'X-STC-Key-Id': 'override' } }, { headers: { 'X-STC-Session-Key': 'override' } }]) {
     assert.throws(() => createClient(options(transport, extra)), { code: 'INVALID_ARGUMENT' });
   }
   const client = createClient(options(transport));
@@ -499,7 +499,7 @@ test('invalid configuration, JSON and reserved headers fail explicitly', async (
     { mode: 'toString', data: {} }, { mode: '__proto__', data: {} },
     { mode: 'plain', data: undefined }, { mode: 'plain', data: circular },
     { mode: 'plain', data: {}, headers: 'not an object' },
-    { mode: 'plain', data: {}, headers: { 'x-StC-SeSsIoN-kEy': 'override' } }
+    { mode: 'plain', data: {}, headers: { 'X-STC-Session-Key': 'override' } }
   ]) {
     await assert.rejects(client.send(input), { code: 'INVALID_ARGUMENT' });
   }
@@ -553,7 +553,7 @@ test('malformed, unauthenticated and non-JSON encrypted responses fail without r
     const client = createClient(options(async (request) => {
       if (request.method === 'GET') return { statusCode: 200, data: firstKey.info };
       posts += 1;
-      const session = unwrapSession(request.headers['X-STC-SESSION-KEY'], firstKey);
+      const session = unwrapSession(request.headers['X-STC-Session-Key'], firstKey);
       let payload = encryptResponse({ ok: true }, session);
       if (failure === 'missing') payload = null;
       else if (failure === 'base64') payload.encryptedDataBase64 = '*invalid*';

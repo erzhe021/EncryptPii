@@ -133,8 +133,8 @@ class CryptoHttpClientTest {
                 assertEquals("cipher-value", body.path("encryptedDataBase64").asText());
                 assertNull(body.get("keyId"));
                 assertNull(body.get("encryptedSessionKeyBase64"));
-                assertEquals("rsa-ciam:1", exchange.getRequestHeaders().getFirst("X-STC-KEY-ID"));
-                assertEquals("wrapped-session", exchange.getRequestHeaders().getFirst("X-STC-SESSION-KEY"));
+                assertEquals("rsa-ciam:1", exchange.getRequestHeaders().getFirst("X-STC-Key-Id"));
+                assertEquals("wrapped-session", exchange.getRequestHeaders().getFirst("X-STC-Session-Key"));
                 byte[] response = "{\"code\":\"0\",\"message\":null,\"data\":{}}"
                         .getBytes(java.nio.charset.StandardCharsets.UTF_8);
                 exchange.sendResponseHeaders(200, response.length);

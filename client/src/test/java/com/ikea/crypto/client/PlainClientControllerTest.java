@@ -103,7 +103,7 @@ class PlainClientControllerTest {
         assertTrue(request.headers().entrySet().stream().anyMatch(entry ->
                 entry.getKey().equalsIgnoreCase("Content-Type")
                         && entry.getValue().equals(List.of(MediaType.APPLICATION_JSON_VALUE))));
-        for (String header : new String[]{"X-STC-KEY-ID", "X-STC-SESSION-KEY", "X-Crypto-Gateway-Token"}) {
+        for (String header : new String[]{"X-STC-Key-Id", "X-STC-Session-Key", "X-Crypto-Gateway-Token"}) {
             assertTrue(request.headers().keySet().stream().noneMatch(header::equalsIgnoreCase));
         }
     }

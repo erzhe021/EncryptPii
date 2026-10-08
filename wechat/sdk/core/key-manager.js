@@ -2,7 +2,7 @@ const { SdkError } = require('./errors');
 const { PUBLIC_KEY_PATH } = require('./protocol');
 
 // Refresh cached keys slightly before expiry so requests never race the deadline.
-const KEY_REFRESH_MARGIN_MS = 30000;
+const KEY_REFRESH_MARGIN_MS = 1000;
 
 function isUsable(key) {
   return Boolean(key) && key.expiresAtEpochMillis - KEY_REFRESH_MARGIN_MS > Date.now();

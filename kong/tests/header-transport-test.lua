@@ -119,8 +119,8 @@ local encrypted_config = {
   upstream_auth_token = "upstream-token",
   upstream_path = "/upstream",
 }
-headers["X-STC-KEY-ID"] = "alias:1"
-headers["X-STC-SESSION-KEY"] = encrypted_session_key
+headers["X-STC-Key-Id"] = "alias:1"
+headers["X-STC-Session-Key"] = encrypted_session_key
 headers["Content-Length"] = tostring(#valid_body)
 request_body = valid_body
 exited = nil
@@ -130,10 +130,10 @@ assert(result == nil)
 assert(captured_key_id == "alias:1")
 assert(captured_encrypted_session_key ~= nil)
 assert(forwarded_body == "decrypted request")
-assert(cleared_headers["X-STC-KEY-ID"] and cleared_headers["X-STC-SESSION-KEY"])
+assert(cleared_headers["X-STC-Key-Id"] and cleared_headers["X-STC-Session-Key"])
 
-headers["X-STC-KEY-ID"] = "alias:1"
-headers["X-STC-SESSION-KEY"] = encrypted_session_key
+headers["X-STC-Key-Id"] = "alias:1"
+headers["X-STC-Session-Key"] = encrypted_session_key
 headers["Content-Length"] = nil
 request_body = '{"data":"plaintext request"}'
 forwarded_body = nil
@@ -148,7 +148,7 @@ result = plugin:access({
 assert(result == nil)
 assert(forwarded_body == nil, "response-only mode must preserve its plaintext request body")
 assert(kong.ctx.plugin.session_key == string.rep("s", 32))
-assert(cleared_headers["X-STC-KEY-ID"] and cleared_headers["X-STC-SESSION-KEY"])
+assert(cleared_headers["X-STC-Key-Id"] and cleared_headers["X-STC-Session-Key"])
 
 for _, legacy_fields in ipairs({
   '"keyId":"alias:1"',
@@ -166,7 +166,7 @@ for _, legacy_fields in ipairs({
     result.body.message)
 end
 
-headers["X-STC-SESSION-KEY"] = nil
+headers["X-STC-Session-Key"] = nil
 request_body = valid_body
 headers["Content-Length"] = tostring(#request_body)
 exited = nil
@@ -174,6 +174,6 @@ kong.ctx.plugin = {}
 result = plugin:access(encrypted_config)
 assert(result.status == 400)
 assert(result.body.message ==
-  "X-STC-KEY-ID and X-STC-SESSION-KEY are required; body key transport is unsupported")
+  "X-STC-Key-Id and X-STC-Session-Key are required; body key transport is unsupported")
 
 print("Header transport tests passed")

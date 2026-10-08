@@ -28,8 +28,9 @@ const MODES = Object.freeze({
 module.exports = {
   MODES,
   PUBLIC_KEY_PATH: '/crypto/server/public-key',
-  KEY_ID_HEADER: 'X-STC-KEY-ID',
-  SESSION_KEY_HEADER: 'X-STC-SESSION-KEY',
+  KEY_ID_HEADER: 'X-STC-Key-Id',
+  SESSION_KEY_HEADER: 'X-STC-Session-Key',
+  ENCRYPTED_RESPONSE_HEADER: 'X-STC-Encrypted',
   SESSION_KEY_BYTES: 32,
   IV_BYTES: 12,
   TAG_BYTES: 16,

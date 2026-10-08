@@ -32,7 +32,7 @@ Keep a client per Kong origin/authentication context. The public key and parsed
 RSA key caches are instance-local. No session key is persisted or returned.
 Request-specific authentication headers can also be passed to `send`.
 Header names are checked case-insensitively: callers cannot override
-`X-STC-KEY-ID` or `X-STC-SESSION-KEY`.
+`X-STC-Key-Id` or `X-STC-Session-Key`.
 
 The minimum supported WeChat base library is **3.4.10** (the demo's configured
 baseline). A runtime without `wx.getRandomValues` can still send plain requests;
@@ -55,7 +55,7 @@ Validate deployment on real devices as well as the simulator.
 | `response-only/system-exception` | JSON + session-key headers | Decrypted HTTP 500 error |
 | `response-only/business-exception` | JSON + session-key headers | Decrypted HTTP 200 business error |
 
-For encrypted modes, `X-STC-KEY-ID` and `X-STC-SESSION-KEY` are the only
+For encrypted modes, `X-STC-Key-Id` and `X-STC-Session-Key` are the only
 transport for key metadata and the RSA-wrapped AES session key. Encrypted
 request bodies contain only `ivBase64` and `encryptedDataBase64`; Kong rejects
 the old body-key protocol.

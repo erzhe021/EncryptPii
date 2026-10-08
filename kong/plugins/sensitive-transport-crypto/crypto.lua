@@ -69,7 +69,7 @@ function Crypto.decrypt_request_body(body, session_key)
   end
 
   if payload.keyId ~= nil or payload.encryptedSessionKeyBase64 ~= nil then
-    return nil, "session key fields are forbidden in the request body; use X-STC-KEY-ID and X-STC-SESSION-KEY"
+    return nil, "session key fields are forbidden in the request body; use X-STC-Key-Id and X-STC-Session-Key"
   end
   for field in pairs(payload) do
     if field ~= "ivBase64" and field ~= "encryptedDataBase64" then

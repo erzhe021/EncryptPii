@@ -53,8 +53,8 @@ class CryptoClientRetryTest {
         });
         server.createContext("/crypto/server/request-only", exchange -> {
             var payload = objectMapper.readTree(exchange.getRequestBody());
-            requestKeyIds.add(exchange.getRequestHeaders().getFirst("X-STC-KEY-ID"));
-            requestSessionKeys.add(exchange.getRequestHeaders().getFirst("X-STC-SESSION-KEY"));
+            requestKeyIds.add(exchange.getRequestHeaders().getFirst("X-STC-Key-Id"));
+            requestSessionKeys.add(exchange.getRequestHeaders().getFirst("X-STC-Session-Key"));
             if (payload.size() != 2 || payload.has("keyId") || payload.has("encryptedSessionKeyBase64")) {
                 respond(exchange, 400, "{\"code\":\"INVALID_BODY\"}");
                 return;
@@ -117,8 +117,8 @@ class CryptoClientRetryTest {
                 return;
             }
             int attempt = modeAttempts.computeIfAbsent(path, ignored -> new AtomicInteger()).incrementAndGet();
-            String keyId = exchange.getRequestHeaders().getFirst("X-STC-KEY-ID");
-            String encryptedSessionKey = exchange.getRequestHeaders().getFirst("X-STC-SESSION-KEY");
+            String keyId = exchange.getRequestHeaders().getFirst("X-STC-Key-Id");
+            String encryptedSessionKey = exchange.getRequestHeaders().getFirst("X-STC-Session-Key");
             keyIds.add(keyId);
             sessionHeaders.add(encryptedSessionKey);
             var body = objectMapper.readTree(exchange.getRequestBody());
@@ -213,7 +213,7 @@ class CryptoClientRetryTest {
                 return;
             }
             String variant = path.substring(path.lastIndexOf('/') + 1);
-            String sessionHeader = exchange.getRequestHeaders().getFirst("X-STC-SESSION-KEY");
+            String sessionHeader = exchange.getRequestHeaders().getFirst("X-STC-Session-Key");
             sessions.computeIfAbsent(variant, ignored -> new CopyOnWriteArrayList<>()).add(sessionHeader);
             int attempt = attempts.computeIfAbsent(variant, ignored -> new AtomicInteger()).incrementAndGet();
             var request = mapper.readTree(exchange.getRequestBody());
@@ -227,7 +227,7 @@ class CryptoClientRetryTest {
                         Map.of("code", "KEY_EXPIRED", "data", publicKey)));
                 return;
             }
-            if (!"rsa-ciam:2".equals(exchange.getRequestHeaders().getFirst("X-STC-KEY-ID"))) {
+            if (!"rsa-ciam:2".equals(exchange.getRequestHeaders().getFirst("X-STC-Key-Id"))) {
                 respond(exchange, 400, "{\"message\":\"wrong key version\"}");
                 return;
             }
@@ -264,9 +264,9 @@ class CryptoClientRetryTest {
                 int expectedStatus = "client-exception".equals(variant) ? 400
                         : "system-exception".equals(variant) ? 500 : 200;
                 assertEquals(expectedStatus, details.path("response").path("status").asInt());
-                assertEquals("rsa-ciam:2", details.path("request").path("headers").path("X-STC-KEY-ID").asText());
+                assertEquals("rsa-ciam:2", details.path("request").path("headers").path("X-STC-Key-Id").asText());
                 assertEquals(sessions.get(variant).get(1),
-                        details.path("request").path("headers").path("X-STC-SESSION-KEY").asText());
+                        details.path("request").path("headers").path("X-STC-Session-Key").asText());
                 assertTrue(details.path("response").path("cipher").has("encryptedDataBase64"));
                 assertEquals(expectedStatus == 200 ? "business error" : "sensitive error",
                         details.path("response").path("plain").path("message").asText());

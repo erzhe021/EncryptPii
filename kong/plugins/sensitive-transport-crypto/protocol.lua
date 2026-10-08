@@ -2,9 +2,10 @@
 
 local Protocol = {
   -- Transport headers.
-  KEY_ID_HEADER = "X-STC-KEY-ID",
-  SESSION_KEY_HEADER = "X-STC-SESSION-KEY",
+  KEY_ID_HEADER = "X-STC-Key-Id",
+  SESSION_KEY_HEADER = "X-STC-Session-Key",
   GATEWAY_TOKEN_HEADER = "X-Crypto-Gateway-Token",
+  ENCRYPTED_RESPONSE_HEADER = "X-STC-Encrypted",
 
   -- Payload / response encoding.
   CONTENT_TYPE_JSON = "application/json",

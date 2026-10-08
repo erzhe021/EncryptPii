@@ -65,6 +65,10 @@
       <view class="result-label">{{result.requestCipherLabel}}</view>
       <text class="result-content" selectable>{{result.requestCipher}}</text>
     </view>
+    <view wx:if="{{result.responseHeaders}}" class="result-block">
+      <view class="result-label">{{result.responseHeadersLabel}}</view>
+      <text class="result-content" selectable>{{result.responseHeaders}}</text>
+    </view>
     <view class="result-block">
       <view class="result-label">{{result.responseCipherLabel}}</view>
       <text class="result-content" selectable>{{result.responseCipher}}</text>

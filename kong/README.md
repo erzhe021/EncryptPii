@@ -46,8 +46,8 @@
 
 | 请求头 | 内容 |
 | --- | --- |
-| `X-STC-KEY-ID` | `<keyAlias>:<version>`，例如 `rsa-ciam:2` |
-| `X-STC-SESSION-KEY` | RSA 加密后的 AES 会话密钥的 Base64 字符串，不能传明文会话密钥 |
+| `X-STC-Key-Id` | `<keyAlias>:<version>`，例如 `rsa-ciam:2` |
+| `X-STC-Session-Key` | RSA 加密后的 AES 会话密钥的 Base64 字符串，不能传明文会话密钥 |
 
 双向加密和请求加密的请求体只包含以下两个字段；响应加密的请求体保持原业务明文结构，也可无请求体：
 

@@ -53,12 +53,30 @@ function resultLabel(title, transmitted, value, direction) {
 }
 
 function buildResult(details) {
+  const responseHeaderName = 'x-stc-encrypted';
+  const responseHeaderValue = details.responseHeaders
+    ? Object.keys(details.responseHeaders).reduce((found, key) => {
+        if (found !== null || !key) {
+          return found;
+        }
+        if (key.toLowerCase() === responseHeaderName) {
+          return details.responseHeaders[key];
+        }
+        return null;
+      }, null)
+    : null;
+
+  const normalizedHeader = responseHeaderValue !== null && responseHeaderValue !== undefined
+    ? { 'X-STC-Encrypted': String(responseHeaderValue) }
+    : null;
+
   const values = {
     requestHeaders: details.requestHeaders ? formatResult(details.requestHeaders) : null,
     requestPlain: formatResult(details.requestPlain),
     requestCipher: details.requestCipher ? formatResult(details.requestCipher) : 'N/A',
     responsePlain: details.responsePlain === null ? 'N/A' : formatResult(details.responsePlain),
     responseCipher: details.responseCipher ? formatResult(details.responseCipher) : 'N/A',
+    responseHeaders: normalizedHeader ? formatResult(normalizedHeader) : null,
     latency: formatResult(details.latency)
   };
   return {
@@ -66,7 +84,8 @@ function buildResult(details) {
     requestPlainLabel: resultLabel('请求体明文', !details.encryptRequest, values.requestPlain, '实发'),
     requestCipherLabel: resultLabel('请求体密文', details.encryptRequest, values.requestCipher, '实发'),
     responsePlainLabel: resultLabel('响应体明文', !details.decryptResponse, values.responsePlain, '实收'),
-    responseCipherLabel: resultLabel('响应体密文', details.decryptResponse, values.responseCipher, '实收')
+    responseCipherLabel: resultLabel('响应体密文', details.decryptResponse, values.responseCipher, '实收'),
+    responseHeadersLabel: '响应头(实收)'
   };
 }
 
@@ -129,11 +148,15 @@ Page({
       if (!outcome.ok) {
         this.setData({ error: errorMessage(outcome.error) });
       }
-      if (outcome.details) {
-        this.setData({ result: buildResult(outcome.details) });
+      const resultDetails = outcome.details || (outcome.error && outcome.error.details);
+      if (resultDetails) {
+        this.setData({ result: buildResult(resultDetails) });
       }
     } catch (error) {
       this.setData({ error: errorMessage(error) });
+      if (error && error.details) {
+        this.setData({ result: buildResult(error.details) });
+      }
     } finally {
       this.setData({ loading: false });
     }

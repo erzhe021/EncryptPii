@@ -6,9 +6,23 @@ local size_limit = require "kong.plugins.sensitive-transport-crypto.size_limit"
 
 local Response = {}
 
+local function should_encrypt_response()
+  local ctx = kong.ctx.plugin
+  if not ctx or not ctx.session_key then
+    return false
+  end
+  if ctx.encrypt_response == false then
+    return false
+  end
+  if ctx.plain_error_response == true then
+    return false
+  end
+  return true
+end
+
 function Response.header_filter()
   local ctx = kong.ctx.plugin
-  if not ctx.session_key then
+  if not should_encrypt_response() then
     return
   end
 
@@ -17,12 +31,13 @@ function Response.header_filter()
   kong.response.clear_header("ETag")
   kong.response.clear_header("Content-MD5")
   kong.response.set_header("Content-Type", headers.CONTENT_TYPE_JSON)
+  kong.response.set_header(headers.ENCRYPTED_RESPONSE_HEADER, "true")
   size_limit.begin_response_capture(ctx, ctx.max_body_bytes)
 end
 
 function Response.body_filter()
   local ctx = kong.ctx.plugin
-  if not ctx.session_key then
+  if not should_encrypt_response() then
     return
   end
 
@@ -36,6 +51,7 @@ function Response.body_filter()
   if ctx.response_failed then
     ngx.status = 502
     ngx.header["Content-Type"] = headers.CONTENT_TYPE_JSON
+    ngx.header[headers.ENCRYPTED_RESPONSE_HEADER] = "false"
     ngx.arg[1] = '{"message":"Upstream response exceeds the crypto plugin size limit"}'
     ngx.arg[2] = true
     return
@@ -49,6 +65,8 @@ function Response.body_filter()
   local response_body = crypto.encrypt_response(ctx.session_key, plaintext)
   if not response_body then
     ngx.status = 502
+    ngx.header["Content-Type"] = headers.CONTENT_TYPE_JSON
+    ngx.header[headers.ENCRYPTED_RESPONSE_HEADER] = "false"
     ngx.arg[1] = '{"message":"Response encryption failed"}'
     ngx.arg[2] = true
     return
@@ -59,4 +77,3 @@ function Response.body_filter()
 end
 
 return Response
-

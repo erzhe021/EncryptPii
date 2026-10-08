@@ -29,6 +29,10 @@ local function expired_or_invalid_key_response(key_error_code, config)
 end
 
 function Access.run(config)
+  kong.ctx.plugin = kong.ctx.plugin or {}
+  kong.ctx.plugin.encrypt_response = config.encrypt_response
+  kong.ctx.plugin.plain_error_response = nil
+
   if config.serve_public_key then
     local public_key_response, public_key_err = keys.get_public_key_response(config)
     if not public_key_response then
@@ -36,6 +40,7 @@ function Access.run(config)
       return errors.json_error(503, "Public key is unavailable")
     end
     return kong.response.exit(200, public_key_response, {
+      [headers.ENCRYPTED_RESPONSE_HEADER] = "false",
       ["Cache-Control"] = "no-store",
     })
   end
@@ -55,7 +60,7 @@ function Access.run(config)
     local encrypted_session_key = kong.request.get_header(headers.SESSION_KEY_HEADER)
     if type(key_id) ~= "string" or key_id == ""
       or type(encrypted_session_key) ~= "string" or encrypted_session_key == "" then
-      return errors.json_error(400, "X-STC-KEY-ID and X-STC-SESSION-KEY are required; body key transport is unsupported")
+      return errors.json_error(400, "X-STC-Key-Id and X-STC-Session-Key are required; body key transport is unsupported")
     end
     local session_err, error_status, key_error_code
     session_key, session_err, error_status, key_error_code = crypto.decrypt_session_key(
@@ -85,7 +90,7 @@ function Access.run(config)
         return response
       end
       local message = "Invalid or undecryptable encrypted request"
-      if decrypt_err == "session key fields are forbidden in the request body; use X-STC-KEY-ID and X-STC-SESSION-KEY"
+      if decrypt_err == "session key fields are forbidden in the request body; use X-STC-Key-Id and X-STC-Session-Key"
         or decrypt_err == "request body may contain only ivBase64 and encryptedDataBase64" then
         message = decrypt_err
       end
@@ -111,4 +116,3 @@ function Access.run(config)
 end
 
 return Access
-
