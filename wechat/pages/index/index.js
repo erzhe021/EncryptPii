@@ -1,4 +1,5 @@
 const { callApi } = require('../../utils/api');
+const { HttpError } = require('../../sdk/core/errors');
 
 const MODES = [
   { id: 'plain', title: '普通传输', description: '明文请求与响应' },
@@ -18,8 +19,7 @@ const ERROR_MESSAGES = {
   ENCRYPTION_FAILED: '请求加密失败。',
   INVALID_CIPHER_PAYLOAD: '加密响应格式无效。',
   DECRYPTION_FAILED: '响应认证或解密失败。',
-  INVALID_RESPONSE: '服务响应格式无效。',
-  KEY_RETRY_FAILED: '公钥刷新后重试失败。'
+  INVALID_RESPONSE: '服务响应格式无效。'
 };
 
 function isResponseOnly(mode) {
@@ -54,17 +54,11 @@ function resultLabel(title, transmitted, value, direction) {
 
 function buildResult(details) {
   const responseHeaderName = 'x-stc-encrypted';
-  const responseHeaderValue = details.responseHeaders
-    ? Object.keys(details.responseHeaders).reduce((found, key) => {
-        if (found !== null || !key) {
-          return found;
-        }
-        if (key.toLowerCase() === responseHeaderName) {
-          return details.responseHeaders[key];
-        }
-        return null;
-      }, null)
+  const headerKey = details.responseHeaders
+    ? Object.keys(details.responseHeaders).find(
+        (key) => key && key.toLowerCase() === responseHeaderName)
     : null;
+  const responseHeaderValue = headerKey ? details.responseHeaders[headerKey] : null;
 
   const normalizedHeader = responseHeaderValue !== null && responseHeaderValue !== undefined
     ? { 'X-STC-Encrypted': String(responseHeaderValue) }
@@ -90,9 +84,10 @@ function buildResult(details) {
 }
 
 function errorMessage(error) {
-  return error.code === 'HTTP_ERROR'
-    ? `请求失败（HTTP ${error.statusCode}）`
-    : ERROR_MESSAGES[error.code] || '请求失败';
+  if (error instanceof HttpError) {
+    return `请求失败（HTTP ${error.statusCode}）`;
+  }
+  return ERROR_MESSAGES[error.code] || '请求失败';
 }
 
 Page({

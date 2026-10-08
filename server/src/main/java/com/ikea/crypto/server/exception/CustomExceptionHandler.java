@@ -1,6 +1,6 @@
 package com.ikea.crypto.server.exception;
 
-import com.ikea.crypto.server.model.Non200Result;
+import com.ikea.crypto.server.model.ErrorResult;
 import com.ikea.crypto.server.model.Result;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
@@ -46,14 +46,14 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
             log.warn("ConstraintViolationException, request: {}, exception: {}, invalid value: {}",
                     path, errorMsg, item.getInvalidValue());
         }
-        return handleNon200Response(errorMsg, HttpStatus.BAD_REQUEST, path);
+        return handleErrorResponse(errorMsg, HttpStatus.BAD_REQUEST, path);
     }
 
     @ExceptionHandler({IllegalArgumentException.class})
     protected ResponseEntity<Object> handleIllegalArgument(IllegalArgumentException ex, WebRequest request) {
         String path = getPath(request);
         log.warn("IllegalArgumentException, request: {}, exception: {}", path, ex.getMessage());
-        return handleNon200Response(ex.getMessage(), HttpStatus.BAD_REQUEST, path);
+        return handleErrorResponse(ex.getMessage(), HttpStatus.BAD_REQUEST, path);
     }
 
     @ExceptionHandler({BusinessException.class})
@@ -75,7 +75,7 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
         } else {
             log.error("SystemException, request: {}, exception: {}", path, systemException.getMessage());
         }
-        return handleNon200Response(systemException.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, path);
+        return handleErrorResponse(systemException.getMessage(), HttpStatus.INTERNAL_SERVER_ERROR, path);
     }
 
     @ExceptionHandler({Exception.class})
@@ -84,7 +84,7 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
         String path = getPath(request);
         String errorMsg = ex.getMessage();
         log.error("Unspecific exception, request: {}, exception: {}", path, errorMsg, ex);
-        return handleNon200Response(errorMsg, HttpStatus.INTERNAL_SERVER_ERROR, path);
+        return handleErrorResponse(errorMsg, HttpStatus.INTERNAL_SERVER_ERROR, path);
     }
 
 
@@ -172,9 +172,9 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
         return resultBuilder.toString();
     }
 
-    private ResponseEntity<Object> handleNon200Response(String errorMsg, HttpStatus httpStatus, String path) {
+    private ResponseEntity<Object> handleErrorResponse(String errorMsg, HttpStatus httpStatus, String path) {
 
-        Non200Result body = Non200Result.builder()
+        ErrorResult body = ErrorResult.builder()
                 .timestamp(System.currentTimeMillis())
                 .status(httpStatus.value())
                 .error(httpStatus.getReasonPhrase())
@@ -187,7 +187,7 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
     private ResponseEntity<Object> handleOverriddenException(
             Exception ex, HttpHeaders headers, HttpStatusCode status, WebRequest request, String errorMsg) {
 
-        Non200Result body = Non200Result.builder()
+        ErrorResult body = ErrorResult.builder()
                 .timestamp(System.currentTimeMillis())
                 .status(status.value())
                 .error(status.toString())

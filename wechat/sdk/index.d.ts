@@ -66,7 +66,7 @@ export interface Client {
 export type ErrorCode =
   | 'INVALID_ARGUMENT' | 'HTTP_ERROR' | 'NETWORK_ERROR' | 'RANDOM_UNAVAILABLE'
   | 'INVALID_SERVER_KEY' | 'ENCRYPTION_FAILED' | 'INVALID_CIPHER_PAYLOAD'
-  | 'DECRYPTION_FAILED' | 'INVALID_RESPONSE' | 'KEY_RETRY_FAILED';
+  | 'DECRYPTION_FAILED' | 'INVALID_RESPONSE';
 
 export class SdkError extends Error {
   constructor(code: ErrorCode, message: string, cause?: unknown);
@@ -77,10 +77,11 @@ export class SdkError extends Error {
 }
 
 export class HttpError extends SdkError {
-  constructor(statusCode: number, data: unknown);
+  constructor(statusCode: number, data: unknown, headers?: Record<string, string>);
   statusCode: number;
   /** May contain sensitive server data; do not log by default. */
   data: unknown;
+  headers: Record<string, string>;
 }
 
 export interface WechatPlatform {

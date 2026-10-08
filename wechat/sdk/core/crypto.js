@@ -29,8 +29,8 @@ function createCrypto(randomBytes) {
       throw new SdkError('RANDOM_UNAVAILABLE', 'Random source returned invalid bytes');
     }
     let binary = '';
-    for (const element of bytes) {
-      binary += String.fromCodePoint(element);
+    for (let i = 0; i < bytes.length; i += 0x8000) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
     }
     return binary;
   }

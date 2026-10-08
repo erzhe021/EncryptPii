@@ -1,5 +1,5 @@
 const { SdkError, HttpError } = require('./errors');
-const {MODES, KEY_ID_HEADER, SESSION_KEY_HEADER, ENCRYPTED_RESPONSE_HEADER} = require('./protocol');
+const { MODES, KEY_ID_HEADER, SESSION_KEY_HEADER, ENCRYPTED_RESPONSE_HEADER } = require('./protocol');
 const { createKeyManager } = require('./key-manager');
 const { createCrypto } = require('./crypto');
 
@@ -30,16 +30,24 @@ function parseResult(response) {
   return response;
 }
 
+// Reject oversized payloads before they reach the synchronous Forge
+// routines; a multi-megabyte string would freeze the JS thread.
+const MAX_PAYLOAD_BYTES = 1024 * 1024;
+
 function serializeData(data) {
+  let serialized;
   try {
-    const serialized = JSON.stringify(data);
-    if (serialized === undefined) {
-      throw new Error('Data is not JSON serializable');
-    }
-    return serialized;
+    serialized = JSON.stringify(data);
   } catch (cause) {
     throw new SdkError('INVALID_ARGUMENT', 'Data must be JSON serializable', cause);
   }
+  if (serialized === undefined) {
+    throw new SdkError('INVALID_ARGUMENT', 'Data is not JSON serializable');
+  }
+  if (serialized.length > MAX_PAYLOAD_BYTES) {
+    throw new SdkError('INVALID_ARGUMENT', `Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
+  }
+  return serialized;
 }
 
 function isCipherEnvelope(value) {
@@ -55,30 +63,30 @@ function isKeyExpiredHttpError(error) {
 }
 
 function headerValue(headers, name) {
-    if (!headers || typeof headers !== 'object') {
-        return null;
-    }
-    const direct = headers[name] ?? headers[name.toLowerCase()];
-    if (typeof direct === 'string' && direct.length > 0) {
-        return direct;
-    }
-    for (const key of Object.keys(headers)) {
-        if (key && key.toLowerCase() === name.toLowerCase()) {
-            const value = headers[key];
-            if (typeof value === 'string' && value.length > 0) {
-                return value;
-            }
-        }
-    }
+  if (!headers || typeof headers !== 'object') {
     return null;
+  }
+  const direct = headers[name] ?? headers[name.toLowerCase()];
+  if (typeof direct === 'string' && direct.length > 0) {
+    return direct;
+  }
+  for (const key of Object.keys(headers)) {
+    if (key && key.toLowerCase() === name.toLowerCase()) {
+      const value = headers[key];
+      if (typeof value === 'string' && value.length > 0) {
+        return value;
+      }
+    }
+  }
+  return null;
 }
 
-function isEncryptedResponse(headers, raw, hasHttpError) {
-    const flag = headerValue(headers, ENCRYPTED_RESPONSE_HEADER);
-    if (flag !== null) {
-        return /^true$/i.test(flag);
-    }
-    return Boolean(raw) && typeof raw === 'object' && isCipherEnvelope(raw);
+function isEncryptedResponse(headers, raw) {
+  const flag = headerValue(headers, ENCRYPTED_RESPONSE_HEADER);
+  if (flag !== null) {
+    return /^true$/i.test(flag);
+  }
+  return Boolean(raw) && typeof raw === 'object' && isCipherEnvelope(raw);
 }
 
 function createClient(options) {
@@ -97,7 +105,7 @@ function createClient(options) {
   const transport = options.transport;
   const crypto = createCrypto(options.randomBytes);
 
-    async function fetchRaw(path, requestOptions) {
+  async function fetchRaw(path, requestOptions) {
     let response;
     try {
       response = await transport({
@@ -118,27 +126,27 @@ function createClient(options) {
     if (!response || !Number.isInteger(response.statusCode)) {
       throw new SdkError('INVALID_RESPONSE', 'Transport returned an invalid HTTP response');
     }
-        const headers = response.headers || response.header || {};
+    const headers = response.headers || response.header || {};
     if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw new HttpError(response.statusCode, response.data, headers, requestOptions && requestOptions.headers ? requestOptions.headers : {});
+      throw new HttpError(response.statusCode, response.data, headers);
     }
-        return {data: response.data, headers};
-    }
+    return { data: response.data, headers };
+  }
 
-    async function request(path, requestOptions) {
-        const response = await fetchRaw(path, requestOptions);
+  async function request(path, requestOptions) {
+    const response = await fetchRaw(path, requestOptions);
     return response.data;
   }
 
   const keys = createKeyManager(request);
 
-  async function sendOnce(mode, serialized, data, headers, serverKey, startedAt) {
+  async function sendOnce(mode, inputData, headers, serverKey, startedAt) {
     const encrypted = mode.encryptRequest || mode.decryptResponse;
     const encryptionStartedAt = Date.now();
     const session = encrypted
-      ? await crypto.prepare(serialized, serverKey, mode.encryptRequest) : null;
+      ? await crypto.prepare(serializeData(inputData), serverKey, mode.encryptRequest) : null;
     const encryptionFinishedAt = Date.now();
-    const body = mode.encryptRequest ? session.payload : data;
+    const body = mode.encryptRequest ? session.payload : inputData;
     const requestHeaders = Object.assign({}, headers);
     if (encrypted) {
       requestHeaders[KEY_ID_HEADER] = serverKey.keyId;
@@ -146,23 +154,24 @@ function createClient(options) {
     }
 
     let raw;
-      let responseHeaders = {};
+    let responseHeaders = {};
     let httpError = null;
     try {
-        const response = await fetchRaw(mode.endpoint, {data: body, headers: requestHeaders});
-        raw = response.data;
-        responseHeaders = response.headers;
+      const response = await fetchRaw(mode.endpoint, { data: body, headers: requestHeaders });
+      raw = response.data;
+      responseHeaders = response.headers;
     } catch (error) {
       if (!(error instanceof HttpError)) {
         throw error;
       }
       httpError = error;
       raw = error.data;
-        responseHeaders = error.headers;
+      responseHeaders = error.headers;
     }
     const httpFinishedAt = Date.now();
 
-      const decryptResponse = mode.decryptResponse && isEncryptedResponse(responseHeaders, raw, httpError);
+    const decryptResponse = mode.decryptResponse && isEncryptedResponse(responseHeaders, raw);
+
     let value = raw;
     let responseError = null;
     if (decryptResponse) {
@@ -194,7 +203,7 @@ function createClient(options) {
       decryptResponse: mode.decryptResponse,
       cipherRequest: mode.encryptRequest ? body : null,
       cipherResponse: decryptResponse ? raw : null,
-        responseHeaders: responseHeaders && Object.keys(responseHeaders).length > 0 ? responseHeaders : null,
+      responseHeaders: responseHeaders && Object.keys(responseHeaders).length > 0 ? responseHeaders : null,
       stcHeaders: encrypted
         ? {
           [KEY_ID_HEADER]: requestHeaders[KEY_ID_HEADER],
@@ -217,15 +226,13 @@ function createClient(options) {
     }
     const mode = MODES[input.mode];
     const headers = normalizeHeaders(input.headers);
-    const serialized = serializeData(input.data);
-    const data = JSON.parse(serialized);
     const startedAt = Date.now();
     const encrypted = mode.encryptRequest || mode.decryptResponse;
     let serverKey = encrypted ? await keys.get(headers) : null;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const { details, httpError, responseError } =
-        await sendOnce(mode, serialized, data, headers, serverKey, startedAt);
+        await sendOnce(mode, input.data, headers, serverKey, startedAt);
       if (httpError && encrypted && attempt === 0 && isKeyExpiredHttpError(httpError)) {
         if (typeof console !== 'undefined' && typeof console.log === 'function') {
           console.log('Server key expired, attempting to install new key...',
@@ -249,7 +256,6 @@ function createClient(options) {
       }
       return detailed ? details : details.data;
     }
-    throw new SdkError('KEY_RETRY_FAILED', 'Server key retry failed');
   }
 
   return {

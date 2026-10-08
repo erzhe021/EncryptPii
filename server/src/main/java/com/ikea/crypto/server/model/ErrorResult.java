@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class Non200Result {
+public class ErrorResult {
 
     private Long timestamp;
 

@@ -2,9 +2,18 @@
 
 EncryptPii 演示如何使用 Java 客户端、Kong Lua 插件和 HashiCorp Vault KV v2 实现应用层加密。Kong 从 Vault 获取 RSA 密钥，在网关解密请求、加密响应；Spring Server 只处理明文业务数据，不直接访问 Vault。
 
-默认部署方式是在 Docker Desktop Kubernetes 中运行 Client、Kong、Server 和 Vault。部署脚本要求当前 Kubernetes context 为 `docker-desktop`，并依赖 Docker Desktop 的本地镜像导入方式；迁移到其他集群前，需要调整镜像分发、存储和部署配置。
+默认部署方式是在 Docker Desktop Kubernetes 中运行 Client、Kong、Server、Vault，以及微信小程序演示和 SDK。部署脚本要求当前 Kubernetes context 为 `docker-desktop`，并依赖 Docker Desktop 的本地镜像导入方式；迁移到其他集群前，需要调整镜像分发、存储和部署配置。
 
 > 本项目用于本地演示，不是开箱即用的生产方案。应用层加密不能替代 TLS。客户端到网关、网关到上游之间可能存在明文，演示 API 也会返回诊断或敏感数据，不应直接暴露到公网。
+
+## 组件总览
+
+- Java Client: `client/`，演示加密/明文调用，内置 `application.yml` 路由配置
+- Spring Server: `server/`，仅处理明文业务请求，`/plain/server/normal` 和 `crypto/server/*` 端点
+- Kong Gateway: `kong/`，DB-less 部署、Kubernetes auth 访问 Vault、Lua 插件 `sensitive-transport-crypto`
+- Vault: `vault/`，本地 Kubernetes 部署、KV v2 密钥管理、RSA 版本化存储和轮换
+- WeChat 小程序和 SDK: `wechat/`、`wechat/sdk/`，直接访问 Kong，演示同一套协议
+- 本地 HTTPS/代理调试: `mitmproxy.md`，说明开发机证书信任和 `local.kong.test` 配置
 
 ## 架构与数据流
 
@@ -38,14 +47,29 @@ Client POST /plain/client/normal
 ```text
 .env.example                         根目录配置模板
 .env                                 本地配置与凭据，不提交 Git
+README.md                            仓库总览与部署入口
+mitmproxy.md                         本机抓包/证书信任说明
 client/                              Java 加密客户端、API 与 Kubernetes 清单
 server/                              Spring Boot 明文业务服务与 Kubernetes 清单
 kong/                                Kong 插件、镜像、部署脚本和说明
 vault/                               Vault 部署、初始化、轮换、迁移脚本和说明
+wechat/                              微信小程序演示，直接对接 Kong
+wechat/sdk/                          可独立发布的微信 SDK，封装协议与公钥缓存
 scripts/                             本地 Kubernetes 镜像、清理和重建工具
 ```
 
-组件细节见 [`kong/README.md`](kong/README.md) 和 [`vault/README.md`](vault/README.md)。
+组件细节见 [`kong/README.md`](kong/README.md)、[`vault/README.md`](vault/README.md)、[`wechat/README.md`](wechat/README.md) 和 [`wechat/sdk/README.md`](wechat/sdk/README.md)。
+
+## 快速上手：建议顺序
+
+1. 配置根目录 `.env`，至少填写 Vault 路径、密钥别名、共享网关 token 和 Kong TLS 证书路径
+2. 部署 Vault：`./vault/scripts/deploy-to-k8s.sh`
+3. 部署 Server：`./server/scripts/deploy-to-k8s.sh`
+4. 部署 Kong：`./kong/scripts/deploy-to-k8s.sh`
+5. 部署 Client：`./client/scripts/deploy-to-k8s.sh`
+6. 使用浏览器或 Java 客户端访问 `http://localhost:18080`；微信小程序则使用 `https://local.kong.test:18443`
+
+如果需要本地 HTTPS 代理及证书信任，先阅读 [`mitmproxy.md`](mitmproxy.md)；如果使用微信小程序开发者工具，需把 Kong 域名加入合法请求域名，并确保证书 SAN 与目标域名匹配。
 
 ## 从零部署到本地 Kubernetes
 
@@ -143,7 +167,7 @@ Server 集群内地址为 `http://encryptpii-server.encryptpii.svc.cluster.local
 
 脚本构建并导入自定义 Kong 镜像、生成 DB-less 声明式配置、将 Server 的 gateway Secret 复制到 `kong` namespace 并部署。Kong 通过 `kong/encryptpii-kong` ServiceAccount 使用 Vault 的 `encryptpii-kong` Kubernetes auth role 获取短期 token；Vault 地址为集群内的 `vault.vault.svc.cluster.local:8200`。
 
-部署前需在 `.env` 配置 TLS 证书/私钥路径并准备好 PEM 文件；脚本会创建 TLS Secret 并启用 Kong 的 `8443` HTTPS 代理端口。证书生成和本机 HTTPS 测试示例见 [`kong/README.md`](kong/README.md)。Kong 配置了四条加密路由和一条不挂插件的明文路由。不需要 PostgreSQL 或 Kong Ingress Controller。DB-less 模式不支持通过 Admin API 写入配置，因此不要对该部署运行 `configure-routes.sh`；修改路由、插件配置、镜像或 Secret 后重新运行部署脚本。
+��署前需在 `.env` 配置 TLS 证书/私钥路径并准备好 PEM 文件；脚本会创建 TLS Secret 并启用 Kong 的 `8443` HTTPS 代理端口。证书生成和本机 HTTPS 测试示例见 [`kong/README.md`](kong/README.md)。Kong 配置了四条加密路由和一条不挂插件的明文路由。不需要 PostgreSQL 或 Kong Ingress Controller。DB-less 模式不支持通过 Admin API 写入配置，因此不要对该部署运行 `configure-routes.sh`；修改路由、插件配置、镜像或 Secret 后重新运行部署脚本。
 
 ### 6. 部署 Client
 
@@ -228,7 +252,7 @@ plain:
 
 ## 构建、重部署与镜像导入
 
-Client、Server 和 Kong 的部署脚本都会构建镜像、导入本地 Kubernetes 节点并重启 Deployment。若对应标签的镜像已构建，可使用 `--skip-build`：
+Client、Server 和 Kong 的部署脚本都会构建镜像、导入本地 Kubernetes ��点并重启 Deployment。若对应标签的镜像已构建，可使用 `--skip-build`：
 
 ```bash
 ./server/scripts/deploy-to-k8s.sh --skip-build

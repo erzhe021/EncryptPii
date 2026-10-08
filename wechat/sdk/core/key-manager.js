@@ -1,3 +1,4 @@
+const forge = require('../lib/forge.min.js');
 const { SdkError } = require('./errors');
 const { PUBLIC_KEY_PATH } = require('./protocol');
 
@@ -6,6 +7,18 @@ const KEY_REFRESH_MARGIN_MS = 1000;
 
 function isUsable(key) {
   return Boolean(key) && key.expiresAtEpochMillis - KEY_REFRESH_MARGIN_MS > Date.now();
+}
+
+// Parse the public key eagerly so a malformed replacement key surfaces
+// during KEY_EXPIRED handling instead of the next encrypted request.
+function verifyPublicKey(base64) {
+  try {
+    const der = forge.util.decode64(base64);
+    forge.pki.publicKeyFromAsn1(forge.asn1.fromDer(der));
+  } catch (cause) {
+    throw new SdkError('INVALID_SERVER_KEY',
+      'Server public key is not a valid RSA SubjectPublicKeyInfo', cause);
+  }
 }
 
 function createKeyManager(request) {
@@ -19,6 +32,7 @@ function createKeyManager(request) {
       || key.expiresAtEpochMillis <= Date.now()) {
       throw new SdkError('INVALID_SERVER_KEY', 'Server public key is invalid or expired');
     }
+    verifyPublicKey(key.publicKeyBase64);
     cached = {
       keyId: key.keyId,
       publicKeyBase64: key.publicKeyBase64,

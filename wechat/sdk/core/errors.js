@@ -10,13 +10,12 @@ class SdkError extends Error {
 }
 
 class HttpError extends SdkError {
-  constructor(statusCode, data, headers = {}, requestHeaders = {}) {
+  constructor(statusCode, data, headers = {}) {
     super('HTTP_ERROR', `Request failed (HTTP ${statusCode})`);
     this.name = 'HttpError';
     this.statusCode = statusCode;
     this.data = data;
     this.headers = headers;
-    this.requestHeaders = requestHeaders;
   }
 }
 

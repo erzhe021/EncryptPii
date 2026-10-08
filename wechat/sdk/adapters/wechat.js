@@ -1,6 +1,10 @@
 const { SdkError } = require('../core/errors');
 const { createClient } = require('../core/client');
 
+// WeChat's wx.getRandomValues caps single calls far below this; rejecting
+// early avoids the platform's silent failure modes.
+const MAX_RANDOM_BYTES = 16384;
+
 function globalPlatform() {
   return typeof wx !== 'undefined' ? wx : null;
 }
@@ -28,6 +32,11 @@ function createWechatAdapter(platform) {
     return new Promise((resolve, reject) => {
       if (!platform || typeof platform.getRandomValues !== 'function') {
         reject(new SdkError('RANDOM_UNAVAILABLE', 'Upgrade WeChat to support secure randomness'));
+        return;
+      }
+      if (!Number.isInteger(length) || length <= 0 || length > MAX_RANDOM_BYTES) {
+        reject(new SdkError('RANDOM_UNAVAILABLE',
+          `Random length must be an integer in [1, ${MAX_RANDOM_BYTES}]`));
         return;
       }
       platform.getRandomValues({
