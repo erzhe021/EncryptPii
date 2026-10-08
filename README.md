@@ -55,6 +55,19 @@ EncryptPii/
 5. The server decrypts the payload automatically based on annotations and request-scoped context.
 6. Response encryption is handled similarly when `@EncryptResponse` is used.
 
+Encrypted requests transport key metadata only in `X-STC-Key-Id` and
+`X-STC-Session-Key`. Their JSON body contains only `ivBase64` and
+`encryptedDataBase64`. A stale key version returns HTTP 400 with
+`code: "KEY_EXPIRED"` and the replacement public key in `data`; the Java demo
+client installs that key and retries once with newly generated session material.
+
+The SDK only throws typed crypto exceptions; it does not register a global
+exception handler or define HTTP error response models. Applications own status
+codes and error bodies. The demo Server's `CustomExceptionHandler` maps crypto
+exceptions, including the `KEY_EXPIRED` replacement-key response. It sets
+`X-STC-Encrypted: false` on crypto errors to keep them plaintext; business error
+responses can still follow the endpoint's response-encryption policy.
+
 ## Supported security patterns
 
 The demo application shows three common modes:
@@ -136,8 +149,6 @@ sensitive:
       endpoint:
         enabled: true
         base-path: /crypto/server
-      exception-handler:
-        enabled: true
       vault:
         enabled: true
         addr: ${VAULT_ADDR:http://127.0.0.1:8200}
@@ -176,7 +187,7 @@ Relevant notes:
 - Key versions are tracked by `keyId` (for example, `ciam:1`, `ciam:2`).
 - Old keys remain valid during a configured grace period to handle rolling deployments.
 
-This behavior is described in more depth in `docs/vault.md` and `docs/sensitive-transport-crypto-multi-team-guidelines.md`.
+This behavior is described in more depth in `vault/vault.md` and `vault/sensitive-transport-crypto-multi-team-guidelines.md`.
 
 ## Quick start
 
@@ -213,5 +224,5 @@ Then call the client APIs, which are exposed under `/crypto/client`.
 
 ## Related docs
 
-- `docs/vault.md` — Vault key lifecycle and rotation design
-- `docs/sensitive-transport-crypto-multi-team-guidelines.md` — ownership and multi-team guidance
+- `vault/vault.md` — Vault key lifecycle and rotation design
+- `vault/sensitive-transport-crypto-multi-team-guidelines.md` — ownership and multi-team guidance

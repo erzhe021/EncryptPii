@@ -1,0 +1,117 @@
+export type TransportMode = 'plain' | 'bidirectional' | 'request-only' | 'response-only'
+  | 'response-only/client-exception' | 'response-only/system-exception'
+  | 'response-only/business-exception';
+export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
+
+export interface TransportRequest {
+  url: string;
+  method: 'GET' | 'POST';
+  data?: JsonValue;
+  timeoutMs: number;
+  headers: Record<string, string>;
+}
+
+export interface TransportResponse {
+  statusCode: number;
+  data: unknown;
+}
+
+export interface ClientOptions {
+  baseUrl: string;
+  timeoutMs?: number;
+  /** Refresh cached public keys on the next encrypted request this many milliseconds before expiry. */
+  keyRefreshMarginMs?: number;
+  headers?: Record<string, string>;
+  transport: (request: TransportRequest) => Promise<TransportResponse>;
+  randomBytes: (length: number) => Promise<Uint8Array>;
+}
+
+export interface SendOptions {
+  mode: TransportMode;
+  data: JsonValue;
+  headers?: Record<string, string>;
+}
+
+export interface Result<T> {
+  code: string;
+  message: string | null;
+  data: T | null;
+}
+
+export interface CipherRequest {
+  ivBase64: string;
+  encryptedDataBase64: string;
+}
+
+export interface CipherResponse {
+  ivBase64: string;
+  encryptedDataBase64: string;
+}
+
+export interface DetailedResult<T> {
+  data: T;
+  /** Protocol flags of the selected mode; the demo uses them to label what was actually sent. */
+  encryptRequest: boolean;
+  decryptResponse: boolean;
+  cipherRequest: CipherRequest | null;
+  cipherResponse: CipherResponse | null;
+  stcHeaders: { 'X-STC-Key-Id': string; 'X-STC-Session-Key': string } | null;
+  timings: { total: number; encryption: number; http: number; decryption: number };
+}
+
+export interface Client {
+  send<T = unknown>(options: SendOptions): Promise<Result<T>>;
+  /** Opt-in diagnostics for demos; contains ciphertext but never the session key. */
+  sendDetailed<T = unknown>(options: SendOptions): Promise<DetailedResult<Result<T>>>;
+}
+
+export type ErrorCode =
+  | 'INVALID_ARGUMENT' | 'HTTP_ERROR' | 'NETWORK_ERROR' | 'RANDOM_UNAVAILABLE'
+  | 'INVALID_SERVER_KEY' | 'ENCRYPTION_FAILED' | 'INVALID_CIPHER_PAYLOAD'
+  | 'DECRYPTION_FAILED' | 'INVALID_RESPONSE';
+
+export class SdkError extends Error {
+  constructor(code: ErrorCode, message: string, cause?: unknown);
+  code: ErrorCode;
+  cause?: unknown;
+  /** Opt-in diagnostics from sendDetailed, including failed HTTP responses. */
+  details?: DetailedResult<unknown>;
+}
+
+export class HttpError extends SdkError {
+  constructor(statusCode: number, data: unknown, headers?: Record<string, string>);
+  statusCode: number;
+  /** May contain sensitive server data; do not log by default. */
+  data: unknown;
+  headers: Record<string, string>;
+}
+
+export interface WechatPlatform {
+  request(options: {
+    url: string;
+    method: 'GET' | 'POST';
+    data?: JsonValue;
+    timeout: number;
+    header: Record<string, string>;
+    success: (response: TransportResponse) => void;
+    fail: (error: unknown) => void;
+  }): unknown;
+  getRandomValues?(options: {
+    length: number;
+    success: (response: { randomValues: ArrayBuffer | ArrayBufferView }) => void;
+    fail: (error: unknown) => void;
+  }): unknown;
+}
+
+export interface WechatClientOptions {
+  baseUrl: string;
+  timeoutMs?: number;
+  /** Refresh cached public keys on the next encrypted request this many milliseconds before expiry. */
+  keyRefreshMarginMs?: number;
+  headers?: Record<string, string>;
+  platform?: WechatPlatform;
+}
+
+export function createClient(options: ClientOptions): Client;
+export function createWechatAdapter(platform: WechatPlatform): Pick<ClientOptions, 'transport' | 'randomBytes'>;
+export function createWechatClient(options: WechatClientOptions): Client;

@@ -2,7 +2,6 @@ package com.ikea.crypto.stc.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.stc.constant.CryptoConstants;
-import com.ikea.crypto.stc.exception.CryptoExceptionHandler;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.vault.VaultClient;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
@@ -30,7 +29,8 @@ import java.security.KeyPairGenerator;
  * <p>
  * This configuration sets up the necessary beans for handling cryptographic operations,
  * including key management via HashiCorp Vault or an in-memory RSA keypair for local/testing environments.
- * It also configures request/response encryption and decryption advice, as well as optional exception handling and key endpoints.
+ * It also configures request/response encryption and decryption advice and optional key endpoints.
+ * Exceptions are propagated to the application's exception handlers.
  */
 @Slf4j
 @AutoConfiguration
@@ -74,13 +74,6 @@ public class SensitiveTransportCryptoAutoConfiguration {
     @ConditionalOnMissingBean
     public ResponseEncryptAdvice responseEncryptAdvice(CryptoPayloadHandler payloadHandler) {
         return new ResponseEncryptAdvice(payloadHandler);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    @ConditionalOnProperty(prefix = "sensitive.transport.crypto.exception-handler", name = "enabled", havingValue = "true", matchIfMissing = true)
-    public CryptoExceptionHandler cryptoExceptionHandler() {
-        return new CryptoExceptionHandler();
     }
 
     @Bean

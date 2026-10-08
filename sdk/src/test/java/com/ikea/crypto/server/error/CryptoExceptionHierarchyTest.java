@@ -1,16 +1,15 @@
 package com.ikea.crypto.server.error;
 
 import com.ikea.crypto.stc.exception.*;
+import com.ikea.crypto.stc.model.PublicKeyResponse;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class CryptoExceptionHierarchyTest {
 
-    private final CryptoExceptionHandler handler = new CryptoExceptionHandler();
-
     @Test
-    void testClientSideExceptionsAre4xx() {
+    void testClientSideExceptionsPreserveTypesAndMessages() {
         InvalidCryptoPayloadException payloadEx = new InvalidCryptoPayloadException("bad json");
         SessionKeyDecryptionException sessionKeyEx = new SessionKeyDecryptionException("key expired");
         DataTamperedException tamperedEx = new DataTamperedException("tag mismatch");
@@ -20,18 +19,13 @@ class CryptoExceptionHierarchyTest {
         assertTrue(tamperedEx instanceof CryptoClientSideException);
         assertTrue(payloadEx instanceof CryptoException);
 
-        ErrorResponse resp1 = handler.handleClientSideError(payloadEx);
-        assertEquals("bad json", resp1.error());
-
-        ErrorResponse resp2 = handler.handleClientSideError(sessionKeyEx);
-        assertEquals("key expired", resp2.error());
-
-        ErrorResponse resp3 = handler.handleClientSideError(tamperedEx);
-        assertEquals("tag mismatch", resp3.error());
+        assertEquals("bad json", payloadEx.getMessage());
+        assertEquals("key expired", sessionKeyEx.getMessage());
+        assertEquals("tag mismatch", tamperedEx.getMessage());
     }
 
     @Test
-    void testServerSideExceptionsAre5xxAndSanitized() {
+    void testServerSideExceptionsPreserveDetailsForApplicationHandlers() {
         KeyNotAvailableException keyNotAvailable = new KeyNotAvailableException("Vault unreachable");
         ResponseEncryptionException responseEncryptEx = new ResponseEncryptionException("AES init error");
 
@@ -39,10 +33,15 @@ class CryptoExceptionHierarchyTest {
         assertTrue(responseEncryptEx instanceof CryptoServerSideException);
         assertTrue(keyNotAvailable instanceof CryptoException);
 
-        ErrorResponse resp1 = handler.handleServerSideError(keyNotAvailable);
-        assertEquals("Cryptographic service internal error", resp1.error());
+        assertEquals("Vault unreachable", keyNotAvailable.getMessage());
+        assertEquals("AES init error", responseEncryptEx.getMessage());
+    }
 
-        ErrorResponse resp2 = handler.handleServerSideError(responseEncryptEx);
-        assertEquals("Cryptographic service internal error", resp2.error());
+    @Test
+    void testExpiredKeyExceptionContainsReplacementKey() {
+        PublicKeyResponse latest = new PublicKeyResponse("public-key", "ciam:2", 123456789L);
+        KeyExpiredException exception = new KeyExpiredException(latest);
+        assertInstanceOf(CryptoClientSideException.class, exception);
+        assertEquals(latest, exception.latestKey());
     }
 }

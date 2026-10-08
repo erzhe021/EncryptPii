@@ -1,7 +1,9 @@
 package com.ikea.crypto.stc.model;
 
 /**
- * CipherRequestPayload represents the encrypted request payload sent by the client.
+ * Internal encrypted request material. On the wire, only {@code ivBase64} and
+ * {@code encryptedDataBase64} are in the JSON body; key metadata and the wrapped
+ * session key are transported separately in STC headers.
  *
  * @param keyId                     Optional identifier of the server public key used to encrypt the session key.
  * @param encryptedSessionKeyBase64 The AES session key encrypted with the server's public key.

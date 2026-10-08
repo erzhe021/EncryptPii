@@ -24,11 +24,6 @@ public class SensitiveTransportCryptoProperties {
      */
     private EndpointProperties endpoint = new EndpointProperties();
 
-    /**
-     * Global exception handler configuration.
-     */
-    private ExceptionHandlerProperties exceptionHandler = new ExceptionHandlerProperties();
-
     @Data
     public static class EndpointProperties {
         /**
@@ -44,12 +39,4 @@ public class SensitiveTransportCryptoProperties {
         private String basePath = "/crypto/server";
     }
 
-    @Data
-    public static class ExceptionHandlerProperties {
-        /**
-         * Whether to enable global exception handler for crypto-related exceptions.
-         * Default is true.
-         */
-        private boolean enabled = true;
-    }
 }

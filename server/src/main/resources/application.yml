@@ -8,8 +8,6 @@ sensitive:
       endpoint:
         enabled: true #default is true, if set to false, the crypto server will not expose any endpoints
         base-path: /crypto/server # default is /crypto/server, you can change it to any other path, but make sure to update the client configuration accordingly
-      exception-handler:
-        enabled: true #default is true, if set to false, the crypto server will not handle exceptions and will return raw exceptions to the client
       vault:
         enabled: true #default is false, if set to true, the crypto server will use vault to store the transport key
         addr: ${VAULT_ADDR:http://127.0.0.1:8200}

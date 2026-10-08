@@ -50,11 +50,11 @@ public record SessionKeyTransport(String keyId, String encryptedSessionKeyBase64
 
     public HttpRequest.Builder apply(HttpRequest.Builder requestBuilder) {
         log.debug("start to apply SessionKeyTransport to HttpRequest");
-        HttpRequest.Builder builder = requestBuilder
-                .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY, encryptedSessionKeyBase64);
-        if (keyId != null && !keyId.isBlank()) {
-            builder.header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID, keyId);
+        if (keyId == null || keyId.isBlank() || encryptedSessionKeyBase64 == null || encryptedSessionKeyBase64.isBlank()) {
+            throw new IllegalArgumentException("keyId and encrypted session key are required for header transport");
         }
-        return builder;
+        return requestBuilder
+                .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID, keyId)
+                .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY, encryptedSessionKeyBase64);
     }
 }

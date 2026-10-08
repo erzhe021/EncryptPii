@@ -8,6 +8,7 @@ import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.PublicKeyResponse;
 import com.ikea.crypto.stc.util.EncodingUtils;
 import com.ikea.crypto.stc.exception.SessionKeyDecryptionException;
+import com.ikea.crypto.stc.exception.KeyExpiredException;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.vault.VaultClient;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
@@ -228,6 +229,7 @@ class VaultMultiVersionGracePeriodTest {
                 EncodingUtils.toBase64(iv),
                 encDataV1
         );
-        assertThrows(SessionKeyDecryptionException.class, () -> server.decrypt(payloadV1));
+        KeyExpiredException expired = assertThrows(KeyExpiredException.class, () -> server.decrypt(payloadV1));
+        assertEquals("rsa-key:3", expired.latestKey().keyId());
     }
 }

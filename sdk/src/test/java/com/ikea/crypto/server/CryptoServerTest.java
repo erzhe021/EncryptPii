@@ -10,6 +10,7 @@ import com.ikea.crypto.stc.util.EncodingUtils;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
 import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
 import com.ikea.crypto.stc.exception.SessionKeyDecryptionException;
+import com.ikea.crypto.stc.exception.KeyExpiredException;
 import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.key.CryptoServer;
 import org.junit.jupiter.api.AfterEach;
@@ -121,5 +122,34 @@ class CryptoServerTest {
         KeyRing.KeyEntry keyEntry = server.keyRing().findKeyEntry(response.keyId()).orElseThrow();
         SecretKey decrypted = SessionKeyService.decryptSessionKeyBase64(encryptedSessionKey, keyEntry.privateKey());
         assertArrayEquals(sessionKey.getEncoded(), decrypted.getEncoded());
+    }
+
+    @Test
+    void testExpiredKeyIdReturnsLatestPublicKey() throws Exception {
+        KeyRing shortLivedRing = new KeyRing("expired-key", 1, 0);
+        shortLivedRing.initialize();
+        KeyRing.KeyEntry oldEntry = shortLivedRing.getActiveKeyEntry();
+        shortLivedRing.rotateKey();
+        shortLivedRing.purgeExpiredKeys(System.currentTimeMillis() + 100);
+        CryptoServer rotatingServer = new CryptoServer(shortLivedRing);
+
+        KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
+        keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
+        SecretKey sessionKey = keyGenerator.generateKey();
+        String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(
+                sessionKey, oldEntry.publicKey());
+
+        KeyExpiredException exception = assertThrows(KeyExpiredException.class,
+                () -> rotatingServer.decryptSessionKeyToSecretKey(
+                        oldEntry.metadata().keyId(), encryptedSessionKey));
+        assertEquals(shortLivedRing.getActiveKeyEntry().metadata().keyId(), exception.latestKey().keyId());
+    }
+
+    @Test
+    void testInvalidPayloadForRetainedKeyIsNotReportedAsExpired() throws Exception {
+        server.rotateKey();
+        assertThrows(SessionKeyDecryptionException.class,
+                () -> server.decryptSessionKeyToSecretKey(
+                        "in-memory-test-key:1", EncodingUtils.toBase64(new byte[]{1, 2, 3})));
     }
 }

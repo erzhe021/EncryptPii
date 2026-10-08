@@ -1,0 +1,9 @@
+{
+  "desc": "Sensitive data transport demo",
+  "rules": [
+    {
+      "action": "allow",
+      "page": "*"
+    }
+  ]
+}

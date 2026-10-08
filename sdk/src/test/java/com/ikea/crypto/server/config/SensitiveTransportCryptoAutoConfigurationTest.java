@@ -2,7 +2,6 @@ package com.ikea.crypto.server.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.stc.config.SensitiveTransportCryptoAutoConfiguration;
-import com.ikea.crypto.stc.exception.CryptoExceptionHandler;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.web.advice.RequestDecryptAdvice;
 import com.ikea.crypto.stc.web.advice.ResponseEncryptAdvice;
@@ -13,6 +12,7 @@ import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -38,7 +38,7 @@ class SensitiveTransportCryptoAutoConfigurationTest {
                     assertThat(context).hasSingleBean(CryptoPayloadHandler.class);
                     assertThat(context).hasSingleBean(RequestDecryptAdvice.class);
                     assertThat(context).hasSingleBean(ResponseEncryptAdvice.class);
-                    assertThat(context).hasSingleBean(CryptoExceptionHandler.class);
+                    assertThat(context.getBeansWithAnnotation(RestControllerAdvice.class)).isEmpty();
                     assertThat(context).hasSingleBean(CryptoKeyEndpoint.class);
 
                     CryptoServer cryptoServer = context.getBean(CryptoServer.class);
@@ -55,7 +55,6 @@ class SensitiveTransportCryptoAutoConfigurationTest {
                     assertThat(context).doesNotHaveBean(CryptoPayloadHandler.class);
                     assertThat(context).doesNotHaveBean(RequestDecryptAdvice.class);
                     assertThat(context).doesNotHaveBean(ResponseEncryptAdvice.class);
-                    assertThat(context).doesNotHaveBean(CryptoExceptionHandler.class);
                     assertThat(context).doesNotHaveBean(CryptoKeyEndpoint.class);
                 });
     }
@@ -71,14 +70,4 @@ class SensitiveTransportCryptoAutoConfigurationTest {
                 });
     }
 
-    @Test
-    void disableExceptionHandlerOnly() {
-        contextRunner
-                .withPropertyValues("sensitive.transport.crypto.enabled=true")
-                .withPropertyValues("sensitive.transport.crypto.exception-handler.enabled=false")
-                .run(context -> {
-                    assertThat(context).hasSingleBean(CryptoServer.class);
-                    assertThat(context).doesNotHaveBean(CryptoExceptionHandler.class);
-                });
-    }
 }

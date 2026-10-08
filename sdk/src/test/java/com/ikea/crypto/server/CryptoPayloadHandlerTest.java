@@ -8,6 +8,7 @@ import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import com.ikea.crypto.stc.model.CipherResponsePayload;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
+import com.ikea.crypto.stc.model.CipherRequestBody;
 import com.ikea.crypto.stc.model.SessionKeyTransport;
 import com.ikea.crypto.stc.util.EncodingUtils;
 import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
@@ -24,6 +25,7 @@ import javax.crypto.SecretKey;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.SecureRandom;
+import java.net.URI;
 import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -64,15 +66,21 @@ class CryptoPayloadHandlerTest {
         String encryptedData = AesGcmCipher.encryptAsBase64(plaintext, sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, keyPair.getPublic());
 
-        CipherRequestPayload payload = new CipherRequestPayload(
-                encryptedSessionKey,
-                EncodingUtils.toBase64(iv),
-                encryptedData
-        );
-        String jsonPayload = objectMapper.writeValueAsString(payload);
+        String jsonPayload = objectMapper.writeValueAsString(
+                new CipherRequestBody(EncodingUtils.toBase64(iv), encryptedData));
 
-        String decrypted = payloadHandler.decrypt(jsonPayload);
+        CryptoSessionContext context = payloadHandler.createSessionContext(
+                jsonPayload, "in-memory-test-key:1", encryptedSessionKey);
+        String decrypted = payloadHandler.decrypt(context);
         assertEquals(plaintext, decrypted);
+    }
+
+    @Test
+    void testCreateSessionContextRejectsKeyMaterialInBody() throws Exception {
+        String oldBody = objectMapper.writeValueAsString(new CipherRequestPayload(
+                "key-id", "wrapped-key", "iv", "data"));
+        assertThrows(InvalidCryptoPayloadException.class, () ->
+                payloadHandler.createSessionContext(oldBody, "in-memory-test-key:1", "wrapped-key"));
     }
 
     @Test
@@ -136,5 +144,19 @@ class CryptoPayloadHandlerTest {
         assertThrows(InvalidCryptoPayloadException.class, () ->
                 payloadHandler.createSessionContext("not valid json")
         );
+    }
+
+    @Test
+    void testSessionKeyTransportUsesRequiredStcHeaders() {
+        SessionKeyTransport transport = new SessionKeyTransport("ciam:1", "wrapped-key");
+        var request = transport.apply(java.net.http.HttpRequest.newBuilder(URI.create("https://example.test")))
+                .build();
+        assertEquals("ciam:1", request.headers()
+                .firstValue(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID).orElseThrow());
+        assertEquals("wrapped-key", request.headers()
+                .firstValue(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY).orElseThrow());
+        assertThrows(IllegalArgumentException.class, () ->
+                new SessionKeyTransport(null, "wrapped-key").apply(
+                        java.net.http.HttpRequest.newBuilder(URI.create("https://example.test"))));
     }
 }

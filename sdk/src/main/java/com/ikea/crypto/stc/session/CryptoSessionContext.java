@@ -13,6 +13,10 @@ public record CryptoSessionContext(Object requestKeyMaterial) {
         return new CryptoSessionContext(payload);
     }
 
+    public static CryptoSessionContext request(SessionKeyTransport transport) {
+        return new CryptoSessionContext(transport);
+    }
+
     public static CryptoSessionContext responseOnly(SessionKeyTransport transport) {
         return new CryptoSessionContext(transport);
     }

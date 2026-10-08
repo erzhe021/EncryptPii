@@ -8,7 +8,7 @@ import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import com.ikea.crypto.stc.key.CryptoServer;
-import com.ikea.crypto.stc.model.CipherRequestPayload;
+import com.ikea.crypto.stc.model.CipherRequestBody;
 import com.ikea.crypto.stc.model.SessionKeyTransport;
 import com.ikea.crypto.stc.util.EncodingUtils;
 import org.junit.jupiter.api.Test;
@@ -26,8 +26,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
-@SpringBootTest
+@SpringBootTest(properties = "sensitive.transport.crypto.vault.enabled=false")
 @AutoConfigureMockMvc
 class CryptoServerControllerTest {
 
@@ -49,6 +51,33 @@ class CryptoServerControllerTest {
     }
 
     @Test
+    void testServerHandlesMissingCryptoHeaders() throws Exception {
+        mockMvc.perform(post("/crypto/server/bidirectional")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"ivBase64\":\"iv\",\"encryptedDataBase64\":\"data\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_ENCRYPTED, "false"))
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").isNotEmpty());
+    }
+
+    @Test
+    void testServerHandlesExpiredKeyDuringResponseEncryption() throws Exception {
+        String staleKeyId = cryptoServer.keyRing().getKeyAlias() + ":0";
+        mockMvc.perform(post("/crypto/server/response-only")
+                        .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID, staleKeyId)
+                        .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY, "AQID")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"data\":\"demo\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_ENCRYPTED, "false"))
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(jsonPath("$.code").value("KEY_EXPIRED"))
+                .andExpect(jsonPath("$.data.keyId").value(cryptoServer.getPublicKey().keyId()))
+                .andExpect(jsonPath("$.data.publicKeyBase64").isNotEmpty());
+    }
+
+    @Test
     void testBidirectionalEndpoint() throws Exception {
         KeyGenerator keyGenerator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
@@ -61,13 +90,12 @@ class CryptoServerControllerTest {
         String encryptedData = AesGcmCipher.encryptAsBase64(requestJson, sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, cryptoServer.publicKey());
 
-        CipherRequestPayload requestPayload = new CipherRequestPayload(
-                encryptedSessionKey,
-                EncodingUtils.toBase64(iv),
-                encryptedData
-        );
+        CipherRequestBody requestPayload = new CipherRequestBody(EncodingUtils.toBase64(iv), encryptedData);
 
         mockMvc.perform(post("/crypto/server/bidirectional")
+                        .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID,
+                                cryptoServer.getPublicKey().keyId())
+                        .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY, encryptedSessionKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(requestPayload)))
                 .andExpect(status().isOk())
@@ -88,16 +116,17 @@ class CryptoServerControllerTest {
         String encryptedData = AesGcmCipher.encryptAsBase64(requestJson, sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, cryptoServer.publicKey());
 
-        CipherRequestPayload requestPayload = new CipherRequestPayload(
-                encryptedSessionKey,
-                EncodingUtils.toBase64(iv),
-                encryptedData
-        );
+        CipherRequestBody requestPayload = new CipherRequestBody(EncodingUtils.toBase64(iv), encryptedData);
 
         mockMvc.perform(post("/crypto/server/request-only")
+                        .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID,
+                                cryptoServer.getPublicKey().keyId())
+                        .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY, encryptedSessionKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(requestPayload)))
-                .andExpect(status().isOk());
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.code").value("0"))
+                .andExpect(jsonPath("$.data").isNotEmpty());
     }
 
     @Test
@@ -111,12 +140,48 @@ class CryptoServerControllerTest {
         DemoPlainRequest demoPlainRequest = new DemoPlainRequest("ping");
 
         mockMvc.perform(post("/crypto/server/response-only")
+                        .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID,
+                                cryptoServer.getPublicKey().keyId())
                         .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY, sessionTransport.encryptedSessionKeyBase64())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(demoPlainRequest)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.encryptedDataBase64").isNotEmpty())
                 .andExpect(jsonPath("$.ivBase64").isNotEmpty());
+    }
+
+    @Test
+    void testResponseOnlyExceptionsRemainEncryptedWithoutGatewayToken() throws Exception {
+        for (String variant : new String[]{"business-exception", "client-exception", "system-exception"}) {
+            KeyGenerator generator = KeyGenerator.getInstance(CryptoConstants.ALGORITHM_AES);
+            generator.init(CryptoConstants.AES_KEY_SIZE_BITS);
+            SecretKey sessionKey = generator.generateKey();
+            SessionKeyTransport transport = SessionKeyTransport.fromGeneratedKey(
+                    cryptoServer.getPublicKey().keyId(), sessionKey, cryptoServer.publicKey());
+            int expectedStatus = switch (variant) {
+                case "client-exception" -> 400;
+                case "system-exception" -> 500;
+                default -> 200;
+            };
+            String response = mockMvc.perform(post("/crypto/server/response-only/" + variant)
+                            .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID, transport.keyId())
+                            .header(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY,
+                                    transport.encryptedSessionKeyBase64())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"data\":\"local-demo\"}"))
+                    .andExpect(status().is(expectedStatus))
+                    .andExpect(header().string(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_ENCRYPTED, "true"))
+                    .andExpect(jsonPath("$.encryptedDataBase64").isNotEmpty())
+                    .andReturn().getResponse().getContentAsString();
+            var cipher = objectMapper.readTree(response);
+            var plain = objectMapper.readTree(AesGcmCipher.decryptFromBase64(
+                    cipher.get("encryptedDataBase64").asText(), sessionKey, cipher.get("ivBase64").asText()));
+            if (expectedStatus == 200) {
+                assertEquals("code-123", plain.get("code").asText());
+            } else {
+                assertEquals(expectedStatus, plain.get("status").asInt());
+            }
+        }
     }
 
 //    @Test

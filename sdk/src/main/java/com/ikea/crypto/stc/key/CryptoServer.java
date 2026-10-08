@@ -11,6 +11,8 @@ import com.ikea.crypto.stc.exception.DataTamperedException;
 import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
 import com.ikea.crypto.stc.exception.KeyNotAvailableException;
 import com.ikea.crypto.stc.exception.SessionKeyDecryptionException;
+import com.ikea.crypto.stc.exception.InvalidKeyException;
+import com.ikea.crypto.stc.exception.KeyExpiredException;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
@@ -162,13 +164,23 @@ public record CryptoServer(KeyRing keyRing) {
         if (!StringUtils.hasLength(encryptedSessionKeyBase64)) {
             throw new InvalidCryptoPayloadException("Encrypted session key is required but was not provided.");
         }
+        String requestedAlias = null;
+        if (keyId != null && !keyId.isBlank()) {
+            requestedAlias = new KeyMetadata(keyId, 0, 0).keyAlias();
+            if (!StringUtils.hasText(requestedAlias)
+                    || keyRing.findActiveKeyEntry(requestedAlias).isEmpty()) {
+                throw new InvalidKeyException();
+            }
+        }
 
         // 1. If keyId is provided, try that specific key first
+        Optional<KeyRing.KeyEntry> requestedEntry = Optional.empty();
         if (keyId != null && !keyId.isBlank()) {
-            Optional<KeyRing.KeyEntry> entryOpt = keyRing.findKeyEntry(keyId);
-            if (entryOpt.isPresent()) {
+            requestedEntry = keyRing.findKeyEntry(keyId);
+            if (requestedEntry.isPresent()) {
                 try {
-                    return SessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, entryOpt.get().privateKey());
+                    return SessionKeyService.decryptSessionKeyBase64(
+                            encryptedSessionKeyBase64, requestedEntry.get().privateKey());
                 } catch (GeneralSecurityException e) {
                     log.warn("Failed to decrypt session key with matched keyId={}, attempting keyring fallback", keyId, e);
                 }
@@ -177,7 +189,8 @@ public record CryptoServer(KeyRing keyRing) {
 
         // 2. Try the active key
         KeyRing.KeyEntry activeEntry = keyRing.getActiveKeyEntry();
-        if (activeEntry != null) {
+        if (activeEntry != null && (requestedAlias == null
+                || requestedAlias.equals(activeEntry.metadata().keyAlias()))) {
             try {
                 return SessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, activeEntry.privateKey());
             } catch (GeneralSecurityException e) {
@@ -187,6 +200,9 @@ public record CryptoServer(KeyRing keyRing) {
 
         // 3. Fallback across all available keys (grace period support for old clients during rotation)
         for (KeyRing.KeyEntry entry : keyRing.getAllKeyEntries()) {
+            if (requestedAlias != null && !requestedAlias.equals(entry.metadata().keyAlias())) {
+                continue;
+            }
             if (activeEntry != null && entry.metadata().keyId().equals(activeEntry.metadata().keyId())) {
                 continue;
             }
@@ -202,7 +218,7 @@ public record CryptoServer(KeyRing keyRing) {
         // 4. Fallback on-demand sync from Vault (in case another pod rotated without notifying this pod)
         if (keyRing instanceof VaultKeyRing vaultKeyRing) {
             try {
-                KeyRing.KeyEntry latestEntry = vaultKeyRing.syncLatestKeyFromVault();
+                KeyRing.KeyEntry latestEntry = vaultKeyRing.syncLatestKeyFromVault(requestedAlias);
                 if (latestEntry != null && (activeEntry == null || !latestEntry.metadata().keyId().equals(activeEntry.metadata().keyId()))) {
                     try {
                         SecretKey decrypted = SessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, latestEntry.privateKey());
@@ -213,6 +229,21 @@ public record CryptoServer(KeyRing keyRing) {
                 }
             } catch (Exception e) {
                 log.warn("Failed on-demand sync from Vault during decryption fallback: {}", e.getMessage());
+            }
+        }
+
+        if (requestedAlias != null) {
+            KeyMetadata requestedMetadata = new KeyMetadata(keyId, 0, 0);
+            KeyRing.KeyEntry currentEntry = keyRing.findActiveKeyEntry(requestedMetadata.keyAlias()).orElse(null);
+            if (currentEntry == null) {
+                throw new InvalidKeyException();
+            }
+            KeyMetadata activeMetadata = currentEntry.metadata();
+            Long requestedVersion = requestedMetadata.version();
+            Long activeVersion = activeMetadata.version();
+            if (requestedEntry.isEmpty()
+                    && (requestedVersion == null || activeVersion == null || !requestedVersion.equals(activeVersion))) {
+                throw new KeyExpiredException(getPublicKey(activeMetadata.keyAlias()));
             }
         }
 

@@ -1,6 +1,7 @@
 package com.ikea.crypto.stc.constant;
 
 public final class CryptoConstants {
+
     private CryptoConstants() {
     }
 
@@ -19,6 +20,9 @@ public final class CryptoConstants {
     public static final int GCM_IV_LENGTH_BYTES = 12;
 
     // --- Header Names for Crypto Session Key Transport ---
-    public static final String HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY = "X-STC-SESSION-KEY";
-    public static final String HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID = "X-STC-KEY-ID";
+    public static final String HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY = "X-STC-Session-Key";
+    public static final String HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID = "X-STC-Key-Id";
+    public static final String HEADER_SENSITIVE_TRANSPORT_CRYPTO_ENCRYPTED = "X-STC-Encrypted";
+    public static final String KEY_EXPIRED_CODE = "KEY_EXPIRED";
+    public static final String INVALID_KEY_CODE = "INVALID_KEY";
 }
