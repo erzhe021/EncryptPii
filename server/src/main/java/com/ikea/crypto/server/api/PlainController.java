@@ -14,7 +14,12 @@ public class PlainController {
 
     @PostMapping("/normal")
     public Result<DemoPlainResponse> normal(@RequestBody DemoPlainRequest request) {
-        return Result.ok(new DemoPlainResponse("123456789012", 3, 10000L, "remarks for request: " + request.data()));
+        return Result.ok(new DemoPlainResponse(
+                "张三",
+                "123456789012",
+                3,
+                10000L,
+                "remarks for request: " + request.data()));
     }
 
 }

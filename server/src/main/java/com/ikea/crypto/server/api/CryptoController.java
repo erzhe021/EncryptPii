@@ -25,8 +25,13 @@ public class CryptoController {
             @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
             @RequestBody DemoSensitiveRequest request) {
         verifyGatewayToken(suppliedToken);
-        return Result.ok(new DemoSensitiveResponse(request.name(), request.phone(), request.email(), request.address(),
-                "This is bidirectional encryption demo"));
+        return Result.ok(new DemoSensitiveResponse(
+                request.name(),
+                request.phone(),
+                request.email(),
+                request.address(),
+                "bidirectional crypto")
+        );
     }
 
     @PostMapping("/request-only")
@@ -34,8 +39,12 @@ public class CryptoController {
             @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
             @RequestBody DemoSensitiveRequest request) {
         verifyGatewayToken(suppliedToken);
-        return Result.ok(new DemoPlainResponse("1234-5678-9012-3456", 3, 1500L,
-                "This is request-only encryption demo"));
+        return Result.ok(new DemoPlainResponse(request.name(),
+                "1234-5678-9012-3456",
+                3,
+                1500L,
+                "request-only crypto")
+        );
     }
 
     @PostMapping("/response-only")
@@ -43,8 +52,12 @@ public class CryptoController {
             @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
             @RequestBody(required = false) DemoPlainRequest request) {
         verifyGatewayToken(suppliedToken);
-        return Result.ok(new DemoSensitiveResponse("张三", "11111111111", "zhangsan@example.com",
-                "上海市长宁区某某广场办公A楼", "This is response-only encryption demo"));
+        return Result.ok(new DemoSensitiveResponse(
+                "张三",
+                "11111111111",
+                "zhangsan@example.com",
+                "上海市长宁区某某广场办公A楼",
+                "response-only crypto"));
     }
 
     @PostMapping("/response-only/client-exception")
@@ -52,7 +65,7 @@ public class CryptoController {
             @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
             @RequestBody(required = false) DemoPlainRequest request) {
         verifyGatewayToken(suppliedToken);
-        throw new IllegalArgumentException("demo 4xx exception with sensitive info e.g. mobile: 11111111111");
+        throw new IllegalArgumentException("Demo 4xx exception with sensitive info e.g. mobile: 11111111111");
     }
 
     @PostMapping("/response-only/system-exception")
@@ -60,7 +73,7 @@ public class CryptoController {
             @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
             @RequestBody(required = false) DemoPlainRequest request) {
         verifyGatewayToken(suppliedToken);
-        throw new SystemException("demo 5xx exception with sensitive info e.g. mobile: 11111111111");
+        throw new SystemException("Demo 5xx exception with sensitive info e.g. mobile: 11111111111");
     }
 
     @PostMapping("/response-only/business-exception")
@@ -68,7 +81,7 @@ public class CryptoController {
             @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
             @RequestBody(required = false) DemoPlainRequest request) {
         verifyGatewayToken(suppliedToken);
-        throw new BusinessException("code-123", "demo business exception with sensitive info e.g. mobile: 11111111111");
+        throw new BusinessException("code-123", "Demo business exception with sensitive info e.g. mobile: 11111111111");
     }
 
     private void verifyGatewayToken(String suppliedToken) {

@@ -59,6 +59,6 @@ class CryptoControllerTest {
                                 new DemoSensitiveRequest("name", "phone", "email", "address"))))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("name"))
-                .andExpect(jsonPath("$.extraInfo").value("This is bidirectional encryption demo"));
+                .andExpect(jsonPath("$.remark").value("bidirectional crypto"));
     }
 }
