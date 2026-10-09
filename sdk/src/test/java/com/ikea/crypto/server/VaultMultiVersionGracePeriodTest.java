@@ -1,19 +1,18 @@
 package com.ikea.crypto.server;
 
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
+import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
+import com.ikea.crypto.stc.exception.KeyExpiredException;
+import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.PublicKeyResponse;
 import com.ikea.crypto.stc.util.EncodingUtils;
-import com.ikea.crypto.stc.exception.SessionKeyDecryptionException;
-import com.ikea.crypto.stc.exception.KeyExpiredException;
-import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.vault.VaultClient;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
-import com.ikea.crypto.stc.config.VaultProperties;
-import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -167,7 +166,9 @@ class VaultMultiVersionGracePeriodTest {
         properties.setKeyAlias("rsa-key");
         KeyLifecycleProperties lifecycle = new KeyLifecycleProperties();
         lifecycle.setValidityMillis(60L * 24 * 3600 * 1000); // 60 days validity
-        lifecycle.setGracePeriodMillis(30L * 24 * 3600 * 1000); // 30 days grace
+        lifecycle.setRotationBeforeExpiryMillis(10L * 24 * 3600 * 1000); // 10 days rotation window
+        lifecycle.setGracePeriodMillis(1L * 24 * 3600 * 1000); // 1 day grace
+
 
         VaultClient vaultClient = new VaultClient(properties.getAddr());
         VaultKeyRing vaultKeyRing = new VaultKeyRing(properties, lifecycle, vaultClient, true);

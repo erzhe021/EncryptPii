@@ -65,8 +65,11 @@ public class VaultRotationCoordinator {
         // 1. 双重检查（Double-Checked Refresh）
         Optional<VaultClient.VaultSecretEntry> latestOpt = repository.readSecretVersionRaw(alias, null);
         long currentLocalVersion = keyRing.getCurrentVersion(alias);
-        KeyRing.KeyEntry currentLocalEntry = (keyRing.getActiveKeyEntry() != null && alias.equals(keyRing.getActiveKeyEntry().metadata().keyAlias()))
-                ? keyRing.getActiveKeyEntry() : keyRing.findActiveKeyEntry(alias).orElse(null);
+        KeyRing.KeyEntry activeEntry = keyRing.getActiveKeyEntry();
+        KeyRing.KeyEntry currentLocalEntry = activeEntry != null
+                && alias.equals(activeEntry.metadata().keyAlias())
+                ? activeEntry
+                : keyRing.findActiveKeyEntry(alias).orElse(null);
         boolean localExpired = (currentLocalEntry == null || currentLocalEntry.metadata().isExpired(now));
 
         if (!force && latestOpt.isPresent()) {

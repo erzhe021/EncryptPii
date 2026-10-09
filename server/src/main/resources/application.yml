@@ -5,11 +5,11 @@ sensitive:
   transport:
     crypto:
       enabled: true #default is true, if set to false, the crypto server will not be started
-      auto-rotate: ${CRYPTO_AUTO_ROTATE:true} # default is true; set to false to require explicit key rotation
+      auto-rotate: ${CRYPTO_AUTO_ROTATE:true} # default is true; set to 'false' to require explicit key rotation
       key-lifecycle:
         validity-millis: ${CRYPTO_KEY_VALIDITY_MILLIS:60000} # 60s
-        grace-period-millis: ${CRYPTO_KEY_GRACE_PERIOD_MILLIS:10000} # 10s after replacement
         rotation-before-expiry-millis: ${CRYPTO_ROTATION_BEFORE_EXPIRY_MILLIS:20000} # 20s
+        grace-period-millis: ${CRYPTO_KEY_GRACE_PERIOD_MILLIS:10000} # 10s after replacement
       endpoint:
         enabled: true #default is true, if set to false, the crypto server will not expose any endpoints
         base-path: /crypto/server # default is /crypto/server, you can change it to any other path, but make sure to update the client configuration accordingly

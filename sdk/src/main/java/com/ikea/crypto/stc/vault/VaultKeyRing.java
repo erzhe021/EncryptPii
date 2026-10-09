@@ -277,10 +277,11 @@ public class VaultKeyRing extends KeyRing {
                 }
 
                 // If remote key version is newer than local active key and is unexpired, promote to active
-                boolean makeActive = (getActiveKeyEntry() == null
+                KeyEntry activeEntry = getActiveKeyEntry();
+                boolean makeActive = (activeEntry == null
                         || (remoteEntry.metadata().version() != null
-                            && getActiveKeyEntry().metadata().version() != null
-                            && Objects.requireNonNull(remoteEntry.metadata().version()) > Objects.requireNonNull(getActiveKeyEntry().metadata().version())
+                            && activeEntry.metadata().version() != null
+                            && Objects.requireNonNull(remoteEntry.metadata().version()) > Objects.requireNonNull(activeEntry.metadata().version())
                             && !remoteEntry.metadata().isExpired()));
 
                 if (nextEntry.isPresent()) {
