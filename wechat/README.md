@@ -1,16 +1,31 @@
 # EncryptPii 微信小程序
 
-此小程序提供普通传输、双向加密、请求加密和响应加密四种传输演示，以及响应加密的客户端异常、系统异常、业务异常三种请求。小程序直接连接 Kong：从 Kong 获取 RSA 公钥，在本机执行 RSA-OAEP-SHA-256（MGF1-SHA-1）和 AES-256-GCM 加解密，再按 Kong 插件协议提交请求。
+此小程序提供普通传输、双向加密、请求加密和响应加密四种传输演示，以及响应加密的客户端异常、系统异常、业务异常三种请求。小程序默认直接连接 Java Server：从 Server 获取 RSA 公钥，在本机执行 RSA-OAEP-SHA-256（MGF1-SHA-1）和 AES-256-GCM 加解密，再按 STC 协议提交请求。
 
 ## 配置与运行
 
-1. 修改 `config.js` 中的 `KONG_BASE_URL`，设置为手机可访问的 Kong HTTPS 域名，不要填写 Client、Server 或 Kong Admin API 地址；`KEY_REFRESH_MARGIN_MS` 配置公钥到期前多少毫秒开始按需刷新，设为 `0` 表示到期才刷新。
+1. 修改 `config.js` 中的 `SERVER_BASE_URL`，设置为 Java Server 地址，默认是 `http://localhost:9090`；真机使用手机可访问的 HTTPS 域名。不要填写 Client 或 Kong Admin API 地址。
 2. 在微信开发者工具中导入 `wechat` 目录并运行。发布前请确认 `project.config.json` 中配置的是团队自己的小程序 AppID。
-3. 在小程序管理后台将 Kong 域名加入 `request` 合法域名；生产环境必须使用 HTTPS。
+3. 在小程序管理后台将服务域名加入 `request` 合法域名；生产环境必须使用 HTTPS。
+
+本地开发者工具可直接使用 `http://localhost:9090`，无需额外开关。
+在开发者工具的本地设置中勾选“不校验合法域名、web-view（业务域名）、TLS 版本以及 HTTPS 证书”。
+SDK 只允许 `localhost`、`127.0.0.1` 和 `[::1]` 的 HTTP 地址，不允许远程 HTTP。
+真机的 `localhost` 指向手机自身；真机和生产环境应使用手机可访问的 HTTPS 地址。
+服务仍须实现下表的接口和 STC 协议。
+
+Java Server 默认允许直接访问，无需 `local` profile 或 gateway token：
+
+```sh
+./gradlew :server:bootRun
+```
+
+密钥管理仍使用 `server/src/main/resources/application.yml` 中的 Vault 配置。
+如果 Server 已在运行，需要先停止旧实例，再重新启动以加载修改。
 
 ## 接口映射
 
-| 小程序模式 | Kong 路由 |
+| 小程序模式 | Server 路由 |
 | --- | --- |
 | 获取公钥 | `GET /crypto/server/public-key` |
 | 普通传输 | `POST /plain/server/normal` |

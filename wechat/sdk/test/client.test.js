@@ -13,7 +13,8 @@ function makeKey(id) {
     info: {
       keyId: id,
       publicKeyBase64: pair.publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
-      expiresAtEpochMillis: Date.now() + 600000
+      expiresAtEpochMillis: Date.now() + 600000,
+      refreshAtEpochMillis: Date.now() + 300000
     }
   };
 }
@@ -165,28 +166,30 @@ test('concurrent encrypted calls share only key fetches, not session material', 
   assert.equal(new Set(sessions).size, 10);
 });
 
-test('key refresh margin is configurable and zero uses the cached key until expiry', async () => {
-  const nearExpiryKey = {
+test('cached key refresh follows server-provided refreshAtEpochMillis', async () => {
+  const alreadyDueKey = {
     ...firstKey,
-    info: { ...firstKey.info, expiresAtEpochMillis: Date.now() + 60000 }
+    info: { ...firstKey.info, refreshAtEpochMillis: Date.now() - 1 }
   };
-  let earlyRefreshGets = 0;
-  const earlyRefreshClient = createClient(options(async (request) => {
-    if (request.method === 'GET') earlyRefreshGets += 1;
-    return gateway(nearExpiryKey, [], [])(request);
-  }, { keyRefreshMarginMs: 120000 }));
-  await earlyRefreshClient.send({ mode: 'request-only', data: {} });
-  await earlyRefreshClient.send({ mode: 'request-only', data: {} });
-  assert.equal(earlyRefreshGets, 2);
+  let gets = 0;
+  const client = createClient(options(async (request) => {
+    if (request.method === 'GET') gets += 1;
+    return gateway(alreadyDueKey, [], [])(request);
+  }));
+  await client.send({ mode: 'request-only', data: {} });
+  await client.send({ mode: 'request-only', data: {} });
+  assert.equal(gets, 2);
+});
 
-  let noEarlyRefreshGets = 0;
-  const noEarlyRefreshClient = createClient(options(async (request) => {
-    if (request.method === 'GET') noEarlyRefreshGets += 1;
-    return gateway(nearExpiryKey, [], [])(request);
-  }, { keyRefreshMarginMs: 0 }));
-  await noEarlyRefreshClient.send({ mode: 'request-only', data: {} });
-  await noEarlyRefreshClient.send({ mode: 'request-only', data: {} });
-  assert.equal(noEarlyRefreshGets, 1);
+test('public key response without a valid refresh timestamp is rejected', async () => {
+  const client = createClient(options(async () => ({
+    statusCode: 200,
+    data: { ...firstKey.info, refreshAtEpochMillis: undefined }
+  })));
+
+  await assert.rejects(client.send({ mode: 'request-only', data: {} }), {
+    code: 'INVALID_SERVER_KEY'
+  });
 });
 
 test('clients with the same keyId keep keys and configuration isolated', async () => {
@@ -511,7 +514,6 @@ test('body and headers are snapshotted before asynchronous key acquisition', asy
 test('invalid configuration, JSON and reserved headers fail explicitly', async () => {
   const transport = async () => { throw new Error('should not send'); };
   for (const extra of [{ baseUrl: 'http://kong.example.com' }, { timeoutMs: 0 },
-    { keyRefreshMarginMs: -1 }, { keyRefreshMarginMs: Infinity },
     { baseUrl: 'https://host\\unexpected' }, { headers: 'not an object' },
     { headers: { Authorization: 'token\r\nInjected: value' } },
     { headers: { 'X-STC-Key-Id': 'override' } }, { headers: { 'X-STC-Session-Key': 'override' } }]) {
@@ -527,6 +529,31 @@ test('invalid configuration, JSON and reserved headers fail explicitly', async (
     { mode: 'plain', data: {}, headers: { 'X-STC-Session-Key': 'override' } }
   ]) {
     await assert.rejects(client.send(input), { code: 'INVALID_ARGUMENT' });
+  }
+});
+
+test('local HTTP works without a flag while remote HTTP remains rejected', async () => {
+  for (const baseUrl of [
+    'http://localhost:9090', 'http://127.0.0.1:9090/', 'http://[::1]:9090'
+  ]) {
+    const requests = [];
+    const transport = async (request) => {
+      requests.push(request);
+      return { statusCode: 200, data: result(request.data) };
+    };
+    const client = createClient(options(transport, { baseUrl }));
+    assert.deepEqual(await client.send({ mode: 'plain', data: {} }), result({}));
+    assert.equal(requests[0].url, baseUrl.replace(/\/$/, '') + '/plain/server/normal');
+  }
+  for (const baseUrl of [
+    'http://kong.example.com', 'http://192.168.1.10:9090',
+    'http://localhost.example.com', 'http://localhost@evil.example',
+    'http://localhost:9090/path', 'http://localhost:9090?query=1',
+    'http://localhost:9090#fragment', 'http://localhost:9090\\evil'
+  ]) {
+    assert.throws(() => createClient(options(async () => {}, {
+      baseUrl
+    })), { code: 'INVALID_ARGUMENT' });
   }
 });
 
@@ -666,7 +693,8 @@ test('demo wrapper returns separate plaintext, ciphertext, and latency values', 
     assert.ok(result.responseCipher.encryptedDataBase64);
     assert.ok(result.latency.total >= 0);
     assert.equal(Object.hasOwn(result, 'sessionKey'), false);
-    assert.ok(requests.every((request) => request.url.startsWith('https://')));
+    const { SERVER_BASE_URL } = require('../../config');
+    assert.ok(requests.every((request) => request.url.startsWith(SERVER_BASE_URL + '/')));
     const plain = await callApi('plain', data);
     assert.equal(plain.ok, true);
     assert.deepEqual(plain.details.requestPlain, data);

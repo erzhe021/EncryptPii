@@ -19,8 +19,6 @@ export interface TransportResponse {
 export interface ClientOptions {
   baseUrl: string;
   timeoutMs?: number;
-  /** Refresh cached public keys on the next encrypted request this many milliseconds before expiry. */
-  keyRefreshMarginMs?: number;
   headers?: Record<string, string>;
   transport: (request: TransportRequest) => Promise<TransportResponse>;
   randomBytes: (length: number) => Promise<Uint8Array>;
@@ -106,8 +104,6 @@ export interface WechatPlatform {
 export interface WechatClientOptions {
   baseUrl: string;
   timeoutMs?: number;
-  /** Refresh cached public keys on the next encrypted request this many milliseconds before expiry. */
-  keyRefreshMarginMs?: number;
   headers?: Record<string, string>;
   platform?: WechatPlatform;
 }

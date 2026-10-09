@@ -34,5 +34,8 @@ function Policy.public_key_expires_at(created_at, key_validity_millis)
   return created_at + key_validity_millis
 end
 
-return Policy
+function Policy.public_key_refresh_at(expires_at, rotation_before_expiry_millis)
+  return expires_at - rotation_before_expiry_millis
+end
 
+return Policy

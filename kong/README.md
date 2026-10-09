@@ -114,7 +114,8 @@ KV v2 每个密钥版本应包含以下字段：
   "data": {
     "publicKeyBase64": "xxxxx",
     "keyId": "rsa-ciam:2",
-    "expiresAtEpochMillis": 1735689600000
+    "expiresAtEpochMillis": 1735689600000,
+    "refreshAtEpochMillis": 1735688700000
   }
 }
 ```
@@ -174,6 +175,7 @@ ENCRYPTPII_VAULT_SECRET_PATH=secret/data/sensitive-transport-crypto/rsa-ciam
 ENCRYPTPII_KEY_ALIAS=rsa-ciam
 ENCRYPTPII_KEY_VALIDITY_MILLIS=3600000
 ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS=600000
+ENCRYPTPII_ROTATION_BEFORE_EXPIRY_MILLIS=900000
 ENCRYPTPII_MAX_BODY_BYTES=1048576
 ```
 
@@ -253,6 +255,7 @@ plugins:
       key_alias: rsa-ciam
       key_validity_millis: 3600000
       key_grace_period_millis: 600000
+      rotation_before_expiry_millis: 900000
       upstream_path: /crypto/server/bidirectional
       upstream_auth_token: "{vault://env/KONG_TO_ENCRYPTPII_AUTH_TOKEN}"
       decrypt_request: true
@@ -260,7 +263,7 @@ plugins:
       max_body_bytes: 1048576
 ```
 
-请求解密单向路由使用 `decrypt_request: true`、`encrypt_response: false`；仅响应加密路由使用 `decrypt_request: false`、`encrypt_response: true`。所有这类加密路由都从固定的两个 STC 请求头读取会话材料。公钥路由使用 `serve_public_key: true`，由插件直接返回 Vault 中的当前公钥、`keyId` 和 `expiresAtEpochMillis`。
+请求解密单向路由使用 `decrypt_request: true`、`encrypt_response: false`；仅响应加密路由使用 `decrypt_request: false`、`encrypt_response: true`。所有这类加密路由都从固定的两个 STC 请求头读取会话材料。公钥路由使用 `serve_public_key: true`，由插件直接返回 Vault 中的当前公钥、`keyId`、`expiresAtEpochMillis` 和 `refreshAtEpochMillis`。刷新时间为公钥到期时间减去 `rotation_before_expiry_millis`。
 
 主要配置项：
 
@@ -273,6 +276,7 @@ plugins:
 | `key_alias` | 必填 | SDK 使用的密钥别名 |
 | `key_validity_millis` | `60000` | 当前密钥有效期 |
 | `key_grace_period_millis` | `30000` | 密钥轮换后的旧版本宽限期 |
+| `rotation_before_expiry_millis` | `40000` | 建议客户端在密钥到期前提前多久刷新；必须满足宽限期 < 提前量 < 有效期 |
 | `upstream_path` | 必填 | 转发到上游的路径 |
 | `upstream_auth_token` | 必填 | 上游共享认证 token，可使用 Kong Vault 引用 |
 | `decrypt_request` | `false` | 是否解密请求体 |

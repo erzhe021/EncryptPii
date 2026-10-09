@@ -18,7 +18,8 @@ test('SDK request decrypts in JCA and JCA response decrypts in SDK', async () =>
           data: {
             keyId: 'java',
             publicKeyBase64: pair.publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
-            expiresAtEpochMillis: Date.now() + 60000
+            expiresAtEpochMillis: Date.now() + 60000,
+            refreshAtEpochMillis: Date.now() + 30000
           }
         };
       }

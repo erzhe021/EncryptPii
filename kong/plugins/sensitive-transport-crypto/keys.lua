@@ -146,11 +146,18 @@ function Keys.get_public_key_response(config)
         kong.log.err("Active Vault key version ", current_version, " has expired")
         return nil, "Vault key is unavailable"
     end
+    if config.key_grace_period_millis >= config.rotation_before_expiry_millis
+            or config.rotation_before_expiry_millis >= config.key_validity_millis then
+        kong.log.err("Key lifecycle settings must satisfy grace period < rotation-before-expiry < validity")
+        return nil, "Vault key is unavailable"
+    end
 
     return {
         publicKeyBase64 = public_key_base64,
         keyId = config.key_alias .. ":" .. current_version,
         expiresAtEpochMillis = expires_at,
+        refreshAtEpochMillis = policy.public_key_refresh_at(
+                expires_at, config.rotation_before_expiry_millis),
     }
 end
 

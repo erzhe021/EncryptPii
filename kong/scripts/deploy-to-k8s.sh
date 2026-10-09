@@ -68,6 +68,7 @@ jq -n \
   --arg alias "${ENCRYPTPII_KEY_ALIAS:?}" \
   --argjson validity "${ENCRYPTPII_KEY_VALIDITY_MILLIS:?}" \
   --argjson grace "${ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS:?}" \
+  --argjson rotation_before_expiry "${ENCRYPTPII_ROTATION_BEFORE_EXPIRY_MILLIS:?}" \
   --argjson max_body "${ENCRYPTPII_MAX_BODY_BYTES:?}" \
   '
   def plugin($public; $decrypt; $encrypt; $path):
@@ -76,6 +77,7 @@ jq -n \
       vault_auth_role:"encryptpii-kong",
       upstream_auth_token:"{vault://env/KONG_TO_ENCRYPTPII_AUTH_TOKEN}",
       key_validity_millis:$validity,key_grace_period_millis:$grace,
+      rotation_before_expiry_millis:$rotation_before_expiry,
       max_body_bytes:$max_body,serve_public_key:$public,
       decrypt_request:$decrypt,encrypt_response:$encrypt,
       upstream_path:$path}};

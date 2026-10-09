@@ -5,6 +5,7 @@ local typedefs = require "kong.db.schema.typedefs"
 local DEFAULT_KUBERNETES_JWT_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
 local DEFAULT_KEY_VALIDITY_MILLIS = 60000
 local DEFAULT_KEY_GRACE_PERIOD_MILLIS = 30000
+local DEFAULT_ROTATION_BEFORE_EXPIRY_MILLIS = 40000
 local MAX_KEY_PERIOD_MILLIS = 31536000000
 local DEFAULT_MAX_BODY_BYTES = 1048576
 local MAX_BODY_BYTES = 16777216
@@ -25,6 +26,7 @@ return {
           { key_alias = { type = "string", required = true, match = [[^[%w_-]+$]] } },
           { key_validity_millis = { type = "integer", default = DEFAULT_KEY_VALIDITY_MILLIS, between = { 1, MAX_KEY_PERIOD_MILLIS } } },
           { key_grace_period_millis = { type = "integer", default = DEFAULT_KEY_GRACE_PERIOD_MILLIS, between = { 0, MAX_KEY_PERIOD_MILLIS } } },
+          { rotation_before_expiry_millis = { type = "integer", default = DEFAULT_ROTATION_BEFORE_EXPIRY_MILLIS, between = { 0, MAX_KEY_PERIOD_MILLIS } } },
           { upstream_path = { type = "string", required = true, match = [[^/[%w/_-]*$]] } },
           { upstream_auth_token = { type = "string", required = true, referenceable = true } },
           { decrypt_request = { type = "boolean", default = false } },

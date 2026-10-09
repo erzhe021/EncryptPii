@@ -19,6 +19,7 @@ VAULT_SECRET_PATH="${ENCRYPTPII_VAULT_SECRET_PATH:?Please set the ENCRYPTPII_VAU
 KEY_ALIAS="${ENCRYPTPII_KEY_ALIAS:?Please set the ENCRYPTPII_KEY_ALIAS environment variable}"
 KEY_VALIDITY_MILLIS="${ENCRYPTPII_KEY_VALIDITY_MILLIS:?Please set the ENCRYPTPII_KEY_VALIDITY_MILLIS environment variable}"
 KEY_GRACE_PERIOD_MILLIS="${ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS:?Please set the ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS environment variable}"
+ROTATION_BEFORE_EXPIRY_MILLIS="${ENCRYPTPII_ROTATION_BEFORE_EXPIRY_MILLIS:?Please set the ENCRYPTPII_ROTATION_BEFORE_EXPIRY_MILLIS environment variable}"
 MAX_BODY_BYTES="${ENCRYPTPII_MAX_BODY_BYTES:?Please set the ENCRYPTPII_MAX_BODY_BYTES environment variable}"
 
 for command in curl jq; do
@@ -114,6 +115,7 @@ upsert_plugin() {
       --arg upstream_path "$upstream_path" \
       --argjson key_validity_millis "$KEY_VALIDITY_MILLIS" \
       --argjson key_grace_period_millis "$KEY_GRACE_PERIOD_MILLIS" \
+      --argjson rotation_before_expiry_millis "$ROTATION_BEFORE_EXPIRY_MILLIS" \
       --argjson max_body_bytes "$MAX_BODY_BYTES" \
       --argjson decrypt_request "$decrypt_request" \
       --argjson encrypt_response "$encrypt_response" \
@@ -125,6 +127,7 @@ upsert_plugin() {
         key_alias:$key_alias,
         key_validity_millis:$key_validity_millis,
         key_grace_period_millis:$key_grace_period_millis,
+        rotation_before_expiry_millis:$rotation_before_expiry_millis,
         upstream_path:$upstream_path,
         upstream_auth_token:"{vault://env/KONG_TO_ENCRYPTPII_AUTH_TOKEN}",
         decrypt_request:$decrypt_request,

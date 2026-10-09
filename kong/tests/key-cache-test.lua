@@ -68,7 +68,7 @@ package.preload["resty.http"] = function()
               },
             } }
           else
-            body = { data = { data = { privateKey = "test-key" } } }
+            body = { data = { data = { privateKey = "test-key", publicKey = "dGVzdC1rZXk=" } } }
           end
           return { status = 200, read_body = function() return body end }
         end,
@@ -86,6 +86,7 @@ kong = { log = { err = function() end } }
 local plugin = dofile("/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/handler.lua")
 assert(plugin.init_worker == nil, "Cache cleanup must not register a worker timer")
 local get_private_key = require("kong.plugins.sensitive-transport-crypto.keys").get_private_key
+local get_public_key_response = require("kong.plugins.sensitive-transport-crypto.keys").get_public_key_response
 local get_vault_context = require("kong.plugins.sensitive-transport-crypto.vault").get_context
 local config = {
   vault_addr = "http://vault:8200",
@@ -95,18 +96,24 @@ local config = {
   key_alias = "test",
   key_validity_millis = 10000,
   key_grace_period_millis = 5000,
+  rotation_before_expiry_millis = 6000,
 }
+
+local public_key_response = assert(get_public_key_response(config))
+assert(public_key_response.keyId == "test:1")
+assert(public_key_response.expiresAtEpochMillis == INITIAL_TIME_SECONDS * MILLIS_PER_SECOND + 10000)
+assert(public_key_response.refreshAtEpochMillis == INITIAL_TIME_SECONDS * MILLIS_PER_SECOND + 4000)
 
 local first = assert(get_private_key(config, "test:1"))
 assert(get_private_key(config, "test:1") == first)
-assert(reads == 2, "Valid cache hits must avoid Vault")
+assert(reads == 4, "Valid cache hits must avoid Vault")
 assert(logins == 1, "The first Vault read must authenticate through Kubernetes")
 
 now = INITIAL_TIME_SECONDS + 5
 get_private_key(config, "invalid:1")
 assert(get_private_key(config, "test:1") ~= first,
   "Expired cached keys must be fetched again on the next valid access")
-assert(reads == 4, "Expired-key cleanup must happen during a later key access")
+assert(reads == 6, "Expired-key cleanup must happen during a later key access")
 
 now = INITIAL_TIME_SECONDS
 created_time = os.date("!%Y-%m-%dT%H:%M:%SZ", now)

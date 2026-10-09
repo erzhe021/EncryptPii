@@ -90,20 +90,22 @@ function isEncryptedResponse(headers, raw) {
 }
 
 function createClient(options) {
-  if (!options || typeof options.baseUrl !== 'string'
-    || !/^https:\/\/(?:\[[0-9a-fA-F:]+\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[0-9]{1,5})?\/?$/.test(options.baseUrl)
-    || typeof options.transport !== 'function'
+  if (!options || typeof options.transport !== 'function'
     || typeof options.randomBytes !== 'function') {
-    throw new SdkError('INVALID_ARGUMENT', 'HTTPS origin, transport and random source are required');
+    throw new SdkError('INVALID_ARGUMENT', 'Transport and random source are required');
+  }
+  const validHttps = typeof options.baseUrl === 'string'
+    && /^https:\/\/(?:\[[0-9a-fA-F:]+\]|[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?)(?::[0-9]{1,5})?\/?$/.test(options.baseUrl);
+  const validLocalHttp = typeof options.baseUrl === 'string'
+    && /^http:\/\/(?:localhost|127\.0\.0\.1|\[::1\])(?::[0-9]{1,5})?\/?$/.test(options.baseUrl);
+  if (!validHttps && !validLocalHttp) {
+    throw new SdkError('INVALID_ARGUMENT',
+      'HTTPS origin or a local HTTP origin is required');
   }
   const baseUrl = options.baseUrl.replace(/\/$/, '');
   const timeoutMs = options.timeoutMs === undefined ? 15000 : options.timeoutMs;
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new SdkError('INVALID_ARGUMENT', 'Timeout must be a positive number');
-  }
-  const keyRefreshMarginMs = options.keyRefreshMarginMs === undefined ? 1000 : options.keyRefreshMarginMs;
-  if (!Number.isFinite(keyRefreshMarginMs) || keyRefreshMarginMs < 0) {
-    throw new SdkError('INVALID_ARGUMENT', 'Key refresh margin must be a non-negative number');
   }
   const defaultHeaders = normalizeHeaders(options.headers);
   const transport = options.transport;
@@ -142,7 +144,7 @@ function createClient(options) {
     return response.data;
   }
 
-  const keys = createKeyManager(request, keyRefreshMarginMs);
+  const keys = createKeyManager(request);
 
   async function sendOnce(mode, inputData, headers, serverKey, startedAt) {
     const encrypted = mode.encryptRequest || mode.decryptResponse;
