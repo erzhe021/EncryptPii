@@ -2,6 +2,9 @@ package com.ikea.crypto.stc.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
+
+import jakarta.validation.constraints.Min;
 
 /**
  * Configuration properties for Vault integration in sensitive transport crypto functionality.
@@ -11,6 +14,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * </p>
  */
 @Data
+@Validated
 @ConfigurationProperties(prefix = "sensitive.transport.crypto.vault")
 public class VaultProperties {
 
@@ -55,31 +59,22 @@ public class VaultProperties {
     private boolean autoBootstrap = true;
 
     /**
-     * Key validity duration in milliseconds before rotation is required.
-     * Default: 1 year (365 days).
-     */
-    private long validityMillis = 365L * 24 * 60 * 60 * 1000;
-
-    /**
-     * Grace period in milliseconds after key expiration during which old keys are still accepted for decryption.
-     * Default: 30 days.
-     */
-    private long gracePeriodMillis = 30L * 24 * 60 * 60 * 1000;
-
-    /**
      * Wait time in milliseconds for pods that lost CAS competition before re-fetching the updated key from Vault.
      * Default: 1200ms (1~2 seconds).
      */
+    @Min(value = 0, message = "cas-backoff-millis must not be negative")
     private long casBackoffMillis = 1200L;
 
     /**
      * Maximum number of attempts to poll Vault after CAS competition loss.
      */
+    @Min(value = 1, message = "cas-max-retries must be greater than zero")
     private int casMaxRetries = 3;
 
     /**
      * Interval in milliseconds between retries when polling Vault after CAS conflict.
      */
+    @Min(value = 1, message = "cas-retry-interval-millis must be greater than zero")
     private long casRetryIntervalMillis = 500L;
 
     /**

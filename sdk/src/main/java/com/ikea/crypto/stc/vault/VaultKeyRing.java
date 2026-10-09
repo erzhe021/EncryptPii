@@ -1,6 +1,7 @@
 package com.ikea.crypto.stc.vault;
 
 import com.ikea.crypto.stc.config.VaultProperties;
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.key.rotation.VaultRotationCoordinator;
 import lombok.Getter;
@@ -34,13 +35,50 @@ public class VaultKeyRing extends KeyRing {
     private final VaultRotationCoordinator rotationCoordinator;
 
     public VaultKeyRing(VaultProperties properties, VaultClient vaultClient) {
-        super(properties.getKeyAlias(), properties.getValidityMillis(), properties.getGracePeriodMillis());
+        this(properties, new KeyLifecycleProperties(), vaultClient, true);
+    }
+
+    public VaultKeyRing(VaultProperties properties, VaultClient vaultClient, boolean autoRotate) {
+        this(properties, new KeyLifecycleProperties(), vaultClient, autoRotate);
+    }
+
+    public VaultKeyRing(
+            VaultProperties properties,
+            VaultClient vaultClient,
+            boolean autoRotate,
+            long rotationBeforeExpiryMillis
+    ) {
+        this(properties, new KeyLifecycleProperties(), vaultClient, autoRotate, rotationBeforeExpiryMillis);
+    }
+
+    public VaultKeyRing(
+            VaultProperties properties,
+            KeyLifecycleProperties lifecycleProperties,
+            VaultClient vaultClient,
+            boolean autoRotate
+    ) {
+        this(properties, lifecycleProperties, vaultClient, autoRotate,
+                lifecycleProperties.getRotationBeforeExpiryMillis());
+    }
+
+    public VaultKeyRing(
+            VaultProperties properties,
+            KeyLifecycleProperties lifecycleProperties,
+            VaultClient vaultClient,
+            boolean autoRotate,
+            long rotationBeforeExpiryMillis
+    ) {
+        super(properties.getKeyAlias(), lifecycleProperties.getValidityMillis(),
+                lifecycleProperties.getGracePeriodMillis(),
+                autoRotate, rotationBeforeExpiryMillis);
         this.properties = properties;
         this.vaultClient = vaultClient;
         this.authenticator = new VaultAuthenticator(properties, vaultClient);
         this.codec = new VaultKeyCodec();
-        this.repository = new VaultKeyRepository(properties, vaultClient, this.authenticator, this.codec);
-        this.rotationCoordinator = new VaultRotationCoordinator(this.repository, properties, this.codec);
+        this.repository = new VaultKeyRepository(
+                properties, lifecycleProperties, vaultClient, this.authenticator, this.codec);
+        this.rotationCoordinator = new VaultRotationCoordinator(
+                this.repository, properties, lifecycleProperties, this.codec);
     }
 
     public VaultKeyRing(
@@ -51,7 +89,22 @@ public class VaultKeyRing extends KeyRing {
             VaultKeyRepository repository,
             VaultRotationCoordinator rotationCoordinator
     ) {
-        super(properties.getKeyAlias(), properties.getValidityMillis(), properties.getGracePeriodMillis());
+        this(properties, vaultClient, authenticator, codec, repository, rotationCoordinator,
+                new KeyLifecycleProperties());
+    }
+
+    private VaultKeyRing(
+            VaultProperties properties,
+            VaultClient vaultClient,
+            VaultAuthenticator authenticator,
+            VaultKeyCodec codec,
+            VaultKeyRepository repository,
+            VaultRotationCoordinator rotationCoordinator,
+            KeyLifecycleProperties lifecycleProperties
+    ) {
+        super(properties.getKeyAlias(), lifecycleProperties.getValidityMillis(),
+                lifecycleProperties.getGracePeriodMillis(), true,
+                lifecycleProperties.getRotationBeforeExpiryMillis());
         this.properties = properties;
         this.vaultClient = vaultClient;
         this.authenticator = authenticator;
@@ -99,9 +152,14 @@ public class VaultKeyRing extends KeyRing {
 
         // Stop backtracking if active key itself has expired beyond grace period
         if (isExpiredBeyondGrace(activeEntry.metadata())) {
-            log.info("Active key '{}' (version {}) has expired beyond grace period. Auto-rotating...",
-                    activeEntry.metadata().keyId(), currentVersion);
-            rotateKey();
+            if (isAutoRotate()) {
+                logRotationDue(getKeyAlias(), activeEntry.metadata(), System.currentTimeMillis());
+                rotateKey();
+            } else {
+                log.warn("Active RSA key is beyond its grace period and automatic rotation is disabled: keyId={}",
+                        activeEntry.metadata().keyId());
+                registerKeyEntry(activeEntry, true);
+            }
             return;
         }
 
@@ -109,6 +167,7 @@ public class VaultKeyRing extends KeyRing {
         log.info("Loaded active key from Vault KV v2: keyId={}, version={}", activeEntry.metadata().keyId(), currentVersion);
 
         // Backtrack historical versions within grace period
+        long nextVersionRotationTime = activeEntry.metadata().createdAtEpochMillis();
         for (int v = currentVersion - 1; v >= 1; v--) {
             try {
                 Optional<VaultClient.VaultSecretEntry> historicalOpt = repository.readSecretVersionRaw(getKeyAlias(), v);
@@ -124,21 +183,28 @@ public class VaultKeyRing extends KeyRing {
                         getValidityMillis()
                 );
 
-                if (isExpiredBeyondGrace(historicalEntry.metadata())) {
+                long historicalRetirementTime = nextVersionRotationTime + getGracePeriodMillis();
+                if (System.currentTimeMillis() >= historicalRetirementTime) {
                     log.info("Historical key '{}' (version {}) has expired beyond grace period. Stopping backwards scan.",
                             historicalEntry.metadata().keyId(), v);
                     break;
                 }
 
-                registerKeyEntry(historicalEntry, false);
+                registerKeyEntry(historicalEntry, false, nextVersionRotationTime);
+                nextVersionRotationTime = historicalEntry.metadata().createdAtEpochMillis();
                 log.info("Loaded historical key from Vault: keyId={}, version={}", historicalEntry.metadata().keyId(), v);
             } catch (Exception e) {
                 log.warn("Failed to load historical key version {} from Vault: {}", v, e.getMessage());
             }
         }
 
-        if (getActiveKeyEntry() == null || getActiveKeyEntry().metadata().isExpired()) {
-            log.info("Active RSA key in Vault is absent or expired, rotating to a new key...");
+        KeyEntry loadedActive = getActiveKeyEntry();
+        if (isAutoRotate() && (loadedActive == null || isRotationDue(loadedActive.metadata()))) {
+            if (loadedActive != null) {
+                logRotationDue(getKeyAlias(), loadedActive.metadata(), System.currentTimeMillis());
+            } else {
+                log.warn("RSA key rotation triggered because no active key was loaded: alias={}", getKeyAlias());
+            }
             rotateKey();
         }
 
@@ -202,7 +268,10 @@ public class VaultKeyRing extends KeyRing {
             Optional<KeyEntry> remoteOpt = repository.readKeyVersion(alias, version);
             if (remoteOpt.isPresent()) {
                 KeyEntry remoteEntry = remoteOpt.get();
-                if (isExpiredBeyondGrace(remoteEntry.metadata())) {
+                Optional<KeyEntry> nextEntry = repository.readKeyVersion(alias, version + 1);
+                long rotatedAt = nextEntry.map(entry -> entry.metadata().createdAtEpochMillis())
+                        .orElse(remoteEntry.metadata().expiresAtEpochMillis());
+                if (System.currentTimeMillis() >= rotatedAt + getGracePeriodMillis()) {
                     log.warn("Key '{}' fetched from Vault has expired beyond grace period and is rejected.", keyId);
                     return Optional.empty();
                 }
@@ -214,7 +283,11 @@ public class VaultKeyRing extends KeyRing {
                             && Objects.requireNonNull(remoteEntry.metadata().version()) > Objects.requireNonNull(getActiveKeyEntry().metadata().version())
                             && !remoteEntry.metadata().isExpired()));
 
-                registerKeyEntry(remoteEntry, makeActive);
+                if (nextEntry.isPresent()) {
+                    registerKeyEntry(remoteEntry, makeActive, rotatedAt);
+                } else {
+                    registerKeyEntry(remoteEntry, makeActive);
+                }
                 log.info("Successfully fetched and cached keyId '{}' on-demand from Vault (makeActive={})", keyId, makeActive);
                 return Optional.of(remoteEntry);
             } else {
@@ -233,6 +306,16 @@ public class VaultKeyRing extends KeyRing {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while rotating key in Vault", e);
+        }
+    }
+
+    @Override
+    protected synchronized KeyEntry rotateIfDueKey(String targetKeyAlias) throws GeneralSecurityException, IOException {
+        try {
+            return rotationCoordinator.rotate(this, targetKeyAlias, false, true);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while proactively rotating key in Vault", e);
         }
     }
 

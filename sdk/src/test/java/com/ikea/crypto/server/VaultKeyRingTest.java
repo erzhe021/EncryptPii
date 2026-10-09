@@ -11,6 +11,7 @@ import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.vault.VaultClient;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
 import com.ikea.crypto.stc.config.VaultProperties;
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -234,17 +235,18 @@ public class VaultKeyRingTest {
         properties.setSecretPath("secret/data/crypto/" + testAlias);
         properties.setKeyAlias(testAlias);
         properties.setAutoBootstrap(true);
-        properties.setValidityMillis(500L); // Expires in 500ms
-        properties.setGracePeriodMillis(5000L);
+        KeyLifecycleProperties lifecycle = new KeyLifecycleProperties();
+        lifecycle.setValidityMillis(500L); // Expires in 500ms
+        lifecycle.setGracePeriodMillis(200L);
 
         VaultClient vaultClient = new VaultClient(VAULT_ADDR);
 
         // Pod 1 & Pod 2 both start up with version 1
-        VaultKeyRing pod1 = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing pod1 = new VaultKeyRing(properties, lifecycle, vaultClient, true, 201L);
         pod1.initialize();
         CryptoServer server1 = new CryptoServer(pod1);
 
-        VaultKeyRing pod2 = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing pod2 = new VaultKeyRing(properties, lifecycle, vaultClient, true, 201L);
         pod2.initialize();
         CryptoServer server2 = new CryptoServer(pod2);
 

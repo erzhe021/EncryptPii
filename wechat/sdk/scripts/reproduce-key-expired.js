@@ -8,7 +8,8 @@ function makeKey(keyId) {
     info: {
       keyId,
       publicKeyBase64: pair.publicKey.export({ type: 'spki', format: 'der' }).toString('base64'),
-      expiresAtEpochMillis: Date.now() + 600000
+      expiresAtEpochMillis: Date.now() + 600000,
+      refreshAtEpochMillis: Date.now() + 300000
     }
   };
 }
@@ -133,4 +134,3 @@ if (require.main === module) {
 }
 
 module.exports = { runScenario };
-

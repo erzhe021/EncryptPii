@@ -3,6 +3,8 @@ package com.ikea.crypto.stc.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.key.CryptoServer;
+import com.ikea.crypto.stc.key.KeyRing;
+import com.ikea.crypto.stc.model.KeyMetadata;
 import com.ikea.crypto.stc.vault.VaultClient;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
 import com.ikea.crypto.stc.web.advice.RequestDecryptAdvice;
@@ -37,25 +39,62 @@ import java.security.KeyPairGenerator;
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(RequestBodyAdvice.class)
 @ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "enabled", havingValue = "true", matchIfMissing = true)
-@EnableConfigurationProperties({SensitiveTransportCryptoProperties.class, VaultProperties.class})
+@EnableConfigurationProperties({
+        SensitiveTransportCryptoProperties.class,
+        KeyLifecycleProperties.class,
+        VaultProperties.class
+})
 public class SensitiveTransportCryptoAutoConfiguration {
 
     @Bean
+    public CryptoTimeConfigurationValidator cryptoTimeConfigurationValidator(
+            KeyLifecycleProperties lifecycleProperties
+    ) {
+        return new CryptoTimeConfigurationValidator(lifecycleProperties);
+    }
+
+    @Bean
     @ConditionalOnMissingBean
-    public CryptoServer cryptoServer(VaultProperties vaultProperties) throws GeneralSecurityException, IOException {
+    public CryptoServer cryptoServer(
+            VaultProperties vaultProperties,
+            SensitiveTransportCryptoProperties cryptoProperties,
+            KeyLifecycleProperties lifecycleProperties,
+            CryptoTimeConfigurationValidator timeConfigurationValidator
+    ) throws GeneralSecurityException, IOException {
         if (vaultProperties != null && vaultProperties.isEnabled()) {
             log.info("Vault key management enabled. Loading and managing keys via Vault at {}", vaultProperties.getAddr());
             VaultClient vaultClient = new VaultClient(vaultProperties.getAddr());
-            VaultKeyRing vaultKeyRing = new VaultKeyRing(vaultProperties, vaultClient);
+            VaultKeyRing vaultKeyRing = new VaultKeyRing(
+                    vaultProperties,
+                    lifecycleProperties,
+                    vaultClient,
+                    cryptoProperties.isAutoRotate(),
+                    lifecycleProperties.getRotationBeforeExpiryMillis()
+            );
             vaultKeyRing.initialize();
             return new CryptoServer(vaultKeyRing);
         }
 
         log.warn("Vault key management is disabled. Initializing CryptoServer with an in-memory RSA keypair for local/testing environment.");
+        long inMemoryValidityMillis = lifecycleProperties.getValidityMillis();
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
         keyGen.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
         KeyPair keyPair = keyGen.generateKeyPair();
-        return new CryptoServer(keyPair.getPrivate(), keyPair.getPublic());
+        KeyRing keyRing = new KeyRing(
+                "in-memory-test-key",
+                inMemoryValidityMillis,
+                lifecycleProperties.getGracePeriodMillis(),
+                cryptoProperties.isAutoRotate(),
+                lifecycleProperties.getRotationBeforeExpiryMillis()
+        );
+        long now = System.currentTimeMillis();
+        KeyMetadata metadata = new KeyMetadata(
+                KeyMetadata.buildKeyId(keyRing.getKeyAlias(), 1),
+                now,
+                now + inMemoryValidityMillis
+        );
+        keyRing.registerKeyEntry(new KeyRing.KeyEntry(metadata, keyPair), true);
+        return new CryptoServer(keyRing);
     }
 
     @Bean

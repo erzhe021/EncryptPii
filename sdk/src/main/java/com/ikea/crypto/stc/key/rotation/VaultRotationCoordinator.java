@@ -1,6 +1,7 @@
 package com.ikea.crypto.stc.key.rotation;
 
 import com.ikea.crypto.stc.config.VaultProperties;
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.model.KeyMetadata;
 import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.vault.*;
@@ -20,11 +21,22 @@ public class VaultRotationCoordinator {
 
     private final VaultKeyRepository repository;
     private final VaultProperties properties;
+    private final KeyLifecycleProperties lifecycleProperties;
     private final VaultKeyCodec codec;
 
     public VaultRotationCoordinator(VaultKeyRepository repository, VaultProperties properties, VaultKeyCodec codec) {
+        this(repository, properties, new KeyLifecycleProperties(), codec);
+    }
+
+    public VaultRotationCoordinator(
+            VaultKeyRepository repository,
+            VaultProperties properties,
+            KeyLifecycleProperties lifecycleProperties,
+            VaultKeyCodec codec
+    ) {
         this.repository = repository;
         this.properties = properties;
+        this.lifecycleProperties = lifecycleProperties;
         this.codec = codec;
     }
 
@@ -38,6 +50,15 @@ public class VaultRotationCoordinator {
      */
     public KeyRing.KeyEntry rotate(KeyRing keyRing, String targetKeyAlias, boolean force)
             throws GeneralSecurityException, IOException, InterruptedException {
+        return rotate(keyRing, targetKeyAlias, force, false);
+    }
+
+    public KeyRing.KeyEntry rotate(
+            KeyRing keyRing,
+            String targetKeyAlias,
+            boolean force,
+            boolean proactiveOnly
+    ) throws GeneralSecurityException, IOException, InterruptedException {
         long now = System.currentTimeMillis();
         String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : properties.getKeyAlias();
 
@@ -56,14 +77,17 @@ public class VaultRotationCoordinator {
                     vaultVersion,
                     latestSecret.createdTime(),
                     alias,
-                    properties.getValidityMillis()
+                    lifecycleProperties.getValidityMillis()
             );
 
             boolean vaultKeyValid = !vaultEntry.metadata().isExpired(now);
             boolean vaultIsNewer = vaultVersion > currentLocalVersion;
+            boolean vaultRotationDue = keyRing.isRotationDue(vaultEntry.metadata(), now);
 
-            // 若 Vault 中已有未过期的更新版本，直接同步至本地内存，轮换终止
-            if (vaultKeyValid && (vaultIsNewer || localExpired)) {
+            boolean shouldSyncVaultKey = proactiveOnly
+                    ? !vaultRotationDue
+                    : vaultIsNewer || localExpired;
+            if (vaultKeyValid && shouldSyncVaultKey) {
                 log.info("Double-checked refresh: Vault already contains valid unexpired key (version={}). Syncing to local memory and terminating rotation.", vaultVersion);
                 keyRing.registerKeyEntry(vaultEntry, true);
                 return vaultEntry;
@@ -94,7 +118,7 @@ public class VaultRotationCoordinator {
             // 获锁 Pod：执行密钥生成、写入 Vault、更新本地
             long latestVersion = writeResult.version();
             long createdAt = codec.parseCreatedTime(writeResult.createdTime(), now);
-            long expiresAt = createdAt + properties.getValidityMillis();
+            long expiresAt = createdAt + lifecycleProperties.getValidityMillis();
             String newKeyId = KeyMetadata.buildKeyId(alias, latestVersion);
             KeyMetadata metadata = new KeyMetadata(newKeyId, createdAt, expiresAt);
             KeyRing.KeyEntry newEntry = new KeyRing.KeyEntry(metadata, keyPair);
@@ -135,7 +159,7 @@ public class VaultRotationCoordinator {
                             latestSecret.version(),
                             latestSecret.createdTime(),
                             alias,
-                            properties.getValidityMillis()
+                            lifecycleProperties.getValidityMillis()
                     );
                     keyRing.registerKeyEntry(entry, true);
                     log.info("Successfully fetched and activated latest key version {} from Vault after CAS contention", latestSecret.version());

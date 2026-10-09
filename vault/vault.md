@@ -216,37 +216,42 @@ secret/data/crypto/service-c
 ### 1. 配置参数说明（`application.yml`）
 
 ```yaml
-crypto:
-  vault:
-    # 是否开启 Vault 托管 (开启后自动使用 VaultKeyRing)
-    enabled: true
-    # Vault 服务地址
-    addr: http://vault.vault.svc:8200
-    # 认证方式: KUBERNETES 或 TOKEN
-    auth-method: KUBERNETES
-    # 静态 Token (auth-method 为 TOKEN 时有效，或用于本地调试)
-    token: root
-    # Vault KV v2 挂载与路径
-    secret-path: secret/data/sensitive-transport-crypto/ciam
-    # 逻辑密钥别名 (keyId 格式为 <keyAlias>:<version>)
-    key-alias: ciam
-    # 是否在 Vault 为空时自动初始化初识密钥
-    auto-bootstrap: true
-    # 密钥有效期 (毫秒，默认 365 天)
-    validity-millis: 31536000000
-    # 宽限过渡期 (毫秒，默认 30 天)
-    grace-period-millis: 2592000000
-    # CAS 竞态失败时的避退等待时长 (毫秒，默认 1200ms)
-    cas-backoff-millis: 1200
-    # CAS 竞态失败后的最大轮询重试次数
-    cas-max-retries: 3
-    # 重试轮询间隔 (毫秒)
-    cas-retry-interval-millis: 500
-    kubernetes:
-      # Vault 中配置的 Kubernetes 认证角色名
-      role: crypto-server
-      # K8s 容器挂载的 ServiceAccount Token 路径
-      token-path: /var/run/secrets/kubernetes.io/serviceaccount/token
+sensitive:
+  transport:
+    crypto:
+      key-lifecycle:
+        # 密钥有效期 (毫秒，默认 365 天)
+        validity-millis: 31536000000
+        # 宽限过渡期 (毫秒，默认 30 天)
+        grace-period-millis: 2592000000
+        # 到期前主动轮换窗口 (毫秒，默认 31 天)
+        rotation-before-expiry-millis: 2678400000
+      vault:
+        # 是否开启 Vault 托管 (开启后自动使用 VaultKeyRing)
+        enabled: true
+        # Vault 服务地址
+        addr: http://vault.vault.svc:8200
+        # 认证方式: KUBERNETES 或 TOKEN
+        auth-method: KUBERNETES
+        # 静态 Token (auth-method 为 TOKEN 时有效，或用于本地调试)
+        token: root
+        # Vault KV v2 挂载与路径
+        secret-path: secret/data/sensitive-transport-crypto/ciam
+        # 逻辑密钥别名 (keyId 格式为 <keyAlias>:<version>)
+        key-alias: ciam
+        # 是否在 Vault 为空时自动初始化初识密钥
+        auto-bootstrap: true
+        # CAS 竞态失败时的避退等待时长 (毫秒，默认 1200ms)
+        cas-backoff-millis: 1200
+        # CAS 竞态失败后的最大轮询重试次数
+        cas-max-retries: 3
+        # 重试轮询间隔 (毫秒)
+        cas-retry-interval-millis: 500
+        kubernetes:
+          # Vault 中配置的 Kubernetes 认证角色名
+          role: crypto-server
+          # K8s 容器挂载的 ServiceAccount Token 路径
+          token-path: /var/run/secrets/kubernetes.io/serviceaccount/token
 ```
 
 ### 2. 获取当前服务端活跃公钥

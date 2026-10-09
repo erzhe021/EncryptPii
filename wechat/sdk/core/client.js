@@ -107,10 +107,6 @@ function createClient(options) {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new SdkError('INVALID_ARGUMENT', 'Timeout must be a positive number');
   }
-  const keyRefreshMarginMs = options.keyRefreshMarginMs === undefined ? 1000 : options.keyRefreshMarginMs;
-  if (!Number.isFinite(keyRefreshMarginMs) || keyRefreshMarginMs < 0) {
-    throw new SdkError('INVALID_ARGUMENT', 'Key refresh margin must be a non-negative number');
-  }
   const defaultHeaders = normalizeHeaders(options.headers);
   const transport = options.transport;
   const crypto = createCrypto(options.randomBytes);
@@ -148,7 +144,7 @@ function createClient(options) {
     return response.data;
   }
 
-  const keys = createKeyManager(request, keyRefreshMarginMs);
+  const keys = createKeyManager(request);
 
   async function sendOnce(mode, inputData, headers, serverKey, startedAt) {
     const encrypted = mode.encryptRequest || mode.decryptResponse;

@@ -2,8 +2,8 @@ const forge = require('../lib/forge.min.js');
 const { SdkError } = require('./errors');
 const { PUBLIC_KEY_PATH } = require('./protocol');
 
-function isUsable(key, refreshMarginMs) {
-  return Boolean(key) && key.expiresAtEpochMillis - refreshMarginMs > Date.now();
+function isUsable(key) {
+  return Boolean(key) && key.refreshAtEpochMillis > Date.now();
 }
 
 // Parse the public key eagerly so a malformed replacement key surfaces
@@ -18,7 +18,7 @@ function verifyPublicKey(base64) {
   }
 }
 
-function createKeyManager(request, refreshMarginMs) {
+function createKeyManager(request) {
   let cached = null;
   let fetching = null;
 
@@ -26,6 +26,8 @@ function createKeyManager(request, refreshMarginMs) {
     if (!key || typeof key.keyId !== 'string' || !key.keyId
       || typeof key.publicKeyBase64 !== 'string' || !key.publicKeyBase64
       || !Number.isFinite(key.expiresAtEpochMillis)
+      || !Number.isFinite(key.refreshAtEpochMillis)
+      || key.refreshAtEpochMillis > key.expiresAtEpochMillis
       || key.expiresAtEpochMillis <= Date.now()) {
       throw new SdkError('INVALID_SERVER_KEY', 'Server public key is invalid or expired');
     }
@@ -33,20 +35,21 @@ function createKeyManager(request, refreshMarginMs) {
     cached = {
       keyId: key.keyId,
       publicKeyBase64: key.publicKeyBase64,
-      expiresAtEpochMillis: key.expiresAtEpochMillis
+      expiresAtEpochMillis: key.expiresAtEpochMillis,
+      refreshAtEpochMillis: key.refreshAtEpochMillis
     };
     return cached;
   }
 
   function get(headers) {
-    if (isUsable(cached, refreshMarginMs)) {
+    if (isUsable(cached)) {
       return Promise.resolve(cached);
     }
     if (!fetching) {
       fetching = request(PUBLIC_KEY_PATH, { method: 'GET', headers })
         .then((key) => {
           // A concurrent KEY_EXPIRED response may already have installed a newer key.
-          if (isUsable(cached, refreshMarginMs)) {
+          if (isUsable(cached)) {
             return cached;
           }
           return install(key);

@@ -1,6 +1,7 @@
 package com.ikea.crypto.stc.vault;
 
 import com.ikea.crypto.stc.config.VaultProperties;
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.key.KeyRing;
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,9 +16,19 @@ import java.util.Optional;
  */
 @Slf4j
 public record VaultKeyRepository(VaultProperties properties,
+                                 KeyLifecycleProperties lifecycleProperties,
                                  VaultClient vaultClient,
                                  VaultAuthenticator authenticator,
                                  VaultKeyCodec codec) {
+
+    public VaultKeyRepository(
+            VaultProperties properties,
+            VaultClient vaultClient,
+            VaultAuthenticator authenticator,
+            VaultKeyCodec codec
+    ) {
+        this(properties, new KeyLifecycleProperties(), vaultClient, authenticator, codec);
+    }
 
     /**
      * Resolves the secret path in Vault for the given key alias.
@@ -67,7 +78,7 @@ public record VaultKeyRepository(VaultProperties properties,
                 entry.version(),
                 entry.createdTime(),
                 effectiveAlias,
-                properties.getValidityMillis()
+                lifecycleProperties.getValidityMillis()
         );
         return Optional.of(keyEntry);
     }

@@ -2,17 +2,13 @@ package com.ikea.crypto.stc.key;
 
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
+import com.ikea.crypto.stc.exception.*;
+import com.ikea.crypto.stc.key.rotation.RotationLog;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.KeyMetadata;
 import com.ikea.crypto.stc.model.PublicKeyResponse;
-import com.ikea.crypto.stc.util.EncodingUtils;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
-import com.ikea.crypto.stc.exception.DataTamperedException;
-import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
-import com.ikea.crypto.stc.exception.KeyNotAvailableException;
-import com.ikea.crypto.stc.exception.SessionKeyDecryptionException;
-import com.ikea.crypto.stc.exception.InvalidKeyException;
-import com.ikea.crypto.stc.exception.KeyExpiredException;
+import com.ikea.crypto.stc.util.EncodingUtils;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
@@ -24,6 +20,9 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Optional;
 
 @Slf4j
@@ -33,18 +32,43 @@ public record CryptoServer(KeyRing keyRing) {
      * Backward-compatible constructor using a single static keypair with 1 year validity.
      */
     public CryptoServer(PrivateKey privateKey, PublicKey publicKey) {
-        this(createInMemoryKeyRing(privateKey, publicKey));
+        this(privateKey, publicKey, true, KeyRing.DEFAULT_GRACE_PERIOD_MILLIS + 1);
     }
 
-    private static KeyRing createInMemoryKeyRing(PrivateKey privateKey, PublicKey publicKey) {
+    public CryptoServer(PrivateKey privateKey, PublicKey publicKey, boolean autoRotate) {
+        this(privateKey, publicKey, autoRotate, KeyRing.DEFAULT_GRACE_PERIOD_MILLIS + 1);
+    }
+
+    public CryptoServer(
+            PrivateKey privateKey,
+            PublicKey publicKey,
+            boolean autoRotate,
+            long rotationBeforeExpiryMillis
+    ) {
+        this(createInMemoryKeyRing(privateKey, publicKey, autoRotate, rotationBeforeExpiryMillis));
+    }
+
+    private static KeyRing createInMemoryKeyRing(
+            PrivateKey privateKey,
+            PublicKey publicKey,
+            boolean autoRotate,
+            long rotationBeforeExpiryMillis
+    ) {
+        long validityMillis = KeyRing.DEFAULT_IN_MEMORY_KEY_VALIDITY_MILLIS;
+        KeyRing ring = new KeyRing(
+                "in-memory-test-key",
+                validityMillis,
+                KeyRing.DEFAULT_GRACE_PERIOD_MILLIS,
+                autoRotate,
+                rotationBeforeExpiryMillis
+        );
         String keyAlias = "in-memory-test-key";
         String keyId = KeyMetadata.buildKeyId(keyAlias, 1);
         long now = System.currentTimeMillis();
-        long expiresAt = now + 365L * 24 * 60 * 60 * 1000;
+        long expiresAt = now + validityMillis;
         KeyMetadata metadata = new KeyMetadata(keyId, now, expiresAt);
         KeyRing.KeyEntry entry = new KeyRing.KeyEntry(metadata, new KeyPair(publicKey, privateKey));
 
-        KeyRing ring = new KeyRing(keyAlias);
         ring.registerKeyEntry(entry, true);
         return ring;
     }
@@ -64,16 +88,18 @@ public record CryptoServer(KeyRing keyRing) {
         }
 
         // Check if active key is absent or expired, rotate if needed
-        if (active.metadata().isExpired()) {
-            log.warn("Active key: keyId={} has expired, start to rotate to a new key version", active.metadata().keyId());
-            return rotateKey();
+        if (keyRing.isRotationDue(active.metadata())) {
+            if (!keyRing.isAutoRotate() && active.metadata().isExpired()) {
+                throw new KeyNotAvailableException("Active RSA key has expired and automatic rotation is disabled");
+            }
+            if (keyRing.isAutoRotate()) {
+                long triggerTime = System.currentTimeMillis();
+                keyRing.logRotationDue(null, active.metadata(), triggerTime);
+                active = rotateAutomatically(null, active.metadata(), triggerTime);
+            }
         }
 
-        return new PublicKeyResponse(
-                EncodingUtils.toBase64(active.publicKey().getEncoded()),
-                active.metadata().keyId(),
-                active.metadata().expiresAtEpochMillis()
-        );
+        return toPublicKeyResponse(active);
     }
 
     /**
@@ -85,11 +111,81 @@ public record CryptoServer(KeyRing keyRing) {
         }
         KeyRing.KeyEntry entry = keyRing.findActiveKeyEntry(keyAlias)
                 .orElseThrow(() -> new KeyNotAvailableException("No active RSA key found for keyAlias: " + keyAlias));
+        if (keyRing.isRotationDue(entry.metadata())) {
+            if (!keyRing.isAutoRotate() && entry.metadata().isExpired()) {
+                throw new KeyNotAvailableException(
+                        "Active RSA key has expired and automatic rotation is disabled for keyAlias: " + keyAlias
+                );
+            }
+            if (keyRing.isAutoRotate()) {
+                long triggerTime = System.currentTimeMillis();
+                keyRing.logRotationDue(keyAlias, entry.metadata(), triggerTime);
+                entry = rotateAutomatically(keyAlias, entry.metadata(), triggerTime);
+            }
+        }
+        return toPublicKeyResponse(entry);
+    }
+
+    private PublicKeyResponse toPublicKeyResponse(KeyRing.KeyEntry entry) {
         return new PublicKeyResponse(
                 EncodingUtils.toBase64(entry.publicKey().getEncoded()),
                 entry.metadata().keyId(),
-                entry.metadata().expiresAtEpochMillis()
+                entry.metadata().expiresAtEpochMillis(),
+                keyRing.getRefreshAtEpochMillis(entry.metadata())
         );
+    }
+
+    private KeyRing.KeyEntry rotateAutomatically(String keyAlias, KeyMetadata triggerMetadata, long triggerTime) {
+        long startNanos = System.nanoTime();
+        try {
+            KeyRing.KeyEntry result = keyRing.rotateIfDue(keyAlias);
+            long completedTime = System.currentTimeMillis();
+            Map<String, Object> event = rotationEvent("rsa_key_rotation_completed", keyAlias, triggerMetadata, triggerTime);
+            event.put("activeKeyId", result.metadata().keyId());
+            event.put("activeKeyCreatedAt", Instant.ofEpochMilli(result.metadata().createdAtEpochMillis()).toString());
+            event.put("activeKeyExpiresAt", Instant.ofEpochMilli(result.metadata().expiresAtEpochMillis()).toString());
+            event.put("completedAt", Instant.ofEpochMilli(completedTime).toString());
+            event.put("durationMillis", (System.nanoTime() - startNanos) / 1_000_000);
+            log.warn("Automatic RSA key rotation completed: {}", RotationLog.toJson(event));
+            return result;
+        } catch (GeneralSecurityException | IOException e) {
+            logAutomaticRotationFailure(keyAlias, triggerMetadata, triggerTime, startNanos, e);
+            throw new KeyNotAvailableException("Automatic RSA key rotation failed for keyAlias: " + keyAlias, e);
+        } catch (RuntimeException e) {
+            logAutomaticRotationFailure(keyAlias, triggerMetadata, triggerTime, startNanos, e);
+            throw e;
+        }
+    }
+
+    private void logAutomaticRotationFailure(
+            String keyAlias,
+            KeyMetadata triggerMetadata,
+            long triggerTime,
+            long startNanos,
+            Throwable exception
+    ) {
+        long failedTime = System.currentTimeMillis();
+        Map<String, Object> event = rotationEvent("rsa_key_rotation_failed", keyAlias, triggerMetadata, triggerTime);
+        event.put("failedAt", Instant.ofEpochMilli(failedTime).toString());
+        event.put("durationMillis", (System.nanoTime() - startNanos) / 1_000_000);
+        log.error("Automatic RSA key rotation failed: {}", RotationLog.toJson(event), exception);
+    }
+
+    private Map<String, Object> rotationEvent(
+            String eventName,
+            String keyAlias,
+            KeyMetadata triggerMetadata,
+            long triggerTime
+    ) {
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("event", eventName);
+        event.put("alias", (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : keyRing.getKeyAlias());
+        event.put("previousKeyId", triggerMetadata.keyId());
+        event.put("triggeredAt", Instant.ofEpochMilli(triggerTime).toString());
+        event.put("previousKeyCreatedAt", Instant.ofEpochMilli(triggerMetadata.createdAtEpochMillis()).toString());
+        event.put("previousKeyExpiresAt", Instant.ofEpochMilli(triggerMetadata.expiresAtEpochMillis()).toString());
+        event.put("remainingValidityMillis", triggerMetadata.expiresAtEpochMillis() - triggerTime);
+        return event;
     }
 
     /**
@@ -106,11 +202,7 @@ public record CryptoServer(KeyRing keyRing) {
     public PublicKeyResponse rotateKey(String keyAlias) {
         try {
             KeyRing.KeyEntry newEntry = keyRing.rotateKey(keyAlias);
-            return new PublicKeyResponse(
-                    EncodingUtils.toBase64(newEntry.publicKey().getEncoded()),
-                    newEntry.metadata().keyId(),
-                    newEntry.metadata().expiresAtEpochMillis()
-            );
+            return toPublicKeyResponse(newEntry);
         } catch (GeneralSecurityException | IOException e) {
             log.error("Failed to rotate RSA key for keyAlias: {}", keyAlias, e);
             throw new KeyNotAvailableException("Failed to rotate RSA key for keyAlias: " + keyAlias, e);
@@ -128,11 +220,7 @@ public record CryptoServer(KeyRing keyRing) {
             } else {
                 newEntry = keyRing.rotateKey(keyAlias);
             }
-            return new PublicKeyResponse(
-                    EncodingUtils.toBase64(newEntry.publicKey().getEncoded()),
-                    newEntry.metadata().keyId(),
-                    newEntry.metadata().expiresAtEpochMillis()
-            );
+            return toPublicKeyResponse(newEntry);
         } catch (GeneralSecurityException | IOException e) {
             log.error("Failed to force rotate RSA key for keyAlias: {}", keyAlias, e);
             throw new KeyNotAvailableException("Failed to force rotate RSA key for keyAlias: " + keyAlias, e);

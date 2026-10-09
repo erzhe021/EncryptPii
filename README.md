@@ -149,6 +149,10 @@ sensitive:
       endpoint:
         enabled: true
         base-path: /crypto/server
+      key-lifecycle:
+        validity-millis: ${CRYPTO_KEY_VALIDITY_MILLIS:2592000000}
+        grace-period-millis: ${CRYPTO_KEY_GRACE_PERIOD_MILLIS:3600000}
+        rotation-before-expiry-millis: ${CRYPTO_ROTATION_BEFORE_EXPIRY_MILLIS:259200000}
       vault:
         enabled: true
         addr: ${VAULT_ADDR:http://127.0.0.1:8200}
@@ -156,8 +160,6 @@ sensitive:
         token: ${VAULT_TOKEN:root}
         secret-path: ${VAULT_SECRET_PATH:secret/data/sensitive-transport-crypto/ciam}
         key-alias: ${VAULT_KEY_ALIAS:ciam}
-        validity-millis: ${VAULT_VALIDITY_MILLIS:60000}
-        grace-period-millis: ${VAULT_GRACE_PERIOD_MILLIS:30000}
 ```
 
 Client example (`client/src/main/resources/application.yml`):
@@ -183,9 +185,13 @@ The SDK can integrate with HashiCorp Vault for key storage, rotation, and multi-
 Relevant notes:
 
 - `sensitive.transport.crypto.vault.enabled` switches Vault integration on/off.
+- Public-key responses include `refreshAtEpochMillis`; clients should use this server-provided timestamp instead of configuring a separate refresh margin.
+- `sensitive.transport.crypto.auto-rotate` controls automatic key rotation (defaults to `true`). Set it to `false` to require explicit rotation; the default public-key endpoint returns `KeyNotAvailableException` while the active key is expired. Initial Vault key creation is still controlled separately by `auto-bootstrap`.
+- `sensitive.transport.crypto.key-lifecycle` groups key validity, grace period, and proactive-rotation window regardless of whether keys are stored in Vault. Configuration must satisfy `grace-period-millis < rotation-before-expiry-millis < validity-millis`. On each public-key request, an enabled SDK rotates when the active key is within this window. Because this is request-driven, a key is not proactively rotated while the service receives no public-key requests; rotation failures are emitted as error logs (`Automatic RSA key rotation failed`) for monitoring and alerting.
+- Key validity and CAS retry interval/count must be positive; grace period, rotation window and CAS backoff must be non-negative. Invalid individual values and violations of the timing relationship prevent startup.
 - `keyAlias` and `secretPath` should be isolated per service or team.
 - Key versions are tracked by `keyId` (for example, `ciam:1`, `ciam:2`).
-- Old keys remain valid during a configured grace period to handle rolling deployments.
+- After a key is replaced, the old key remains valid for decryption for the configured grace period, measured from the replacement key's creation time.
 
 This behavior is described in more depth in `vault/vault.md` and `vault/sensitive-transport-crypto-multi-team-guidelines.md`.
 

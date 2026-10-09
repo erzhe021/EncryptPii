@@ -4,7 +4,7 @@
 
 ## 配置与运行
 
-1. 修改 `config.js` 中的 `SERVER_BASE_URL`，设置为 Java Server 地址，默认是 `http://localhost:9090`；真机使用手机可访问的 HTTPS 域名。不要填写 Client 或 Kong Admin API 地址；`KEY_REFRESH_MARGIN_MS` 配置公钥到期前多少毫秒开始按需刷新，设为 `0` 表示到期才刷新。
+1. 修改 `config.js` 中的 `SERVER_BASE_URL`，设置为 Java Server 地址，默认是 `http://localhost:9090`；真机使用手机可访问的 HTTPS 域名。不要填写 Client 或 Kong Admin API 地址。
 2. 在微信开发者工具中导入 `wechat` 目录并运行。发布前请确认 `project.config.json` 中配置的是团队自己的小程序 AppID。
 3. 在小程序管理后台将服务域名加入 `request` 合法域名；生产环境必须使用 HTTPS。
 

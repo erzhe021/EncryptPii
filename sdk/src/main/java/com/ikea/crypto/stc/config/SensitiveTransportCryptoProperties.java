@@ -2,6 +2,7 @@ package com.ikea.crypto.stc.config;
 
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.validation.annotation.Validated;
 
 /**
  * Configuration properties for sensitive transport crypto functionality.
@@ -11,6 +12,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * </p>
  */
 @Data
+@Validated
 @ConfigurationProperties(prefix = "sensitive.transport.crypto")
 public class SensitiveTransportCryptoProperties {
 
@@ -18,6 +20,11 @@ public class SensitiveTransportCryptoProperties {
      * Whether sensitive transport crypto functionality is enabled. Defaults to true.
      */
     private boolean enabled = true;
+
+    /**
+     * Whether expired keys are rotated automatically. Defaults to true.
+     */
+    private boolean autoRotate = true;
 
     /**
      * Endpoint configuration for public key retrieval.

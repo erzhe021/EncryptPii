@@ -17,7 +17,6 @@ const { createWechatClient } = require('@encryptpii/wechat-sdk');
 const client = createWechatClient({
   baseUrl: 'https://kong.example.com',
   timeoutMs: 15000,
-  keyRefreshMarginMs: 1000,
   headers: { Authorization: 'Bearer <application-token>' }
 });
 
@@ -35,10 +34,11 @@ Request-specific authentication headers can also be passed to `send`.
 Header names are checked case-insensitively: callers cannot override
 `X-STC-Key-Id` or `X-STC-Session-Key`.
 
-`keyRefreshMarginMs` controls how long before `expiresAtEpochMillis` a cached key
-is considered stale. The next encrypted request fetches a replacement on demand;
-it does not start a background timer. It defaults to 1000 ms and can be set to 0
-to use the cache until its expiry.
+The server returns `refreshAtEpochMillis` with each public key. The client uses
+that timestamp to refresh its cached key on the next encrypted request. It does
+not start a background timer or require a client-side timing setting.
+`refreshAtEpochMillis` is calculated by the server from the key expiry and its
+configured rotation window.
 
 The minimum supported WeChat base library is **3.4.10** (the demo's configured
 baseline). A runtime without `wx.getRandomValues` can still send plain requests;
@@ -89,7 +89,7 @@ need not use the business result envelope. Decryption failures also expose
 diagnostics, with `data: null` and the received ciphertext, and remain errors.
 These diagnostics may contain sensitive data and must not be logged by default.
 
-`createClient({ baseUrl, transport, randomBytes, timeoutMs?, keyRefreshMarginMs?, headers? })` supports
+`createClient({ baseUrl, transport, randomBytes, timeoutMs?, headers? })` supports
 existing network stacks and future platform adapters:
 
 - `transport({ url, method, data, timeoutMs, headers })` resolves to

@@ -19,7 +19,7 @@ class CryptoExceptionHandlerTest {
 
     @Test
     void serverDefinesExpiredAndInvalidKeyResponses() {
-        PublicKeyResponse latest = new PublicKeyResponse("public-key", "ciam:2", 123456789L);
+        PublicKeyResponse latest = new PublicKeyResponse("public-key", "ciam:2", 123456789L, 123456000L);
         var expired = handler.handleExpiredKey(new KeyExpiredException(latest));
         assertEquals(HttpStatus.BAD_REQUEST, expired.getStatusCode());
         assertEquals("false", expired.getHeaders().getFirst("X-STC-Encrypted"));

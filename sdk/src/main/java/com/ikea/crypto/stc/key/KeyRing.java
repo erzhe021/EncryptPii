@@ -1,12 +1,14 @@
 package com.ikea.crypto.stc.key;
 
 import com.ikea.crypto.stc.constant.CryptoConstants;
+import com.ikea.crypto.stc.key.rotation.RotationLog;
 import com.ikea.crypto.stc.model.KeyMetadata;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.security.*;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -29,7 +31,8 @@ public class KeyRing {
 
     public static final String DEFAULT_KEY_ALIAS = KeyMetadata.DEFAULT_KEY_ALIAS;
     public static final long DEFAULT_VALIDITY_MILLIS = 60 * 1000; // 1 minute
-    public static final long DEFAULT_GRACE_PERIOD_MILLIS = 30 * 1000; // 30 seconds grace
+    public static final long DEFAULT_GRACE_PERIOD_MILLIS = 20 * 1000; // 20 seconds grace
+    public static final long DEFAULT_IN_MEMORY_KEY_VALIDITY_MILLIS = 365L * 24 * 60 * 60 * 1000;
 
     @Getter
     private final String keyAlias;
@@ -37,11 +40,16 @@ public class KeyRing {
     private final long validityMillis;
     @Getter
     private final long gracePeriodMillis;
+    @Getter
+    private final boolean autoRotate;
+    @Getter
+    private final long rotationBeforeExpiryMillis;
 
     @Getter
     private volatile KeyEntry activeKeyEntry;
     // Key entries are stored in a thread-safe map keyed by keyId for quick lookup.
     private final Map<String, KeyEntry> keyEntriesById = new ConcurrentHashMap<>();
+    private final Map<String, Long> retirementTimeByKeyId = new ConcurrentHashMap<>();
 
     public KeyRing() {
         this(DEFAULT_KEY_ALIAS, DEFAULT_VALIDITY_MILLIS, DEFAULT_GRACE_PERIOD_MILLIS);
@@ -56,18 +64,58 @@ public class KeyRing {
     }
 
     public KeyRing(String keyAlias, long validityMillis, long gracePeriodMillis) {
+        this(keyAlias, validityMillis, gracePeriodMillis, true,
+                defaultRotationWindowMillis(gracePeriodMillis));
+    }
+
+    public KeyRing(String keyAlias, long validityMillis, long gracePeriodMillis, boolean autoRotate) {
+        this(keyAlias, validityMillis, gracePeriodMillis, autoRotate,
+                defaultRotationWindowMillis(gracePeriodMillis));
+    }
+
+    public KeyRing(
+            String keyAlias,
+            long validityMillis,
+            long gracePeriodMillis,
+            boolean autoRotate,
+            long rotationBeforeExpiryMillis
+    ) {
+        if (validityMillis <= 0) {
+            throw new IllegalArgumentException("validityMillis must be greater than zero");
+        }
+        if (gracePeriodMillis < 0 || gracePeriodMillis >= rotationBeforeExpiryMillis) {
+            throw new IllegalArgumentException(
+                    "gracePeriodMillis must be non-negative and less than rotationBeforeExpiryMillis"
+            );
+        }
+        if (rotationBeforeExpiryMillis >= validityMillis) {
+            throw new IllegalArgumentException(
+                    "rotationBeforeExpiryMillis must be less than validityMillis"
+            );
+        }
         this.keyAlias = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : DEFAULT_KEY_ALIAS;
         this.validityMillis = validityMillis;
         this.gracePeriodMillis = gracePeriodMillis;
+        this.autoRotate = autoRotate;
+        this.rotationBeforeExpiryMillis = rotationBeforeExpiryMillis;
+    }
+
+    private static long defaultRotationWindowMillis(long gracePeriodMillis) {
+        if (gracePeriodMillis == Long.MAX_VALUE) {
+            throw new IllegalArgumentException("No rotation window can be greater than the grace period");
+        }
+        return gracePeriodMillis + 1;
     }
 
     /**
-     * Initializes the key ring. Generates a new active key in memory if none exists or if expired.
+     * Initializes the key ring. Generates an initial key if none exists and optionally replaces expired keys.
      * Obsolete keys beyond the grace period are automatically cleaned up.
      */
     public synchronized void initialize() throws GeneralSecurityException, IOException {
-        // Check if active key is absent or expired, rotate if needed
-        if (activeKeyEntry == null || activeKeyEntry.metadata().isExpired()) {
+        if (activeKeyEntry == null) {
+            rotateKey();
+        } else if (autoRotate && isRotationDue(activeKeyEntry.metadata())) {
+            logRotationDue(keyAlias, activeKeyEntry.metadata(), System.currentTimeMillis());
             rotateKey();
         }
 
@@ -79,13 +127,60 @@ public class KeyRing {
      * Registers a key entry into the keyring in memory (e.g. from Vault or external KMS).
      */
     public synchronized void registerKeyEntry(KeyEntry entry, boolean makeActive) {
+        registerKeyEntry(entry, makeActive, null);
+    }
+
+    public synchronized void registerKeyEntry(KeyEntry entry, boolean makeActive, Long retiredAtEpochMillis) {
         if (entry == null) {
             return;
         }
+        KeyEntry previousActiveForAlias = findLatestKeyEntryForAlias(entry.metadata().keyAlias());
         keyEntriesById.put(entry.metadata().keyId(), entry);
+        if (retiredAtEpochMillis != null) {
+            retirementTimeByKeyId.put(entry.metadata().keyId(), addGracePeriod(retiredAtEpochMillis));
+        }
         logCurrentEntries(keyEntriesById);
-        if (makeActive || activeKeyEntry == null || entry.metadata().expiresAtEpochMillis() > activeKeyEntry.metadata().expiresAtEpochMillis()) {
+        boolean becomesActive = makeActive
+                || activeKeyEntry == null
+                || entry.metadata().expiresAtEpochMillis() > activeKeyEntry.metadata().expiresAtEpochMillis();
+        if (becomesActive) {
+            if (previousActiveForAlias != null
+                    && !previousActiveForAlias.metadata().keyId().equals(entry.metadata().keyId())) {
+                retirementTimeByKeyId.put(
+                        previousActiveForAlias.metadata().keyId(),
+                        addGracePeriod(entry.metadata().createdAtEpochMillis())
+                );
+            }
             this.activeKeyEntry = entry;
+        }
+    }
+
+    private KeyEntry findLatestKeyEntryForAlias(String alias) {
+        if (alias == null || alias.isBlank()) {
+            return null;
+        }
+        String prefix = alias + ":";
+        KeyEntry latest = null;
+        long highestVersion = Long.MIN_VALUE;
+        for (KeyEntry entry : keyEntriesById.values()) {
+            if (!entry.metadata().keyId().startsWith(prefix)) {
+                continue;
+            }
+            Long version = entry.metadata().version();
+            long candidateVersion = version == null ? Long.MIN_VALUE : version;
+            if (latest == null || candidateVersion > highestVersion) {
+                latest = entry;
+                highestVersion = candidateVersion;
+            }
+        }
+        return latest;
+    }
+
+    private long addGracePeriod(long rotationTimeMillis) {
+        try {
+            return Math.addExact(rotationTimeMillis, gracePeriodMillis);
+        } catch (ArithmeticException e) {
+            return Long.MAX_VALUE;
         }
     }
 
@@ -110,8 +205,8 @@ public class KeyRing {
     }
 
     /**
-     * Returns all available key entries (active + transition keys within grace period).
-     * Keys expired beyond the grace period are purged and excluded.
+     * Returns all available key entries (active + transition keys within their grace period).
+     * Retired keys beyond the grace period are purged and excluded.
      */
     public Collection<KeyEntry> getAllKeyEntries() {
         purgeExpiredKeys();
@@ -215,10 +310,10 @@ public class KeyRing {
 
     protected synchronized KeyEntry activateNewKeyEntry(KeyMetadata metadata, KeyPair keyPair, long now) {
         KeyEntry newEntry = new KeyEntry(metadata, keyPair);
-        keyEntriesById.put(metadata.keyId(), newEntry);
-        this.activeKeyEntry = newEntry;
+        registerKeyEntry(newEntry, true);
 
-        log.info("Rotated to new active RSA key: keyId={}, expiresAt={}", metadata.keyId(), new Date(metadata.expiresAtEpochMillis()));
+        log.info("Rotated to new active RSA key: keyId={}, expiresAt={}",
+                metadata.keyId(), Instant.ofEpochMilli(metadata.expiresAtEpochMillis()));
         logCurrentEntries(keyEntriesById);
 
         // Purge historical keys whose grace period has expired
@@ -254,7 +349,7 @@ public class KeyRing {
     }
 
     /**
-     * Purges expired keys whose grace period has expired at current time:
+     * Purges retired keys whose grace period has expired at current time:
      * - Removes them from keyEntriesById (in-memory)
      * Active key is never purged.
      *
@@ -274,8 +369,7 @@ public class KeyRing {
         List<String> keysToPurge = new ArrayList<>();
         for (Map.Entry<String, KeyEntry> mapEntry : keyEntriesById.entrySet()) {
             KeyEntry entry = mapEntry.getValue();
-            // Only purge keys that are not the active key and have expired beyond the grace period
-            // however, we keep the active key even if it has expired, to allow for graceful transition.
+            // Active keys are retained even after expiry so they remain available until replaced.
             if (entry != activeKeyEntry && isExpiredBeyondGrace(entry.metadata(), now)) {
                 keysToPurge.add(mapEntry.getKey());
             }
@@ -290,6 +384,7 @@ public class KeyRing {
 
     private synchronized void purgeKey(String keyId) {
         keyEntriesById.remove(keyId);
+        retirementTimeByKeyId.remove(keyId);
         log.info("Purged expired key beyond grace period: keyId={}", keyId);
         logCurrentEntries(keyEntriesById);
     }
@@ -299,7 +394,14 @@ public class KeyRing {
     }
 
     public boolean isExpiredBeyondGrace(KeyMetadata metadata, long now) {
-        return metadata != null && metadata.isGracePeriodExpired(gracePeriodMillis, now);
+        if (metadata == null) {
+            return false;
+        }
+        long retirementTime = retirementTimeByKeyId.getOrDefault(
+                metadata.keyId(),
+                addGracePeriod(metadata.expiresAtEpochMillis())
+        );
+        return now >= retirementTime;
     }
 
     public boolean isWithinGracePeriod(KeyMetadata metadata) {
@@ -307,7 +409,70 @@ public class KeyRing {
     }
 
     public boolean isWithinGracePeriod(KeyMetadata metadata, long now) {
-        return metadata != null && metadata.isWithinGracePeriod(gracePeriodMillis, now);
+        if (metadata == null) {
+            return false;
+        }
+        long retirementTime = retirementTimeByKeyId.getOrDefault(
+                metadata.keyId(),
+                addGracePeriod(metadata.expiresAtEpochMillis())
+        );
+        return metadata.isExpired(now) && now < retirementTime;
+    }
+
+    public boolean isRotationDue(KeyMetadata metadata) {
+        return isRotationDue(metadata, System.currentTimeMillis());
+    }
+
+    public boolean isRotationDue(KeyMetadata metadata, long now) {
+        if (metadata == null) {
+            return false;
+        }
+        if (metadata.isExpired(now)) {
+            return true;
+        }
+        return metadata.expiresAtEpochMillis() - now <= rotationBeforeExpiryMillis;
+    }
+
+    public long getEffectiveRotationWindowMillis() {
+        return rotationBeforeExpiryMillis;
+    }
+
+    public long getRefreshAtEpochMillis(KeyMetadata metadata) {
+        return autoRotate
+                ? metadata.expiresAtEpochMillis() - rotationBeforeExpiryMillis
+                : metadata.expiresAtEpochMillis();
+    }
+
+    public void logRotationDue(String targetKeyAlias, KeyMetadata metadata, long now) {
+        long remainingMillis = metadata.expiresAtEpochMillis() - now;
+        String reason = metadata.isExpired(now) ? "expired" : "within-rotation-window";
+        Map<String, Object> event = new LinkedHashMap<>();
+        event.put("event", "rsa_key_rotation_triggered");
+        event.put("alias", (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : keyAlias);
+        event.put("keyId", metadata.keyId());
+        event.put("reason", reason);
+        event.put("now", Instant.ofEpochMilli(now).toString());
+        event.put("keyCreatedAt", Instant.ofEpochMilli(metadata.createdAtEpochMillis()).toString());
+        event.put("keyExpiresAt", Instant.ofEpochMilli(metadata.expiresAtEpochMillis()).toString());
+        event.put("remainingValidityMillis", remainingMillis);
+        event.put("configuredRotationBeforeExpiryMillis", rotationBeforeExpiryMillis);
+        event.put("effectiveRotationWindowMillis", getEffectiveRotationWindowMillis());
+        log.warn("RSA key rotation triggered: {}", RotationLog.toJson(event));
+    }
+
+    public synchronized KeyEntry rotateIfDue(String targetKeyAlias)
+            throws GeneralSecurityException, IOException {
+        String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : keyAlias;
+        KeyEntry current = findActiveKeyEntry(alias)
+                .orElseThrow(() -> new IllegalStateException("No active RSA key found for keyAlias: " + alias));
+        if (autoRotate && isRotationDue(current.metadata())) {
+            return rotateIfDueKey(alias);
+        }
+        return current;
+    }
+
+    protected KeyEntry rotateIfDueKey(String alias) throws GeneralSecurityException, IOException {
+        return rotateKey(alias);
     }
 
     private void logCurrentEntries(Map<String, KeyEntry> keyEntriesById) {

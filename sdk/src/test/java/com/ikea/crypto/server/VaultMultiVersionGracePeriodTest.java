@@ -13,6 +13,7 @@ import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.vault.VaultClient;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
 import com.ikea.crypto.stc.config.VaultProperties;
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.sun.net.httpserver.HttpServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -56,12 +57,12 @@ class VaultMultiVersionGracePeriodTest {
         long v3Created = now;
         long v3Expires = now + 10 * oneDay;
 
-        // V2: Created 15 days ago, expired 5 days ago (Within 30-day grace period)
-        long v2Created = now - 15 * oneDay;
+        // V2: Created 65 days ago, expired 5 days ago (Within 30-day grace period)
+        long v2Created = now - 65 * oneDay;
         long v2Expires = now - 5 * oneDay;
 
-        // V1: Created 50 days ago, expired 40 days ago (Beyond 30-day grace period)
-        long v1Created = now - 50 * oneDay;
+        // V1: Created 100 days ago, expired 40 days ago (Beyond 30-day grace period)
+        long v1Created = now - 100 * oneDay;
         long v1Expires = now - 40 * oneDay;
 
         mockVault = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -164,11 +165,12 @@ class VaultMultiVersionGracePeriodTest {
         properties.setToken("root");
         properties.setSecretPath("secret/data/crypto/rsa-keys");
         properties.setKeyAlias("rsa-key");
-        properties.setValidityMillis(10L * 24 * 3600 * 1000); // 10 days validity
-        properties.setGracePeriodMillis(30L * 24 * 3600 * 1000); // 30 days grace
+        KeyLifecycleProperties lifecycle = new KeyLifecycleProperties();
+        lifecycle.setValidityMillis(60L * 24 * 3600 * 1000); // 60 days validity
+        lifecycle.setGracePeriodMillis(30L * 24 * 3600 * 1000); // 30 days grace
 
         VaultClient vaultClient = new VaultClient(properties.getAddr());
-        VaultKeyRing vaultKeyRing = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing vaultKeyRing = new VaultKeyRing(properties, lifecycle, vaultClient, true);
 
         // Initialize: should load version 3 as active, version 2 as transition key, and stop at version 1
         vaultKeyRing.initialize();

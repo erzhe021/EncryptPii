@@ -1,6 +1,7 @@
 package com.ikea.crypto.stc.vault;
 
 import com.ikea.crypto.stc.config.VaultProperties;
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.key.KeyRing;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,16 +19,30 @@ import java.security.GeneralSecurityException;
 public class VaultKeySynchronizer {
 
     private final VaultProperties properties;
+    private final KeyLifecycleProperties lifecycleProperties;
     private final VaultClient vaultClient;
     private final VaultAuthenticator authenticator;
 
-    @Autowired
     public VaultKeySynchronizer(VaultProperties properties) {
-        this(properties, new VaultClient(properties.getAddr()));
+        this(properties, new KeyLifecycleProperties());
+    }
+
+    @Autowired
+    public VaultKeySynchronizer(VaultProperties properties, KeyLifecycleProperties lifecycleProperties) {
+        this(properties, lifecycleProperties, new VaultClient(properties.getAddr()));
     }
 
     public VaultKeySynchronizer(VaultProperties properties, VaultClient vaultClient) {
+        this(properties, new KeyLifecycleProperties(), vaultClient);
+    }
+
+    public VaultKeySynchronizer(
+            VaultProperties properties,
+            KeyLifecycleProperties lifecycleProperties,
+            VaultClient vaultClient
+    ) {
         this.properties = properties;
+        this.lifecycleProperties = lifecycleProperties;
         this.vaultClient = vaultClient;
         this.authenticator = new VaultAuthenticator(properties, vaultClient);
     }
@@ -45,7 +60,8 @@ public class VaultKeySynchronizer {
      * @return Fully populated in-memory KeyRing
      */
     public KeyRing syncToKeyRing() throws GeneralSecurityException, IOException, InterruptedException {
-        VaultKeyRing vaultKeyRing = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing vaultKeyRing = new VaultKeyRing(
+                properties, lifecycleProperties, vaultClient, true);
         vaultKeyRing.initialize();
         return vaultKeyRing;
     }
