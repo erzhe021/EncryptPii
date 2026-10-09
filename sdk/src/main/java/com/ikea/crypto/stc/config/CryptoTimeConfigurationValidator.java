@@ -1,7 +1,5 @@
 package com.ikea.crypto.stc.config;
 
-import com.ikea.crypto.stc.key.KeyRing;
-
 public final class CryptoTimeConfigurationValidator {
 
     public CryptoTimeConfigurationValidator(

@@ -3,6 +3,7 @@ package com.ikea.crypto.server.config;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.stc.config.SensitiveTransportCryptoAutoConfiguration;
 import com.ikea.crypto.stc.key.CryptoServer;
+import com.ikea.crypto.stc.web.advice.CryptoExceptionHandler;
 import com.ikea.crypto.stc.web.advice.RequestDecryptAdvice;
 import com.ikea.crypto.stc.web.advice.ResponseEncryptAdvice;
 import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
@@ -36,9 +37,11 @@ class SensitiveTransportCryptoAutoConfigurationTest {
                 .run(context -> {
                     assertThat(context).hasSingleBean(CryptoServer.class);
                     assertThat(context).hasSingleBean(CryptoPayloadHandler.class);
+                    assertThat(context).hasSingleBean(CryptoExceptionHandler.class);
                     assertThat(context).hasSingleBean(RequestDecryptAdvice.class);
                     assertThat(context).hasSingleBean(ResponseEncryptAdvice.class);
-                    assertThat(context.getBeansWithAnnotation(RestControllerAdvice.class)).isEmpty();
+                    assertThat(context.getBeansWithAnnotation(RestControllerAdvice.class))
+                            .containsOnlyKeys("cryptoExceptionHandler");
                     assertThat(context).hasSingleBean(CryptoKeyEndpoint.class);
 
                     CryptoServer cryptoServer = context.getBean(CryptoServer.class);
@@ -53,6 +56,7 @@ class SensitiveTransportCryptoAutoConfigurationTest {
                 .run(context -> {
                     assertThat(context).doesNotHaveBean(CryptoServer.class);
                     assertThat(context).doesNotHaveBean(CryptoPayloadHandler.class);
+                    assertThat(context).doesNotHaveBean(CryptoExceptionHandler.class);
                     assertThat(context).doesNotHaveBean(RequestDecryptAdvice.class);
                     assertThat(context).doesNotHaveBean(ResponseEncryptAdvice.class);
                     assertThat(context).doesNotHaveBean(CryptoKeyEndpoint.class);

@@ -1,4 +1,4 @@
-package com.ikea.crypto.server.model;
+package com.ikea.crypto.stc.web.model;
 
 public record KeyErrorResponse(
         String code,

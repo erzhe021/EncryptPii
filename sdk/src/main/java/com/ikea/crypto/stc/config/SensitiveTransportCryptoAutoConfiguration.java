@@ -7,6 +7,7 @@ import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.model.KeyMetadata;
 import com.ikea.crypto.stc.vault.VaultClient;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
+import com.ikea.crypto.stc.web.advice.CryptoExceptionHandler;
 import com.ikea.crypto.stc.web.advice.RequestDecryptAdvice;
 import com.ikea.crypto.stc.web.advice.ResponseEncryptAdvice;
 import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
@@ -27,7 +28,7 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 
 /**
- * Auto-configuration for sensitive transport cryptography in Spring Boot applications.
+ * Autoconfiguration for sensitive transport cryptography in Spring Boot applications.
  * <p>
  * This configuration sets up the necessary beans for handling cryptographic operations,
  * including key management via HashiCorp Vault or an in-memory RSA keypair for local/testing environments.
@@ -58,8 +59,7 @@ public class SensitiveTransportCryptoAutoConfiguration {
     public CryptoServer cryptoServer(
             VaultProperties vaultProperties,
             SensitiveTransportCryptoProperties cryptoProperties,
-            KeyLifecycleProperties lifecycleProperties,
-            CryptoTimeConfigurationValidator timeConfigurationValidator
+            KeyLifecycleProperties lifecycleProperties
     ) throws GeneralSecurityException, IOException {
         if (vaultProperties != null && vaultProperties.isEnabled()) {
             log.info("Vault key management enabled. Loading and managing keys via Vault at {}", vaultProperties.getAddr());
@@ -113,6 +113,12 @@ public class SensitiveTransportCryptoAutoConfiguration {
     @ConditionalOnMissingBean
     public ResponseEncryptAdvice responseEncryptAdvice(CryptoPayloadHandler payloadHandler) {
         return new ResponseEncryptAdvice(payloadHandler);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public CryptoExceptionHandler cryptoExceptionHandler() {
+        return new CryptoExceptionHandler();
     }
 
     @Bean

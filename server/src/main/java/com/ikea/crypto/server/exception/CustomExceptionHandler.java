@@ -2,12 +2,6 @@ package com.ikea.crypto.server.exception;
 
 import com.ikea.crypto.server.model.ErrorResult;
 import com.ikea.crypto.server.model.Result;
-import com.ikea.crypto.server.model.KeyErrorResponse;
-import com.ikea.crypto.stc.constant.CryptoConstants;
-import com.ikea.crypto.stc.exception.CryptoClientSideException;
-import com.ikea.crypto.stc.exception.CryptoException;
-import com.ikea.crypto.stc.exception.InvalidKeyException;
-import com.ikea.crypto.stc.exception.KeyExpiredException;
 import jakarta.validation.ConstraintViolation;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -32,47 +26,10 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 
 import java.util.List;
 import java.util.Set;
-import java.security.GeneralSecurityException;
 
 @RestControllerAdvice
 @Slf4j
 public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
-
-    @ExceptionHandler(KeyExpiredException.class)
-    public ResponseEntity<KeyErrorResponse> handleExpiredKey(KeyExpiredException exception) {
-        log.warn("Rejected request using an expired key version");
-        HttpHeaders headers = plainCryptoHeaders();
-        headers.setCacheControl("no-store");
-        KeyErrorResponse body = new KeyErrorResponse(CryptoConstants.KEY_EXPIRED_CODE,
-                "The key version has expired; please update to the new version specified in the 'data' field.",
-                exception.latestKey());
-        return new ResponseEntity<>(body, headers, HttpStatus.BAD_REQUEST);
-    }
-
-    @ExceptionHandler(InvalidKeyException.class)
-    public ResponseEntity<KeyErrorResponse> handleInvalidKey(InvalidKeyException exception) {
-        log.warn("Rejected request using an invalid key alias");
-        HttpHeaders headers = plainCryptoHeaders();
-        headers.setCacheControl("no-store");
-        KeyErrorResponse body = new KeyErrorResponse(CryptoConstants.INVALID_KEY_CODE, "Invalid key", null);
-        return new ResponseEntity<>(body, headers, HttpStatus.BAD_REQUEST);
-    }
-
-    @ExceptionHandler(CryptoClientSideException.class)
-    public ResponseEntity<Object> handleCryptoClientError(CryptoClientSideException exception, WebRequest request) {
-        log.warn("Crypto client-side request error: {}", exception.getMessage());
-        ResponseEntity<Object> response = handleErrorResponse(
-                exception.getMessage(), HttpStatus.BAD_REQUEST, getPath(request));
-        return new ResponseEntity<>(response.getBody(), plainCryptoHeaders(), response.getStatusCode());
-    }
-
-    @ExceptionHandler({CryptoException.class, GeneralSecurityException.class})
-    public ResponseEntity<Object> handleCryptoServerError(Exception exception, WebRequest request) {
-        log.error("Crypto server-side internal error", exception);
-        ResponseEntity<Object> response = handleErrorResponse(
-                "Cryptographic service internal error", HttpStatus.INTERNAL_SERVER_ERROR, getPath(request));
-        return new ResponseEntity<>(response.getBody(), plainCryptoHeaders(), response.getStatusCode());
-    }
 
     // customized ExceptionHandler start ============>
     @ExceptionHandler({ConstraintViolationException.class})
@@ -201,12 +158,6 @@ public class CustomExceptionHandler extends ResponseEntityExceptionHandler {
     }
 
     // helper private method start ===>
-    private HttpHeaders plainCryptoHeaders() {
-        HttpHeaders headers = new HttpHeaders();
-        headers.set(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_ENCRYPTED, "false");
-        return headers;
-    }
-
     private String buildMessages(BindingResult result) {
 
         StringBuilder resultBuilder = new StringBuilder();
