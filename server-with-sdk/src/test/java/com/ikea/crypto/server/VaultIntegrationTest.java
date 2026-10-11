@@ -1,17 +1,19 @@
 package com.ikea.crypto.server;
 
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
+import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
+import com.ikea.crypto.stc.key.CryptoServer;
+import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.PublicKeyResponse;
 import com.ikea.crypto.stc.util.EncodingUtils;
-import com.ikea.crypto.stc.key.CryptoServer;
-import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.vault.VaultKeySynchronizer;
-import com.ikea.crypto.stc.config.VaultProperties;
 import com.sun.net.httpserver.HttpServer;
+import lombok.extern.slf4j.Slf4j;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -27,8 +29,6 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.time.Duration;
-
-import lombok.extern.slf4j.Slf4j;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -66,7 +66,7 @@ public class VaultIntegrationTest {
         props.setSecretPath("secret/data/crypto/demo-keys");
         props.setAutoBootstrap(true);
 
-        VaultKeySynchronizer synchronizer = new VaultKeySynchronizer(props);
+        VaultKeySynchronizer synchronizer = new VaultKeySynchronizer(props, new KeyLifecycleProperties());
         KeyRing keyRing = synchronizer.syncToKeyRing();
         CryptoServer server = new CryptoServer(keyRing);
 
@@ -186,7 +186,7 @@ public class VaultIntegrationTest {
             props.setSecretPath("secret/data/crypto/k8s-keys");
 
             // 1. Authenticate to Vault via Kubernetes Auth & synchronize keys
-            VaultKeySynchronizer synchronizer = new VaultKeySynchronizer(props);
+            VaultKeySynchronizer synchronizer = new VaultKeySynchronizer(props, new KeyLifecycleProperties());
             KeyRing keyRing = synchronizer.syncToKeyRing();
             CryptoServer server = new CryptoServer(keyRing);
 

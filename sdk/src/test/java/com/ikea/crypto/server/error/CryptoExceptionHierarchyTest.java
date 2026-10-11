@@ -39,7 +39,7 @@ class CryptoExceptionHierarchyTest {
 
     @Test
     void testExpiredKeyExceptionContainsReplacementKey() {
-        PublicKeyResponse latest = new PublicKeyResponse("public-key", "ciam:2", 123456789L, 123456700L);
+        PublicKeyResponse latest = new PublicKeyResponse("public-key", "demo-service:2", 123456789L, 123456700L);
         KeyExpiredException exception = new KeyExpiredException(latest);
         assertInstanceOf(CryptoClientSideException.class, exception);
         assertEquals(latest, exception.latestKey());

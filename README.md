@@ -110,8 +110,8 @@ openssl rand -hex 32
 ```dotenv
 ENCRYPTPII_UPSTREAM_URL=http://encryptpii-server.encryptpii.svc.cluster.local:9090
 ENCRYPTPII_VAULT_ADDR=http://vault.vault.svc.cluster.local:8200
-ENCRYPTPII_VAULT_SECRET_PATH=secret/data/sensitive-transport-crypto/rsa-ciam
-ENCRYPTPII_KEY_ALIAS=rsa-ciam
+ENCRYPTPII_VAULT_SECRET_PATH=secret/data/sensitive-transport-crypto/demo-service
+ENCRYPTPII_KEY_ALIAS=demo-service
 ENCRYPTPII_KEY_VALIDITY_MILLIS=3600000
 ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS=600000
 ENCRYPTPII_ROTATION_BEFORE_EXPIRY_MILLIS=900000
@@ -121,8 +121,8 @@ KONG_TO_ENCRYPTPII_AUTH_TOKEN=填入生成的随机值
 
 | 配置项 | 说明 |
 | --- | --- |
-| `ENCRYPTPII_VAULT_SECRET_PATH` | KV v2 data 路径，例如 `secret/data/sensitive-transport-crypto/rsa-ciam` |
-| `ENCRYPTPII_KEY_ALIAS` | `keyId` 中的别名部分，例如 `rsa-ciam`，与 Vault 路径相互独立 |
+| `ENCRYPTPII_VAULT_SECRET_PATH` | KV v2 data 路径，例如 `secret/data/sensitive-transport-crypto/demo-service` |
+| `ENCRYPTPII_KEY_ALIAS` | `keyId` 中的别名部分，例如 `demo-service`，与 Vault 路径相互独立 |
 | `ENCRYPTPII_KEY_VALIDITY_MILLIS` | 当前公钥有效期，范围 1–31536000000 毫秒 |
 | `ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS` | 旧版本解密宽限期，范围 0–31536000000 毫秒 |
 | `ENCRYPTPII_ROTATION_BEFORE_EXPIRY_MILLIS` | 建议客户端提前刷新公钥的时间；配置需满足 `宽限期 < 刷新提前量 < 有效期` |
@@ -344,7 +344,7 @@ Vault KV v2 的每个 RSA 密钥版本包含：
 | Kong Kubernetes auth role | 读取配置路径下的 data 与 metadata |
 | 轮换脚本 token | 在既有 data 路径读取和更新 |
 
-例如 `secret/data/sensitive-transport-crypto/rsa-ciam` 对应 metadata 路径 `secret/metadata/sensitive-transport-crypto/rsa-ciam`。建议按应用或安全边界隔离路径和别名。
+例如 `secret/data/sensitive-transport-crypto/demo-service` 对应 metadata 路径 `secret/metadata/sensitive-transport-crypto/demo-service`。建议按应用或安全边界隔离路径和别名。
 
 双向加密和请求加密模式的请求体只包含以下密文。所有加密模式均通过 `X-STC-Key-Id` 和 `X-STC-Session-Key` 请求头传递 keyId 和 RSA-OAEP 加密的 AES 会话密钥：
 
@@ -378,7 +378,7 @@ RSA 使用 OAEP-SHA-256 和 MGF1-SHA-1，与 Java SDK 默认参数匹配。AES �
 ```bash
 VAULT_ADDR=https://vault.example.invalid VAULT_TOKEN='<rotation-token>' \
   ./vault/scripts/rotate-vault-key.sh --http \
-  secret/data/sensitive-transport-crypto/rsa-ciam
+  secret/data/sensitive-transport-crypto/demo-service
 ```
 
 只有 `--http` 模式需要主机上的 `curl` 和显式 `VAULT_TOKEN`。未显式设置 `VAULT_ADDR` 时，轮换脚本会将 `.env` 中的 `host.docker.internal` 映射到主机 `localhost`；显式设置的地址保持原样，主机无法直接解析集群 Service DNS。临时密钥文件权限受限，并在脚本退出时清理；脚本不会打印密钥或 token。

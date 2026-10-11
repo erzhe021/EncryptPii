@@ -91,7 +91,7 @@ if [[ -z "$vault_token" || ( "$transport" == http && ! "$vault_addr" =~ ^https?:
   exit 1
 fi
 if [[ ! "$secret_path" =~ ^[A-Za-z0-9_-]+/data/[A-Za-z0-9/_-]+$ ]]; then
-  printf 'Specify a KV v2 data path, e.g. secret/data/sensitive-transport-crypto/rsa-ciam.\n' >&2
+  printf 'Specify a KV v2 data path, e.g. secret/data/sensitive-transport-crypto/demo-service.\n' >&2
   exit 1
 fi
 if [[ "$vault_token" == *$'\r'* || "$vault_token" == *$'\n'* ]]; then

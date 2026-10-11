@@ -8,11 +8,9 @@ public record KeyMetadata(
         long createdAtEpochMillis,
         long expiresAtEpochMillis
 ) {
-    public static final String DEFAULT_KEY_ALIAS = "ciam";
 
     public static String buildKeyId(String keyAlias, long version) {
-        String alias = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : DEFAULT_KEY_ALIAS;
-        return alias + ":" + version;
+        return keyAlias + ":" + version;
     }
 
     public String keyAlias() {

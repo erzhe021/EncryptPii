@@ -195,7 +195,7 @@ class CryptoServerControllerTest {
 //
 //        PublicKeyResponse rotatedKey = objectMapper.readValue(content, PublicKeyResponse.class);
 //        assertNotNull(rotatedKey.keyId());
-//        assertTrue(rotatedKey.keyId().startsWith("ciam:"));
+//        assertTrue(rotatedKey.keyId().startsWith("demo-service:"));
 //
 //        // Verify active key in /public-key endpoint is updated to newly rotated key
 //        String activeContent = mockMvc.perform(get("/crypto/server/public-key"))

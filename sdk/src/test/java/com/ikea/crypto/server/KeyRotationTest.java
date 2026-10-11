@@ -3,11 +3,11 @@ package com.ikea.crypto.server;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
+import com.ikea.crypto.stc.key.CryptoServer;
+import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.PublicKeyResponse;
 import com.ikea.crypto.stc.util.EncodingUtils;
-import com.ikea.crypto.stc.key.CryptoServer;
-import com.ikea.crypto.stc.key.KeyRing;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -24,7 +24,7 @@ class KeyRotationTest {
 
     @BeforeEach
     void setUp() throws Exception {
-        KeyRing keyRing = new KeyRing();
+        KeyRing keyRing = new KeyRing("demo-service");
         keyRing.initialize();
         server = new CryptoServer(keyRing);
     }
@@ -34,7 +34,7 @@ class KeyRotationTest {
         PublicKeyResponse response = server.getPublicKey();
         assertNotNull(response);
         assertNotNull(response.keyId());
-        assertEquals("ciam:1", response.keyId());
+        assertEquals("demo-service:1", response.keyId());
         assertTrue(response.keyId().matches("^[a-zA-Z0-9_-]+:\\d+$"));
         assertTrue(response.expiresAtEpochMillis() > System.currentTimeMillis());
     }
@@ -44,7 +44,7 @@ class KeyRotationTest {
         // 1. Client fetches active Key 1 (old key)
         PublicKeyResponse oldKeyResponse = server.getPublicKey();
         String oldKeyId = oldKeyResponse.keyId();
-        assertEquals("ciam:1", oldKeyId);
+        assertEquals("demo-service:1", oldKeyId);
         PublicKey oldPublicKey = server.publicKey();
 
         // 2. Client prepares request encrypted with old key (simulate client caching old key)
@@ -58,7 +58,7 @@ class KeyRotationTest {
         // 3. Server rotates to new Key 2 (simulating 1-year periodic rotation)
         KeyRing.KeyEntry newKeyEntry = server.keyRing().rotateKey();
         String newKeyId = newKeyEntry.metadata().keyId();
-        assertEquals("ciam:2", newKeyId);
+        assertEquals("demo-service:2", newKeyId);
         assertNotEquals(oldKeyId, newKeyId);
         assertEquals(newKeyId, server.getPublicKey().keyId());
 
@@ -118,7 +118,6 @@ class KeyRotationTest {
 
     @Test
     void testRotateKeyWithSpecifiedKeyAlias() throws Exception {
-        long now = System.currentTimeMillis();
         KeyRing keyRing = new KeyRing("default-app-key");
         keyRing.initialize();
         assertEquals("default-app-key:1", keyRing.getActiveKeyEntry().metadata().keyId());

@@ -1,10 +1,12 @@
 package com.ikea.crypto.stc.key;
 
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.key.rotation.RotationLog;
 import com.ikea.crypto.stc.model.KeyMetadata;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.Assert;
 
 import java.io.IOException;
 import java.security.*;
@@ -29,11 +31,6 @@ public class KeyRing {
         }
     }
 
-    public static final String DEFAULT_KEY_ALIAS = KeyMetadata.DEFAULT_KEY_ALIAS;
-    public static final long DEFAULT_VALIDITY_MILLIS = 60 * 1000; // 1 minute
-    public static final long DEFAULT_GRACE_PERIOD_MILLIS = 20 * 1000; // 20 seconds grace
-    public static final long DEFAULT_IN_MEMORY_KEY_VALIDITY_MILLIS = 365L * 24 * 60 * 60 * 1000;
-
     @Getter
     private final String keyAlias;
     @Getter
@@ -51,16 +48,13 @@ public class KeyRing {
     private final Map<String, KeyEntry> keyEntriesById = new ConcurrentHashMap<>();
     private final Map<String, Long> retirementTimeByKeyId = new ConcurrentHashMap<>();
 
-    public KeyRing() {
-        this(DEFAULT_KEY_ALIAS, DEFAULT_VALIDITY_MILLIS, DEFAULT_GRACE_PERIOD_MILLIS);
-    }
-
     public KeyRing(String keyAlias) {
-        this(keyAlias, DEFAULT_VALIDITY_MILLIS, DEFAULT_GRACE_PERIOD_MILLIS);
+        this(keyAlias, new KeyLifecycleProperties());
     }
 
-    public KeyRing(long validityMillis, long gracePeriodMillis) {
-        this(DEFAULT_KEY_ALIAS, validityMillis, gracePeriodMillis);
+    private KeyRing(String keyAlias, KeyLifecycleProperties lifecycleProperties) {
+        this(keyAlias, lifecycleProperties.getValidityMillis(), lifecycleProperties.getGracePeriodMillis(),
+                true, lifecycleProperties.getRotationBeforeExpiryMillis());
     }
 
     public KeyRing(String keyAlias, long validityMillis, long gracePeriodMillis) {
@@ -80,6 +74,8 @@ public class KeyRing {
             boolean autoRotate,
             long rotationBeforeExpiryMillis
     ) {
+        Assert.hasText(keyAlias, "keyAlias must not be null or blank");
+
         if (validityMillis <= 0) {
             throw new IllegalArgumentException("validityMillis must be greater than zero");
         }
@@ -93,7 +89,8 @@ public class KeyRing {
                     "rotationBeforeExpiryMillis must be less than validityMillis"
             );
         }
-        this.keyAlias = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : DEFAULT_KEY_ALIAS;
+
+        this.keyAlias = keyAlias;
         this.validityMillis = validityMillis;
         this.gracePeriodMillis = gracePeriodMillis;
         this.autoRotate = autoRotate;

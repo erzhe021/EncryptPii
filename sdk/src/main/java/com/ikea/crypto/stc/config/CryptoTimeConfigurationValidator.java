@@ -2,9 +2,7 @@ package com.ikea.crypto.stc.config;
 
 public final class CryptoTimeConfigurationValidator {
 
-    public CryptoTimeConfigurationValidator(
-            KeyLifecycleProperties lifecycleProperties
-    ) {
+    public CryptoTimeConfigurationValidator(KeyLifecycleProperties lifecycleProperties) {
         long keyValidityMillis = lifecycleProperties.getValidityMillis();
         long gracePeriodMillis = lifecycleProperties.getGracePeriodMillis();
         long rotationWindowMillis = lifecycleProperties.getRotationBeforeExpiryMillis();

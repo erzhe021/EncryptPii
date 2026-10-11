@@ -16,19 +16,19 @@ public class KeyLifecycleProperties {
     /**
      * Key validity duration in milliseconds.
      */
-    @Min(value = 1, message = "validity-millis must be greater than zero")
+    @Min(value = 1, message = "validity-millis must be greater than zero, default is 365 days")
     private long validityMillis = 365L * 24 * 60 * 60 * 1000;
 
     /**
      * Rotate keys when their remaining validity falls below this window.
      */
-    @Min(value = 0, message = "rotation-before-expiry-millis must not be negative")
+    @Min(value = 0, message = "rotation-before-expiry-millis must not be negative, default is 30 days")
     private long rotationBeforeExpiryMillis = 30L * 24 * 60 * 60 * 1000;
 
     /**
      * Grace period in milliseconds after a replacement key is activated.
      */
-    @Min(value = 0, message = "grace-period-millis must not be negative")
-    private long gracePeriodMillis = 1L * 24 * 60 * 60 * 1000;
+    @Min(value = 0, message = "grace-period-millis must not be negative, default is 1 day")
+    private long gracePeriodMillis = (long) 24 * 60 * 60 * 1000;
 
 }

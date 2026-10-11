@@ -1,10 +1,13 @@
 package com.ikea.crypto.stc.key.rotation;
 
-import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.config.KeyLifecycleProperties;
-import com.ikea.crypto.stc.model.KeyMetadata;
+import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.key.KeyRing;
-import com.ikea.crypto.stc.vault.*;
+import com.ikea.crypto.stc.model.KeyMetadata;
+import com.ikea.crypto.stc.vault.VaultCasMismatchException;
+import com.ikea.crypto.stc.vault.VaultClient;
+import com.ikea.crypto.stc.vault.VaultKeyCodec;
+import com.ikea.crypto.stc.vault.VaultKeyRepository;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -23,10 +26,6 @@ public class VaultRotationCoordinator {
     private final VaultProperties properties;
     private final KeyLifecycleProperties lifecycleProperties;
     private final VaultKeyCodec codec;
-
-    public VaultRotationCoordinator(VaultKeyRepository repository, VaultProperties properties, VaultKeyCodec codec) {
-        this(repository, properties, new KeyLifecycleProperties(), codec);
-    }
 
     public VaultRotationCoordinator(
             VaultKeyRepository repository,

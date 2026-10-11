@@ -1,17 +1,17 @@
 package com.ikea.crypto.server;
 
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
+import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
+import com.ikea.crypto.stc.key.CryptoServer;
+import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.PublicKeyResponse;
 import com.ikea.crypto.stc.util.EncodingUtils;
-import com.ikea.crypto.stc.key.CryptoServer;
-import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.vault.VaultClient;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
-import com.ikea.crypto.stc.config.VaultProperties;
-import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -62,8 +62,10 @@ public class VaultKeyRingTest {
 
         VaultClient vaultClient = new VaultClient(VAULT_ADDR);
 
+        KeyLifecycleProperties keyLifecycleProperties = new KeyLifecycleProperties();
+
         // 1. Initialize VaultKeyRing - automatically generates initial RSA key in Vault
-        VaultKeyRing vaultKeyRing = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing vaultKeyRing = new VaultKeyRing(properties, keyLifecycleProperties, vaultClient, true);
         vaultKeyRing.initialize();
         CryptoServer server = new CryptoServer(vaultKeyRing);
 
@@ -110,7 +112,7 @@ public class VaultKeyRingTest {
         assertEquals("vault-data-after-rotation", decryptedNew);
 
         // 6. Simulate another pod starting up: loads active and transition keys from Vault
-        VaultKeyRing anotherPodKeyRing = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing anotherPodKeyRing = new VaultKeyRing(properties, keyLifecycleProperties, vaultClient, true);
         anotherPodKeyRing.initialize();
         assertEquals(newKeyId, anotherPodKeyRing.getActiveKeyEntry().metadata().keyId());
         assertTrue(anotherPodKeyRing.findKeyEntry(oldKeyId).isPresent());
@@ -132,13 +134,15 @@ public class VaultKeyRingTest {
 
         VaultClient vaultClient = new VaultClient(VAULT_ADDR);
 
+        KeyLifecycleProperties keyLifecycleProperties = new KeyLifecycleProperties();
+
         // Pod 1 starts and initializes v1
-        VaultKeyRing pod1 = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing pod1 = new VaultKeyRing(properties, keyLifecycleProperties, vaultClient, true);
         pod1.initialize();
         assertEquals(testAlias + ":1", pod1.getActiveKeyEntry().metadata().keyId());
 
         // Pod 2 starts and initializes v1
-        VaultKeyRing pod2 = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing pod2 = new VaultKeyRing(properties, keyLifecycleProperties, vaultClient, true);
         pod2.initialize();
         assertEquals(testAlias + ":1", pod2.getActiveKeyEntry().metadata().keyId());
 
@@ -179,13 +183,14 @@ public class VaultKeyRingTest {
         properties.setCasBackoffMillis(300L); // Fast backoff for test
 
         VaultClient vaultClient = new VaultClient(VAULT_ADDR);
+        KeyLifecycleProperties keyLifecycleProperties = new KeyLifecycleProperties();
 
         // Bootstrap initial version 1
-        VaultKeyRing pod1 = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing pod1 = new VaultKeyRing(properties, keyLifecycleProperties, vaultClient, true);
         pod1.initialize();
         assertEquals(testAlias + ":1", pod1.getActiveKeyEntry().metadata().keyId());
 
-        VaultKeyRing pod2 = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing pod2 = new VaultKeyRing(properties, keyLifecycleProperties, vaultClient, true);
         pod2.initialize();
         assertEquals(testAlias + ":1", pod2.getActiveKeyEntry().metadata().keyId());
 
@@ -288,12 +293,14 @@ public class VaultKeyRingTest {
 
         VaultClient vaultClient = new VaultClient(VAULT_ADDR);
 
+        KeyLifecycleProperties keyLifecycleProperties = new KeyLifecycleProperties();
+
         // 1. Pod 1 and Pod 2 start with version 1
-        VaultKeyRing pod1 = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing pod1 = new VaultKeyRing(properties, keyLifecycleProperties, vaultClient, true);
         pod1.initialize();
         CryptoServer server1 = new CryptoServer(pod1);
 
-        VaultKeyRing pod2 = new VaultKeyRing(properties, vaultClient);
+        VaultKeyRing pod2 = new VaultKeyRing(properties, keyLifecycleProperties, vaultClient, true);
         pod2.initialize();
         CryptoServer server2 = new CryptoServer(pod2);
 

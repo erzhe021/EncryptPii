@@ -48,6 +48,8 @@ implementation project(':sdk')
 
 确保 Vault 已启用 KV v2，并为服务身份配置仅能访问本服务密钥路径的策略。示例配置：
 
+以下生命周期数值是显式的生产配置示例，会覆盖 SDK 默认值；例如示例将宽限期设为 10 天，而 `KeyLifecycleProperties` 默认是 1 天。未配置时实际默认值以本文“重要配置项”表格为准。
+
 ```yaml
 sensitive:
   transport:
@@ -63,15 +65,18 @@ sensitive:
         grace-period-millis: 864000000
       vault:
         enabled: true
-        addr: ${VAULT_ADDR}
-        auth-method: KUBERNETES
-        auth-path: auth/kubernetes
         secret-path: secret/data/crypto/my-service
         key-alias: my-service
         auto-bootstrap: false
-        kubernetes:
-          role: my-service
-          token-path: /var/run/secrets/kubernetes.io/serviceaccount/token
+spring:
+  cloud:
+    vault:
+      uri: ${VAULT_ADDR}
+      authentication: KUBERNETES
+      kubernetes:
+        role: my-service
+        kubernetes-path: kubernetes
+        service-account-token-file: /var/run/secrets/kubernetes.io/serviceaccount/token
 ```
 
 示例生命周期参数满足以下约束：
@@ -82,7 +87,9 @@ grace-period-millis < rotation-before-expiry-millis < validity-millis
 
 生产环境应使用 HTTPS Vault 地址和受控的认证凭证；不要将 Vault Token 或其他秘密写入代码仓库。若启用 `auto-bootstrap`，应用会在 Vault 中没有密钥时尝试以 CAS=0 创建初始密钥。生产环境是否允许自动引导，应按密钥初始化和审批流程决定。
 
-也可以使用 `auth-method: TOKEN`。此时通过 `sensitive.transport.crypto.vault.token` 配置 Vault Token，建议从环境变量或密钥管理系统注入。
+Vault 地址与认证由 Spring Cloud Vault 管理。静态 Token 认证可将 `spring.cloud.vault.authentication` 设为 `TOKEN`，并通过 `spring.cloud.vault.token` 从环境变量或密钥管理系统注入 Token。
+
+升级时将原先 `sensitive.transport.crypto.vault` 下的 Vault 地址和认证配置迁移到 `spring.cloud.vault`；密钥路径、别名和自动引导仍由 SDK 自身配置管理。
 
 ### 本地开发：内存密钥
 
@@ -187,8 +194,8 @@ SDK 自动注册 `CryptoExceptionHandler`，处理 SDK 加密协议异常，并�
 | `sensitive.transport.crypto.key-lifecycle.rotation-before-expiry-millis` | 30 天 | 到期前触发自动轮换的时间窗口 |
 | `sensitive.transport.crypto.key-lifecycle.grace-period-millis` | 1 天 | 替换密钥激活后，旧密钥的解密宽限期 |
 | `sensitive.transport.crypto.vault.enabled` | `false` | 是否使用 Vault 管理密钥 |
-| `sensitive.transport.crypto.vault.key-alias` | `ciam` | 密钥别名；`keyId` 格式为 `<keyAlias>:<version>` |
-| `sensitive.transport.crypto.vault.secret-path` | `secret/data/sensitive-transport-crypto/ciam` | Vault KV v2 密钥路径 |
+| `sensitive.transport.crypto.vault.key-alias` | `demo-service` | 密钥别名；`keyId` 格式为 `<keyAlias>:<version>` |
+| `sensitive.transport.crypto.vault.secret-path` | `secret/data/sensitive-transport-crypto/demo-service` | Vault KV v2 密钥路径 |
 | `sensitive.transport.crypto.vault.auto-bootstrap` | `true` | Vault 没有密钥时是否自动创建初始密钥 |
 
 Vault 认证方式、CAS 重试参数和 Kubernetes 认证设置见 [`vault/vault.md`](../vault/vault.md)。

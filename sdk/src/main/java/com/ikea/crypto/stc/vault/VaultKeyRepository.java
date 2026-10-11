@@ -1,7 +1,7 @@
 package com.ikea.crypto.stc.vault;
 
-import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.config.KeyLifecycleProperties;
+import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.key.KeyRing;
 import lombok.extern.slf4j.Slf4j;
 
@@ -20,15 +20,6 @@ public record VaultKeyRepository(VaultProperties properties,
                                  VaultClient vaultClient,
                                  VaultAuthenticator authenticator,
                                  VaultKeyCodec codec) {
-
-    public VaultKeyRepository(
-            VaultProperties properties,
-            VaultClient vaultClient,
-            VaultAuthenticator authenticator,
-            VaultKeyCodec codec
-    ) {
-        this(properties, new KeyLifecycleProperties(), vaultClient, authenticator, codec);
-    }
 
     /**
      * Resolves the secret path in Vault for the given key alias.
@@ -49,7 +40,7 @@ public record VaultKeyRepository(VaultProperties properties,
      * Reads raw secret version data from Vault. When version is null, reads latest.
      */
     public Optional<VaultClient.VaultSecretEntry> readSecretVersionRaw(String alias, Integer version)
-            throws IOException, InterruptedException {
+            throws IOException {
         String vaultToken = authenticator.authenticate();
         String secretPath = resolveSecretPath(alias);
         return vaultClient.readSecretVersion(vaultToken, secretPath, version);
@@ -58,7 +49,7 @@ public record VaultKeyRepository(VaultProperties properties,
     /**
      * Reads and deserializes the latest key version from Vault.
      */
-    public Optional<KeyRing.KeyEntry> readLatestKey(String alias) throws IOException, InterruptedException, GeneralSecurityException {
+    public Optional<KeyRing.KeyEntry> readLatestKey(String alias) throws IOException, GeneralSecurityException {
         return readKeyVersion(alias, null);
     }
 
@@ -66,7 +57,7 @@ public record VaultKeyRepository(VaultProperties properties,
      * Reads and deserializes a specific key version from Vault.
      */
     public Optional<KeyRing.KeyEntry> readKeyVersion(String alias, Integer version)
-            throws IOException, InterruptedException, GeneralSecurityException {
+            throws IOException, GeneralSecurityException {
         Optional<VaultClient.VaultSecretEntry> entryOpt = readSecretVersionRaw(alias, version);
         if (entryOpt.isEmpty()) {
             return Optional.empty();
@@ -87,7 +78,7 @@ public record VaultKeyRepository(VaultProperties properties,
      * Writes an RSA keypair to Vault KV v2 with optional Check-And-Set (CAS).
      */
     public VaultClient.VaultWriteResult writeKeyWithCas(String alias, KeyPair keyPair, Integer cas)
-            throws IOException, InterruptedException {
+            throws IOException {
         String vaultToken = authenticator.authenticate();
         String secretPath = resolveSecretPath(alias);
         Map<String, Object> payload = codec.serializeKeyPair(keyPair);

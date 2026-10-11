@@ -1,5 +1,6 @@
 package com.ikea.crypto.stc.key;
 
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import com.ikea.crypto.stc.exception.*;
@@ -32,11 +33,26 @@ public record CryptoServer(KeyRing keyRing) {
      * Backward-compatible constructor using a single static keypair with 1 year validity.
      */
     public CryptoServer(PrivateKey privateKey, PublicKey publicKey) {
-        this(privateKey, publicKey, true, KeyRing.DEFAULT_GRACE_PERIOD_MILLIS + 1);
+        this(privateKey, publicKey, true, new KeyLifecycleProperties());
     }
 
     public CryptoServer(PrivateKey privateKey, PublicKey publicKey, boolean autoRotate) {
-        this(privateKey, publicKey, autoRotate, KeyRing.DEFAULT_GRACE_PERIOD_MILLIS + 1);
+        this(privateKey, publicKey, autoRotate, new KeyLifecycleProperties());
+    }
+
+    private CryptoServer(
+            PrivateKey privateKey,
+            PublicKey publicKey,
+            boolean autoRotate,
+            KeyLifecycleProperties lifecycleProperties
+    ) {
+        this(createInMemoryKeyRing(
+                privateKey,
+                publicKey,
+                autoRotate,
+                lifecycleProperties.getRotationBeforeExpiryMillis(),
+                lifecycleProperties
+        ));
     }
 
     public CryptoServer(
@@ -45,24 +61,34 @@ public record CryptoServer(KeyRing keyRing) {
             boolean autoRotate,
             long rotationBeforeExpiryMillis
     ) {
-        this(createInMemoryKeyRing(privateKey, publicKey, autoRotate, rotationBeforeExpiryMillis));
+        this(createInMemoryKeyRing(
+                privateKey,
+                publicKey,
+                autoRotate,
+                rotationBeforeExpiryMillis,
+                new KeyLifecycleProperties()
+        ));
     }
 
     private static KeyRing createInMemoryKeyRing(
             PrivateKey privateKey,
             PublicKey publicKey,
             boolean autoRotate,
-            long rotationBeforeExpiryMillis
+            long rotationBeforeExpiryMillis,
+            KeyLifecycleProperties lifecycleProperties
     ) {
-        long validityMillis = KeyRing.DEFAULT_IN_MEMORY_KEY_VALIDITY_MILLIS;
+
+        String keyAlias = "in-memory-test-key";
+        long validityMillis = lifecycleProperties.getValidityMillis();
+
         KeyRing ring = new KeyRing(
-                "in-memory-test-key",
+                keyAlias,
                 validityMillis,
-                KeyRing.DEFAULT_GRACE_PERIOD_MILLIS,
+                lifecycleProperties.getGracePeriodMillis(),
                 autoRotate,
                 rotationBeforeExpiryMillis
         );
-        String keyAlias = "in-memory-test-key";
+
         String keyId = KeyMetadata.buildKeyId(keyAlias, 1);
         long now = System.currentTimeMillis();
         long expiresAt = now + validityMillis;

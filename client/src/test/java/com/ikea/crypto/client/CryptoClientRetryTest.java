@@ -49,7 +49,7 @@ class CryptoClientRetryTest {
         server.createContext("/crypto/server/public-key", exchange -> {
             int version = keyRequests.incrementAndGet();
             respond(exchange, 200, objectMapper.writeValueAsString(
-                    new PublicKeyResponse(publicKey, "rsa-ciam:" + version, System.currentTimeMillis() + 60_000)));
+                    new PublicKeyResponse(publicKey, "demo-service:" + version, System.currentTimeMillis() + 60_000)));
         });
         server.createContext("/crypto/server/request-only", exchange -> {
             var payload = objectMapper.readTree(exchange.getRequestBody());
@@ -63,7 +63,7 @@ class CryptoClientRetryTest {
                 respond(exchange, 400, objectMapper.writeValueAsString(java.util.Map.of(
                         "code", "KEY_EXPIRED",
                         "msg", "密钥版本已过期，请更新公钥。最新公钥参考data",
-                        "data", new PublicKeyResponse(publicKey, "rsa-ciam:2",
+                        "data", new PublicKeyResponse(publicKey, "demo-service:2",
                                 System.currentTimeMillis() + 60_000))));
             } else {
                 respond(exchange, 200,
@@ -89,7 +89,7 @@ class CryptoClientRetryTest {
 
             assertEquals(1, keyRequests.get());
             assertEquals(2, encryptedRequests.get());
-            assertEquals(List.of("rsa-ciam:1", "rsa-ciam:2"), requestKeyIds);
+            assertEquals(List.of("demo-service:1", "demo-service:2"), requestKeyIds);
             assertEquals(2, requestSessionKeys.size());
             assertNotEquals(requestSessionKeys.get(0), requestSessionKeys.get(1));
         } finally {
@@ -114,7 +114,7 @@ class CryptoClientRetryTest {
                 respond(exchange, 200, objectMapper.writeValueAsString(
                         new PublicKeyResponse(
                                 java.util.Base64.getEncoder().encodeToString(firstKey.getPublic().getEncoded()),
-                                "rsa-ciam:1", System.currentTimeMillis() + 60_000)));
+                                "demo-service:1", System.currentTimeMillis() + 60_000)));
                 return;
             }
             int attempt = modeAttempts.computeIfAbsent(path, ignored -> new AtomicInteger()).incrementAndGet();
@@ -135,10 +135,10 @@ class CryptoClientRetryTest {
                         "msg", "expired",
                         "data", new PublicKeyResponse(
                                 java.util.Base64.getEncoder().encodeToString(secondKey.getPublic().getEncoded()),
-                                "rsa-ciam:2", System.currentTimeMillis() + 60_000))));
+                                "demo-service:2", System.currentTimeMillis() + 60_000))));
                 return;
             }
-            var privateKey = "rsa-ciam:1".equals(keyId) ? firstKey.getPrivate() : secondKey.getPrivate();
+            var privateKey = "demo-service:1".equals(keyId) ? firstKey.getPrivate() : secondKey.getPrivate();
             javax.crypto.SecretKey sessionKey;
             try {
                 sessionKey = SessionKeyService.decryptSessionKeyBase64(encryptedSessionKey, privateKey);
@@ -184,8 +184,8 @@ class CryptoClientRetryTest {
                         .andExpect(status().isOk());
             }
 
-            assertEquals(List.of("rsa-ciam:1", "rsa-ciam:2", "rsa-ciam:1",
-                    "rsa-ciam:2", "rsa-ciam:1", "rsa-ciam:2"), keyIds);
+            assertEquals(List.of("demo-service:1", "demo-service:2", "demo-service:1",
+                    "demo-service:2", "demo-service:1", "demo-service:2"), keyIds);
             assertEquals(6, sessionHeaders.size());
             for (int attempt = 0; attempt < sessionHeaders.size(); attempt += 2) {
                 assertNotEquals(sessionHeaders.get(attempt), sessionHeaders.get(attempt + 1));
@@ -203,7 +203,7 @@ class CryptoClientRetryTest {
         ObjectMapper mapper = new ObjectMapper();
         var publicKey = new PublicKeyResponse(
                 EncodingUtils.toBase64(key.getPublic().getEncoded()),
-                "rsa-ciam:2", System.currentTimeMillis() + 60_000);
+                "demo-service:2", System.currentTimeMillis() + 60_000);
         Map<String, AtomicInteger> attempts = new ConcurrentHashMap<>();
         Map<String, List<String>> sessions = new ConcurrentHashMap<>();
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
@@ -211,7 +211,7 @@ class CryptoClientRetryTest {
             String path = exchange.getRequestURI().getPath();
             if (path.endsWith("/public-key")) {
                 respond(exchange, 200, mapper.writeValueAsString(new PublicKeyResponse(
-                        publicKey.publicKeyBase64(), "rsa-ciam:1", publicKey.expiresAtEpochMillis())));
+                        publicKey.publicKeyBase64(), "demo-service:1", publicKey.expiresAtEpochMillis())));
                 return;
             }
             String variant = path.substring(path.lastIndexOf('/') + 1);
@@ -229,7 +229,7 @@ class CryptoClientRetryTest {
                         Map.of("code", "KEY_EXPIRED", "data", publicKey)));
                 return;
             }
-            if (!"rsa-ciam:2".equals(exchange.getRequestHeaders().getFirst("X-STC-Key-Id"))) {
+            if (!"demo-service:2".equals(exchange.getRequestHeaders().getFirst("X-STC-Key-Id"))) {
                 respond(exchange, 400, "{\"message\":\"wrong key version\"}");
                 return;
             }
@@ -266,7 +266,7 @@ class CryptoClientRetryTest {
                 int expectedStatus = "client-exception".equals(variant) ? 400
                         : "system-exception".equals(variant) ? 500 : 200;
                 assertEquals(expectedStatus, details.path("response").path("status").asInt());
-                assertEquals("rsa-ciam:2", details.path("request").path("headers").path("X-STC-Key-Id").asText());
+                assertEquals("demo-service:2", details.path("request").path("headers").path("X-STC-Key-Id").asText());
                 assertEquals(sessions.get(variant).get(1),
                         details.path("request").path("headers").path("X-STC-Session-Key").asText());
                 assertTrue(details.path("response").path("cipher").has("encryptedDataBase64"));

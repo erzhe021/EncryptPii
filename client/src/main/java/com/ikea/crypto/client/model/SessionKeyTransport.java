@@ -3,6 +3,7 @@ package com.ikea.crypto.client.model;
 import com.ikea.crypto.client.constant.CryptoConstants;
 import com.ikea.crypto.client.crypto.SessionKeyService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.Assert;
 
 import javax.crypto.SecretKey;
 import java.net.http.HttpRequest;
@@ -19,24 +20,16 @@ import java.security.PublicKey;
 public record SessionKeyTransport(String keyId, String encryptedSessionKeyBase64) {
 
     public SessionKeyTransport {
-        if (keyId == null || keyId.isBlank()) {
-            throw new IllegalArgumentException("keyId is required");
-        }
-        if (encryptedSessionKeyBase64 == null || encryptedSessionKeyBase64.isBlank()) {
-            throw new IllegalArgumentException("encryptedSessionKeyBase64 is required");
-        }
+        Assert.hasText(keyId, "keyId is required");
+        Assert.hasText(encryptedSessionKeyBase64, "encryptedSessionKeyBase64 is required");
     }
 
     public static SessionKeyTransport fromGeneratedKey(String keyId, SecretKey sessionKey, PublicKey serverPublicKey)
             throws GeneralSecurityException {
         log.debug("start to build SessionKeyTransport from generated session key");
 
-        if (sessionKey == null) {
-            throw new IllegalArgumentException("sessionKey is required");
-        }
-        if (serverPublicKey == null) {
-            throw new IllegalArgumentException("serverPublicKey is required");
-        }
+        Assert.notNull(sessionKey, "sessionKey is required");
+        Assert.notNull(serverPublicKey, "serverPublicKey is required");
 
         if (!CryptoConstants.ALGORITHM_RSA.equalsIgnoreCase(serverPublicKey.getAlgorithm())) {
             throw new IllegalArgumentException(

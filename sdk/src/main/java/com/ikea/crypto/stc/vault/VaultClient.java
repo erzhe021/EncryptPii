@@ -6,6 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.vault.VaultException;
+import org.springframework.vault.authentication.SessionManager;
 import org.springframework.vault.authentication.KubernetesAuthentication;
 import org.springframework.vault.authentication.KubernetesAuthenticationOptions;
 import org.springframework.vault.authentication.SimpleSessionManager;
@@ -21,6 +22,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import java.net.URI;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -32,6 +34,8 @@ public class VaultClient {
     private final URI vaultUri;
     private final ClientHttpRequestFactory requestFactory;
     private final ObjectMapper objectMapper;
+    private final VaultTemplate vaultTemplate;
+    private final SessionManager sessionManager;
 
     public VaultClient(String vaultAddr) {
         this.vaultUri = URI.create(vaultAddr);
@@ -40,6 +44,27 @@ public class VaultClient {
                 SslConfiguration.unconfigured()
         );
         this.objectMapper = new ObjectMapper();
+        this.vaultTemplate = null;
+        this.sessionManager = null;
+    }
+
+    public VaultClient(VaultTemplate vaultTemplate, SessionManager sessionManager) {
+        this.vaultUri = null;
+        this.requestFactory = null;
+        this.objectMapper = new ObjectMapper();
+        this.vaultTemplate = Objects.requireNonNull(vaultTemplate, "vaultTemplate must not be null");
+        this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager must not be null");
+    }
+
+    public boolean usesSpringCloudVault() {
+        return vaultTemplate != null;
+    }
+
+    public String getSessionToken() {
+        if (vaultTemplate == null) {
+            throw new IllegalStateException("Spring Cloud Vault is not configured for this VaultClient");
+        }
+        return sessionManager.getSessionToken().getToken();
     }
 
     public record VaultSecretEntry(JsonNode data, int version, String createdTime) {}
@@ -77,9 +102,11 @@ public class VaultClient {
                 return Optional.empty();
             }
 
+            int targetVersion = version != null ? version : 1;
+
             int resolvedVersion = metadata != null
                     ? metadata.getVersion().getVersion()
-                    : version != null ? version : 1;
+                    : targetVersion;
             String createdTime = metadata != null
                     ? metadata.getCreatedAt().toString()
                     : null;
@@ -137,6 +164,9 @@ public class VaultClient {
     }
 
     private VaultTemplate authenticatedTemplate(String vaultToken) {
+        if (vaultTemplate != null) {
+            return vaultTemplate;
+        }
         return new VaultTemplate(restTemplateBuilder(), new SimpleSessionManager(new TokenAuthentication(vaultToken)));
     }
 

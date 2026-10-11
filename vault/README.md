@@ -29,8 +29,8 @@ cp .env.example .env
 
 ```dotenv
 ENCRYPTPII_VAULT_ADDR=http://vault.vault.svc.cluster.local:8200
-ENCRYPTPII_VAULT_SECRET_PATH=secret/data/sensitive-transport-crypto/rsa-ciam
-ENCRYPTPII_KEY_ALIAS=rsa-ciam
+ENCRYPTPII_VAULT_SECRET_PATH=secret/data/sensitive-transport-crypto/demo-service
+ENCRYPTPII_KEY_ALIAS=demo-service
 ```
 
 部署：
@@ -75,7 +75,7 @@ dry run 会读取当前密钥并生成临时 RSA-2048 密钥以验证写入数�
 默认路径从根目录 `.env` 的 `ENCRYPTPII_VAULT_SECRET_PATH` 读取，也可显式指定 KV v2 data 路径：
 
 ```bash
-./vault/scripts/rotate-vault-key.sh secret/data/sensitive-transport-crypto/rsa-ciam
+./vault/scripts/rotate-vault-key.sh secret/data/sensitive-transport-crypto/demo-service
 ```
 
 默认通过 `kubectl exec` 访问 `docker-desktop` 集群中的 `vault/vault-0`，不需要端口转发。脚本默认使用 `.local/rotation-token`，也可用 `VAULT_TOKEN` 显式覆盖。写入时保留当前密钥对象中的其他字段，并使用当前版本号作为 CAS 条件，拒绝覆盖并发写入产生的新版本。该命令是一次性轮换，不会配置定时任务。

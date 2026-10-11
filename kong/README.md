@@ -46,7 +46,7 @@
 
 | 请求头 | 内容 |
 | --- | --- |
-| `X-STC-Key-Id` | `<keyAlias>:<version>`，例如 `rsa-ciam:2` |
+| `X-STC-Key-Id` | `<keyAlias>:<version>`，例如 `demo-service:2` |
 | `X-STC-Session-Key` | RSA 加密后的 AES 会话密钥的 Base64 字符串，不能传明文会话密钥 |
 
 双向加密和请求加密的请求体只包含以下两个字段；响应加密的请求体保持原业务明文结构，也可无请求体：
@@ -113,7 +113,7 @@ KV v2 每个密钥版本应包含以下字段：
   "msg": "密钥版本已过期，请更新。新版本在data字段里。",
   "data": {
     "publicKeyBase64": "xxxxx",
-    "keyId": "rsa-ciam:2",
+    "keyId": "demo-service:2",
     "expiresAtEpochMillis": 1735689600000,
     "refreshAtEpochMillis": 1735688700000
   }
@@ -140,8 +140,8 @@ KV v2 每个密钥版本应包含以下字段：
 轮换脚本在现有 KV v2 路径新增 RSA-2048 密钥版本，保留其他字段和历史版本，并通过 CAS 避免并发覆盖。先检查变更，再执行：
 
 ```bash
-./vault/scripts/rotate-vault-key.sh --dry-run secret/data/sensitive-transport-crypto/rsa-ciam
-./vault/scripts/rotate-vault-key.sh secret/data/sensitive-transport-crypto/rsa-ciam
+./vault/scripts/rotate-vault-key.sh --dry-run secret/data/sensitive-transport-crypto/demo-service
+./vault/scripts/rotate-vault-key.sh secret/data/sensitive-transport-crypto/demo-service
 ```
 
 默认通过 `kubectl exec` 操作 `docker-desktop` context 中的 Vault，使用 `vault/.local/rotation-token` 或显式设置的 `VAULT_TOKEN`，不需要端口转发。轮换 token 仅需目标 data 路径的 `read` 和 `update` 权限，不要复用 Kong 的只读 role。外部 Vault 可使用 `--http`，并通过 `VAULT_ADDR`、`VAULT_TOKEN` 覆盖配置；CAS 失败时应先检查当前版本再决定是否重试。详细操作见 [Vault 文档](../vault/README.md)。
@@ -171,8 +171,8 @@ cp .env.example .env
 KONG_TO_ENCRYPTPII_AUTH_TOKEN=replace-with-a-random-shared-secret
 KONG_TLS_CERT_FILE=certs/kong.crt
 KONG_TLS_KEY_FILE=certs/kong.key
-ENCRYPTPII_VAULT_SECRET_PATH=secret/data/sensitive-transport-crypto/rsa-ciam
-ENCRYPTPII_KEY_ALIAS=rsa-ciam
+ENCRYPTPII_VAULT_SECRET_PATH=secret/data/sensitive-transport-crypto/demo-service
+ENCRYPTPII_KEY_ALIAS=demo-service
 ENCRYPTPII_KEY_VALIDITY_MILLIS=3600000
 ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS=600000
 ENCRYPTPII_ROTATION_BEFORE_EXPIRY_MILLIS=900000
@@ -251,8 +251,8 @@ plugins:
       vault_addr: http://vault.vault.svc.cluster.local:8200
       vault_auth_role: encryptpii-kong
       vault_kubernetes_jwt_path: /var/run/secrets/kubernetes.io/serviceaccount/token
-      vault_secret_path: secret/data/sensitive-transport-crypto/rsa-ciam
-      key_alias: rsa-ciam
+      vault_secret_path: secret/data/sensitive-transport-crypto/demo-service
+      key_alias: demo-service
       key_validity_millis: 3600000
       key_grace_period_millis: 600000
       rotation_before_expiry_millis: 900000

@@ -1,7 +1,7 @@
 package com.ikea.crypto.stc.vault;
 
-import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.config.KeyLifecycleProperties;
+import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.key.rotation.VaultRotationCoordinator;
 import lombok.Getter;
@@ -9,7 +9,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
-import java.security.KeyPair;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -33,23 +32,6 @@ public class VaultKeyRing extends KeyRing {
     private final VaultKeyRepository repository;
     @Getter
     private final VaultRotationCoordinator rotationCoordinator;
-
-    public VaultKeyRing(VaultProperties properties, VaultClient vaultClient) {
-        this(properties, new KeyLifecycleProperties(), vaultClient, true);
-    }
-
-    public VaultKeyRing(VaultProperties properties, VaultClient vaultClient, boolean autoRotate) {
-        this(properties, new KeyLifecycleProperties(), vaultClient, autoRotate);
-    }
-
-    public VaultKeyRing(
-            VaultProperties properties,
-            VaultClient vaultClient,
-            boolean autoRotate,
-            long rotationBeforeExpiryMillis
-    ) {
-        this(properties, new KeyLifecycleProperties(), vaultClient, autoRotate, rotationBeforeExpiryMillis);
-    }
 
     public VaultKeyRing(
             VaultProperties properties,
@@ -79,38 +61,6 @@ public class VaultKeyRing extends KeyRing {
                 properties, lifecycleProperties, vaultClient, this.authenticator, this.codec);
         this.rotationCoordinator = new VaultRotationCoordinator(
                 this.repository, properties, lifecycleProperties, this.codec);
-    }
-
-    public VaultKeyRing(
-            VaultProperties properties,
-            VaultClient vaultClient,
-            VaultAuthenticator authenticator,
-            VaultKeyCodec codec,
-            VaultKeyRepository repository,
-            VaultRotationCoordinator rotationCoordinator
-    ) {
-        this(properties, vaultClient, authenticator, codec, repository, rotationCoordinator,
-                new KeyLifecycleProperties());
-    }
-
-    private VaultKeyRing(
-            VaultProperties properties,
-            VaultClient vaultClient,
-            VaultAuthenticator authenticator,
-            VaultKeyCodec codec,
-            VaultKeyRepository repository,
-            VaultRotationCoordinator rotationCoordinator,
-            KeyLifecycleProperties lifecycleProperties
-    ) {
-        super(properties.getKeyAlias(), lifecycleProperties.getValidityMillis(),
-                lifecycleProperties.getGracePeriodMillis(), true,
-                lifecycleProperties.getRotationBeforeExpiryMillis());
-        this.properties = properties;
-        this.vaultClient = vaultClient;
-        this.authenticator = authenticator;
-        this.codec = codec;
-        this.repository = repository;
-        this.rotationCoordinator = rotationCoordinator;
     }
 
     /**
@@ -307,6 +257,12 @@ public class VaultKeyRing extends KeyRing {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while rotating key in Vault", e);
+        } catch (GeneralSecurityException e) {
+            log.error("GeneralSecurityException during key rotation for alias '{}': {}", targetKeyAlias, e.getMessage(), e);
+            throw e;
+        } catch (IOException e) {
+            log.error("IOException during key rotation for alias '{}': {}", targetKeyAlias, e.getMessage(), e);
+            throw e;
         }
     }
 
@@ -325,38 +281,17 @@ public class VaultKeyRing extends KeyRing {
      * updates local memory.
      */
     public synchronized KeyEntry syncLatestKeyFromVault(String targetKeyAlias) throws GeneralSecurityException, IOException {
-        try {
-            String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : getKeyAlias();
-            Optional<KeyEntry> latestOpt = repository.readLatestKey(alias);
-            if (latestOpt.isPresent()) {
-                KeyEntry remoteEntry = latestOpt.get();
-                long currentLocal = getCurrentVersion(alias);
-                if (remoteEntry.metadata().version() != null && Objects.requireNonNull(remoteEntry.metadata().version()) > currentLocal) {
-                    registerKeyEntry(remoteEntry, true);
-                    log.info("Synced newer key version {} from Vault into local memory", remoteEntry.metadata().version());
-                    return remoteEntry;
-                }
+        String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : getKeyAlias();
+        Optional<KeyEntry> latestOpt = repository.readLatestKey(alias);
+        if (latestOpt.isPresent()) {
+            KeyEntry remoteEntry = latestOpt.get();
+            long currentLocal = getCurrentVersion(alias);
+            if (remoteEntry.metadata().version() != null && Objects.requireNonNull(remoteEntry.metadata().version()) > currentLocal) {
+                registerKeyEntry(remoteEntry, true);
+                log.info("Synced newer key version {} from Vault into local memory", remoteEntry.metadata().version());
+                return remoteEntry;
             }
-            return getActiveKeyEntry();
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while syncing latest key from Vault", e);
         }
-    }
-
-    public synchronized KeyEntry syncLatestKeyFromVault() throws GeneralSecurityException, IOException {
-        return syncLatestKeyFromVault(getKeyAlias());
-    }
-
-    public String authenticate() throws IOException, InterruptedException {
-        return authenticator.authenticate();
-    }
-
-    public VaultClient.VaultWriteResult saveKeyPairToVault(String alias, KeyPair keyPair) throws IOException, InterruptedException {
-        return repository.writeKeyWithCas(alias, keyPair, null);
-    }
-
-    public VaultClient.VaultWriteResult saveKeyPairToVault(String alias, KeyPair keyPair, Integer cas) throws IOException, InterruptedException {
-        return repository.writeKeyWithCas(alias, keyPair, cas);
+        return getActiveKeyEntry();
     }
 }

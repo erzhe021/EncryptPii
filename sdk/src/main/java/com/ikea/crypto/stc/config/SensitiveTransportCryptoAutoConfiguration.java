@@ -19,7 +19,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
+import org.springframework.vault.authentication.SessionManager;
+import org.springframework.vault.core.VaultTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.RequestBodyAdvice;
 
 import java.io.IOException;
@@ -39,7 +42,8 @@ import java.security.KeyPairGenerator;
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(RequestBodyAdvice.class)
-@ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "enabled", havingValue = "true",
+        matchIfMissing = true)
 @EnableConfigurationProperties({
         SensitiveTransportCryptoProperties.class,
         KeyLifecycleProperties.class,
@@ -49,8 +53,7 @@ public class SensitiveTransportCryptoAutoConfiguration {
 
     @Bean
     public CryptoTimeConfigurationValidator cryptoTimeConfigurationValidator(
-            KeyLifecycleProperties lifecycleProperties
-    ) {
+            KeyLifecycleProperties lifecycleProperties) {
         return new CryptoTimeConfigurationValidator(lifecycleProperties);
     }
 
@@ -59,11 +62,14 @@ public class SensitiveTransportCryptoAutoConfiguration {
     public CryptoServer cryptoServer(
             VaultProperties vaultProperties,
             SensitiveTransportCryptoProperties cryptoProperties,
-            KeyLifecycleProperties lifecycleProperties
+            KeyLifecycleProperties lifecycleProperties,
+            ObjectProvider<VaultTemplate> vaultTemplateProvider,
+            ObjectProvider<SessionManager> sessionManagerProvider
     ) throws GeneralSecurityException, IOException {
         if (vaultProperties != null && vaultProperties.isEnabled()) {
-            log.info("Vault key management enabled. Loading and managing keys via Vault at {}", vaultProperties.getAddr());
-            VaultClient vaultClient = new VaultClient(vaultProperties.getAddr());
+            VaultTemplate vaultTemplate = vaultTemplateProvider.getObject();
+            log.info("Vault key management is enabled. Loading and managing keys via Spring Cloud Vault");
+            VaultClient vaultClient = new VaultClient(vaultTemplate, sessionManagerProvider.getObject());
             VaultKeyRing vaultKeyRing = new VaultKeyRing(
                     vaultProperties,
                     lifecycleProperties,
@@ -123,7 +129,8 @@ public class SensitiveTransportCryptoAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnProperty(prefix = "sensitive.transport.crypto.endpoint", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "sensitive.transport.crypto.endpoint", name = "enabled", havingValue = "true",
+            matchIfMissing = true)
     public CryptoKeyEndpoint cryptoKeyEndpoint(CryptoServer cryptoServer) {
         return new CryptoKeyEndpoint(cryptoServer);
     }

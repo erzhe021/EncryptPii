@@ -39,7 +39,7 @@ class CryptoClientTest {
         String originalData = "Hello RSA Encrypted World";
 
         CryptoClient.EncryptionResult result = cryptoClient.encrypt(
-                originalData, "rsa-ciam:1", serverKeyPair.getPublic());
+                originalData, "demo-service:1", serverKeyPair.getPublic());
 
         CipherRequestPayload payload = result.payload();
         CryptoRequestContext context = result.context();
@@ -47,7 +47,7 @@ class CryptoClientTest {
         assertNotNull(context);
         assertNotNull(payload.ivBase64());
         assertNotNull(payload.encryptedDataBase64());
-        assertEquals("rsa-ciam:1", context.sessionKeyTransport().keyId());
+        assertEquals("demo-service:1", context.sessionKeyTransport().keyId());
         assertNotNull(context.sessionKeyTransport().encryptedSessionKeyBase64());
 
         assertNotNull(context.requestId());
@@ -88,7 +88,7 @@ class CryptoClientTest {
     void testDecryptFailsWithTamperedData() throws Exception {
         String originalData = "Sensitive Data";
         CryptoClient.EncryptionResult result = cryptoClient.encrypt(
-                originalData, "rsa-ciam:1", serverKeyPair.getPublic());
+                originalData, "demo-service:1", serverKeyPair.getPublic());
 
         byte[] responseIv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
         String encryptedResponse = AesGcmCipher.encryptAsBase64("Response", result.context().sessionKey(), responseIv);

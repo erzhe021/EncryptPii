@@ -47,7 +47,7 @@ class CryptoHttpClientTest {
         long expiresAt = System.currentTimeMillis() + 60_000;
         String response = "{\"publicKeyBase64\":\""
                 + java.util.Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded())
-                + "\",\"keyId\":\"rsa-ciam:1\",\"expiresAtEpochMillis\":" + expiresAt + "}";
+                + "\",\"keyId\":\"demo-service:1\",\"expiresAtEpochMillis\":" + expiresAt + "}";
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/public-key", exchange -> {
             requests.incrementAndGet();
@@ -74,12 +74,12 @@ class CryptoHttpClientTest {
             start.countDown();
             for (var result : results) {
                 var keyInfo = result.get(5, TimeUnit.SECONDS);
-                assertEquals("rsa-ciam:1", keyInfo.keyId());
+                assertEquals("demo-service:1", keyInfo.keyId());
                 assertEquals(keyPair.getPublic(), keyInfo.publicKey());
                 assertEquals(expiresAt, keyInfo.expiresAtEpochMillis());
             }
             assertEquals(1, requests.get());
-            assertEquals("rsa-ciam:1", cryptoHttpClient.fetchServerKeyInfo().keyId());
+            assertEquals("demo-service:1", cryptoHttpClient.fetchServerKeyInfo().keyId());
             assertEquals(1, requests.get());
         } finally {
             executor.shutdownNow();
@@ -96,7 +96,7 @@ class CryptoHttpClientTest {
             long expiresAt = System.currentTimeMillis() + 60_000;
             String response = "{\"publicKeyBase64\":\""
                     + java.util.Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded())
-                    + "\",\"keyId\":\"rsa-ciam:1\",\"expiresAtEpochMillis\":" + expiresAt + "}";
+                    + "\",\"keyId\":\"demo-service:1\",\"expiresAtEpochMillis\":" + expiresAt + "}";
             respond(exchange, 200, response);
         });
         server.start();
@@ -119,7 +119,7 @@ class CryptoHttpClientTest {
         server.createContext("/stale-key", exchange -> respond(exchange,
                 "{\"code\":\"KEY_EXPIRED\",\"msg\":\"expired\",\"data\":{\"publicKeyBase64\":\""
                         + java.util.Base64.getEncoder().encodeToString(keyPair.getPublic().getEncoded())
-                        + "\",\"keyId\":\"rsa-ciam:2\",\"expiresAtEpochMillis\":"
+                        + "\",\"keyId\":\"demo-service:2\",\"expiresAtEpochMillis\":"
                         + (System.currentTimeMillis() + 60_000) + "}}"));
         server.createContext("/invalid-alias", exchange -> respond(exchange,
                 "{\"code\":\"INVALID_KEY\",\"msg\":\"invalid alias\"}"));
@@ -134,9 +134,9 @@ class CryptoHttpClientTest {
             CryptoHttpClient.HttpStatusException expiredFailure = assertThrows(
                     CryptoHttpClient.HttpStatusException.class,
                     () -> cryptoHttpClient.postRequestOnly("/stale-key", payload, session));
-            assertEquals("rsa-ciam:2",
+            assertEquals("demo-service:2",
                     cryptoHttpClient.getRefreshedKeyFromFailure(expiredFailure).keyId());
-            assertEquals("rsa-ciam:2", cryptoHttpClient.fetchServerKeyInfo().keyId());
+            assertEquals("demo-service:2", cryptoHttpClient.fetchServerKeyInfo().keyId());
             assertEquals(keyPair.getPublic(), cryptoHttpClient.fetchServerKeyInfo().publicKey());
 
             CryptoHttpClient.HttpStatusException aliasFailure = assertThrows(
@@ -159,7 +159,7 @@ class CryptoHttpClientTest {
                 assertEquals("cipher-value", body.path("encryptedDataBase64").asText());
                 assertNull(body.get("keyId"));
                 assertNull(body.get("encryptedSessionKeyBase64"));
-                assertEquals("rsa-ciam:1", exchange.getRequestHeaders().getFirst("X-STC-Key-Id"));
+                assertEquals("demo-service:1", exchange.getRequestHeaders().getFirst("X-STC-Key-Id"));
                 assertEquals("wrapped-session", exchange.getRequestHeaders().getFirst("X-STC-Session-Key"));
                 byte[] response = "{\"code\":\"0\",\"message\":null,\"data\":{}}"
                         .getBytes(java.nio.charset.StandardCharsets.UTF_8);
@@ -178,7 +178,7 @@ class CryptoHttpClientTest {
                     "http://127.0.0.1:" + server.getAddress().getPort()));
             cryptoHttpClient.postRequestOnly("/encrypted",
                     new CipherRequestPayload("iv-value", "cipher-value"),
-                    new SessionKeyTransport("rsa-ciam:1", "wrapped-session"));
+                    new SessionKeyTransport("demo-service:1", "wrapped-session"));
         } finally {
             server.stop(0);
         }

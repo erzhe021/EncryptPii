@@ -9,6 +9,7 @@ import com.ikea.crypto.client.core.CryptoHttpClient;
 import com.ikea.crypto.client.model.*;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -224,9 +225,7 @@ public class CryptoClientController {
     }
 
     private String toJsonString(DemoSensitiveRequest data) throws JsonProcessingException {
-        if (data == null) {
-            throw new IllegalArgumentException("UserRequest cannot be null or empty");
-        }
+        Assert.notNull(data, "UserRequest cannot be null or empty");
         return objectMapper.writeValueAsString(data);
     }
 

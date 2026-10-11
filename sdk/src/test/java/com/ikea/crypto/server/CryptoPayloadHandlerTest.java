@@ -148,10 +148,10 @@ class CryptoPayloadHandlerTest {
 
     @Test
     void testSessionKeyTransportUsesRequiredStcHeaders() {
-        SessionKeyTransport transport = new SessionKeyTransport("ciam:1", "wrapped-key");
+        SessionKeyTransport transport = new SessionKeyTransport("demo-service:1", "wrapped-key");
         var request = transport.apply(java.net.http.HttpRequest.newBuilder(URI.create("https://example.test")))
                 .build();
-        assertEquals("ciam:1", request.headers()
+        assertEquals("demo-service:1", request.headers()
                 .firstValue(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID).orElseThrow());
         assertEquals("wrapped-key", request.headers()
                 .firstValue(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY).orElseThrow());

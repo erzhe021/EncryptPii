@@ -1,6 +1,7 @@
 package com.ikea.crypto.server;
 
 import com.ikea.crypto.stc.constant.CryptoConstants;
+import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
@@ -52,10 +53,14 @@ class CryptoServerTest {
     @Test
     void testGetPublicKey() {
         PublicKeyResponse response = server.getPublicKey();
+        KeyLifecycleProperties defaults = new KeyLifecycleProperties();
         assertNotNull(response);
         assertNotNull(response.publicKeyBase64());
         assertEquals("in-memory-test-key:1", response.keyId());
         assertTrue(response.expiresAtEpochMillis() > System.currentTimeMillis());
+        assertEquals(defaults.getValidityMillis(), server.keyRing().getValidityMillis());
+        assertEquals(defaults.getGracePeriodMillis(), server.keyRing().getGracePeriodMillis());
+        assertEquals(defaults.getRotationBeforeExpiryMillis(), server.keyRing().getRotationBeforeExpiryMillis());
         assertEquals(
                 response.expiresAtEpochMillis() - server.keyRing().getRotationBeforeExpiryMillis(),
                 response.refreshAtEpochMillis()

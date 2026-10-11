@@ -1,10 +1,9 @@
 package com.ikea.crypto.stc.config;
 
+import jakarta.validation.constraints.Min;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
-
-import jakarta.validation.constraints.Min;
 
 /**
  * Configuration properties for Vault integration in sensitive transport crypto functionality.
@@ -31,12 +30,12 @@ public class VaultProperties {
     /**
      * Authentication method: KUBERNETES or TOKEN.
      */
-    private AuthMethod authMethod = AuthMethod.TOKEN;
+    private AuthMethod authMethod = AuthMethod.KUBERNETES;
 
     /**
      * Vault static token (used when authMethod is TOKEN, or for local dev/testing).
      */
-    private String token = "root";
+    private String token = "replace-with-your-vault-token-used-for-local-dev-testing";
 
     /**
      * Authentication mount path, e.g. auth/kubernetes or auth/token.
@@ -44,14 +43,14 @@ public class VaultProperties {
     private String authPath = "auth/kubernetes";
 
     /**
-     * Vault KV v2 secret path (relative to /v1/), e.g. secret/data/sensitive-transport-crypto/ciam
+     * Vault KV v2 secret path (relative to /v1/), e.g. secret/data/sensitive-transport-crypto/demo-service
      */
-    private String secretPath = "secret/data/sensitive-transport-crypto/ciam";
+    private String secretPath = "replace-with-your-vault-secret-path";
 
     /**
      * Logical key alias used in keyId format <keyAlias>:<version>.
      */
-    private String keyAlias = "ciam";
+    private String keyAlias = "replace-with-your-key-alias";
 
     /**
      * Automatically bootstrap and initialize keys in Vault if none exist.

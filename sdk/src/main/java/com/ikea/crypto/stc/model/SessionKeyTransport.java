@@ -3,6 +3,7 @@ package com.ikea.crypto.stc.model;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.util.Assert;
 
 import javax.crypto.SecretKey;
 import java.net.http.HttpRequest;
@@ -31,12 +32,8 @@ public record SessionKeyTransport(String keyId, String encryptedSessionKeyBase64
     public static SessionKeyTransport fromGeneratedKey(String keyId, SecretKey sessionKey, PublicKey serverPublicKey) throws GeneralSecurityException {
         log.debug("start to build SessionKeyTransport from generated session key");
 
-        if (sessionKey == null) {
-            throw new IllegalArgumentException("sessionKey is required");
-        }
-        if (serverPublicKey == null) {
-            throw new IllegalArgumentException("serverPublicKey is required");
-        }
+        Assert.notNull(sessionKey, "sessionKey is required");
+        Assert.notNull(serverPublicKey, "serverPublicKey is required");
 
         if (!CryptoConstants.ALGORITHM_RSA.equalsIgnoreCase(serverPublicKey.getAlgorithm())) {
             throw new IllegalArgumentException("Only RSA server public keys are supported for encrypting a session key before header transport.");
