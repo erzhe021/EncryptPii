@@ -265,10 +265,6 @@ public record CryptoServer(KeyRing keyRing) {
         return decryptWithAes(payload, sessionKey);
     }
 
-    public byte[] decryptSessionKey(String keyId, String encryptedSessionKeyBase64) throws GeneralSecurityException {
-        return decryptSessionKeyToSecretKey(keyId, encryptedSessionKeyBase64).getEncoded();
-    }
-
     /**
      * Decrypts the encrypted session key using the private key corresponding to keyId,
      * or attempts all available keys in the transition grace period if keyId is not matched/provided.

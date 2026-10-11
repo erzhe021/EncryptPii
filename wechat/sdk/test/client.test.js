@@ -3,8 +3,18 @@ const assert = require('node:assert/strict');
 const nodeCrypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const vm = require('node:vm');
-const { createClient, createWechatClient, createWechatAdapter, SdkError, HttpError } = require('..');
+const { createClient: createSdkClient, createWechatClient, createWechatAdapter, SdkError, HttpError } = require('..');
 const forge = require('../lib/forge.min');
+const { MODES } = require('../core/protocol');
+
+function createClient(configuration) {
+  const client = createSdkClient(configuration);
+  const withEndpoint = (input) => ({ endpoint: `/test/${input.mode}`, ...input });
+  return {
+    send: (input) => client.send(withEndpoint(input)),
+    sendDetailed: (input) => client.sendDetailed(withEndpoint(input))
+  };
+}
 
 function makeKey(id) {
   const pair = nodeCrypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
@@ -81,7 +91,9 @@ function result(data) {
 }
 
 function options(transport, extra) {
-  return Object.assign({ baseUrl: 'https://kong.example.com', transport, randomBytes }, extra);
+  return Object.assign({
+    baseUrl: 'https://kong.example.com', publicKeyPath: '/test/key', transport, randomBytes
+  }, extra);
 }
 
 function gateway(key, requests, sessions) {
@@ -91,7 +103,7 @@ function gateway(key, requests, sessions) {
       return { statusCode: 200, data: key.info };
     }
     const mode = request.url.split('/').pop();
-    if (mode === 'normal') {
+    if (mode === 'plain') {
       return { statusCode: 200, data: result(request.data) };
     }
     const session = unwrapSession(request.headers['X-STC-Session-Key'], key);
@@ -138,16 +150,64 @@ test('plain requests do not require random support or fetch public keys', async 
   let count = 0;
   const client = createWechatClient({
     baseUrl: 'https://localhost:18443',
+    publicKeyPath: '/test/key',
     platform: {
       request(request) {
         count += 1;
-        assert.equal(request.url, 'https://localhost:18443/plain/server/normal');
+        assert.equal(request.url, 'https://localhost:18443/test/resource');
         request.success({ statusCode: 200, data: result({ ok: true }) });
       }
     }
   });
-  assert.deepEqual(await client.send({ mode: 'plain', data: {} }), result({ ok: true }));
+  assert.deepEqual(await client.send({
+    mode: 'plain', endpoint: '/test/resource', data: {}
+  }), result({ ok: true }));
   assert.equal(count, 1);
+});
+
+test('only four modes are supported and each request supplies its own endpoint', async () => {
+  const requests = [];
+  assert.deepEqual(Object.keys(MODES).sort(),
+    ['plain', 'request-only', 'response-only', 'bidirectional'].sort());
+  const client = createSdkClient(options(async (request) => {
+    requests.push(request);
+    return {
+      statusCode: 200,
+      data: request.method === 'GET' ? firstKey.info : result(request.data)
+    };
+  }, { publicKeyPath: '/custom/key', timeoutMs: 4321 }));
+  for (const mode of Object.keys(MODES)) {
+    for (const endpoint of ['/custom/first', '/custom/second']) {
+      await client.send({ mode, endpoint, data: { configured: true } });
+    }
+  }
+  assert.deepEqual(requests.map((request) => request.url), [
+    'https://kong.example.com/custom/first',
+    'https://kong.example.com/custom/second',
+    'https://kong.example.com/custom/key',
+    ...Array.from({ length: 3 }, () => [
+      'https://kong.example.com/custom/first', 'https://kong.example.com/custom/second'
+    ]).flat()
+  ]);
+  assert.ok(requests.every((request) => request.timeoutMs === 4321));
+});
+
+test('invalid routes and unknown modes fail before network requests', async () => {
+  let requests = 0;
+  const transport = async () => { requests += 1; };
+  const client = createSdkClient(options(transport));
+  for (const path of [undefined, '', 'relative/path', '//other.example.com', '/bad\\path',
+    '/bad path', '/key?query', '/key#fragment', 123]) {
+    assert.throws(() => createSdkClient(options(transport, { publicKeyPath: path })),
+      { code: 'INVALID_ARGUMENT' });
+    await assert.rejects(client.send({ mode: 'plain', endpoint: path, data: {} }),
+      { code: 'INVALID_ARGUMENT' });
+  }
+  for (const mode of ['unknown', 'bidirectional', 'response-only/variant', '__proto__', 'toString']) {
+    await assert.rejects(client.send({ mode, endpoint: '/test/resource', data: {} }),
+      { code: 'INVALID_ARGUMENT' });
+  }
+  assert.equal(requests, 0);
 });
 
 test('successful business responses must use the Result envelope', async () => {
@@ -347,120 +407,6 @@ test('failed error response authentication retains ciphertext without inventing 
   });
 });
 
-test('response-only exception requests route, transport session headers and decrypt errors', async () => {
-  const fs = require('node:fs');
-  const source = fs.readFileSync(require.resolve('../../pages/index/index.js'), 'utf8');
-  for (const [variant, statusCode] of [
-    ['client-exception', 400], ['system-exception', 500], ['business-exception', 200]
-  ]) {
-    const mode = `response-only/${variant}`;
-    const response = statusCode === 200
-      ? { code: 'code-123', message: 'business error', data: null }
-      : { status: statusCode, message: 'server error' };
-    let posts = 0;
-    const client = createClient(options(async (request) => {
-      if (request.method === 'GET') return { statusCode: 200, data: firstKey.info };
-      posts += 1;
-      assert.equal(request.url, `https://kong.example.com/crypto/server/${mode}`);
-      assert.deepEqual(request.data, { data: 'hello world' });
-      assert.equal(request.headers['X-STC-Key-Id'], firstKey.info.keyId);
-      const session = unwrapSession(request.headers['X-STC-Session-Key'], firstKey);
-      return { statusCode, data: encryptResponse(response, session) };
-    }));
-    let page;
-    vm.runInNewContext(source, {
-      require: () => ({
-        callApi: async (selectedMode, data) => {
-          let details;
-          let failure;
-          try {
-            details = await client.sendDetailed({ mode: selectedMode, data });
-          } catch (error) {
-            failure = error;
-            details = error.details;
-          }
-          const result = {
-            requestPlain: data, requestCipher: details.cipherRequest,
-            responsePlain: details.data, responseCipher: details.cipherResponse,
-            requestHeaders: details.stcHeaders, latency: details.timings,
-            encryptRequest: details.encryptRequest, decryptResponse: details.decryptResponse
-          };
-          return failure
-            ? { ok: false, error: failure, details: result }
-            : { ok: true, error: null, details: result };
-        }
-      }),
-      Page: (definition) => { page = definition; }
-    });
-    page.setData = function (values) { Object.assign(this.data, values); };
-    assert.ok(page.data.modes.some((entry) => entry.id === mode));
-    page.selectMode({ currentTarget: { dataset: { mode } } });
-    assert.equal(page.data.usesPlainInput, true);
-    await page.submit();
-    assert.equal(posts, 1);
-    assert.equal(page.data.error, statusCode === 200 ? '' : `请求失败（HTTP ${statusCode}）`);
-    assert.equal(page.data.loading, false);
-    assert.equal(page.data.result.requestCipher, 'N/A');
-    assert.deepEqual(JSON.parse(page.data.result.requestPlain), { data: 'hello world' });
-    assert.ok(page.data.result.requestHeaders.includes('X-STC-Session-Key'));
-    assert.ok(page.data.result.responseCipher.includes('encryptedDataBase64'));
-    assert.deepEqual(JSON.parse(page.data.result.responsePlain), response);
-    assert.ok(JSON.parse(page.data.result.latency).total >= 0);
-    assert.equal(page.data.result.requestPlainLabel, '请求体明文(实发)');
-    assert.equal(page.data.result.responseCipherLabel, '响应体密文(实收)');
-  }
-});
-
-test('demo page renders all five sections alongside the HTTP failure message', async () => {
-  const fs = require('node:fs');
-  const source = fs.readFileSync(require.resolve('../../pages/index/index.js'), 'utf8');
-  for (const mode of ['plain', 'bidirectional', 'request-only', 'response-only']) {
-    let page;
-    const requestCipher = ['bidirectional', 'request-only'].includes(mode)
-      ? { encryptedDataBase64: 'request' } : null;
-    const responseCipher = ['bidirectional', 'response-only'].includes(mode)
-      ? { encryptedDataBase64: 'response' } : null;
-    const encryptRequest = ['bidirectional', 'request-only'].includes(mode);
-    const decryptResponse = ['bidirectional', 'response-only'].includes(mode);
-    const failure = new HttpError(500, {});
-    const details = {
-      requestPlain: { name: 'demo' }, requestCipher,
-      responsePlain: { status: 500, message: 'demo error' }, responseCipher,
-      requestHeaders: mode === 'plain' ? null
-        : { 'X-STC-Key-Id': 'first', 'X-STC-Session-Key': 'wrapped' },
-      latency: { total: 10, encryption: 2, http: 7, decryption: 1 },
-      encryptRequest, decryptResponse
-    };
-    vm.runInNewContext(source, {
-      require: () => ({ callApi: async () => ({ ok: false, error: failure, details }) }),
-      Page: (definition) => { page = definition; }
-    });
-    page.setData = function (values) { Object.assign(this.data, values); };
-    page.data.mode = mode;
-    await page.submit();
-    assert.equal(page.data.error, '请求失败（HTTP 500）');
-    assert.equal(page.data.loading, false);
-    assert.ok(page.data.result.requestPlain.includes('demo'));
-    assert.deepEqual(JSON.parse(page.data.result.requestPlain), { name: 'demo' });
-    assert.equal(page.data.result.requestHeaders, mode === 'plain' ? null
-      : JSON.stringify(details.requestHeaders, null, 2));
-    assert.equal(page.data.result.requestPlainLabel,
-      ['plain', 'response-only'].includes(mode) ? '请求体明文(实发)' : '请求体明文');
-    assert.equal(page.data.result.requestCipherLabel,
-      requestCipher ? '请求体密文(实发)' : '请求体密文');
-    assert.equal(page.data.result.responsePlainLabel,
-      responseCipher ? '响应体明文' : '响应体明文(实收)');
-    assert.equal(page.data.result.responseCipherLabel,
-      responseCipher ? '响应体密文(实收)' : '响应体密文');
-    assert.equal(page.data.result.requestCipher,
-      requestCipher ? JSON.stringify(requestCipher, null, 2) : 'N/A');
-    assert.equal(page.data.result.responseCipher,
-      responseCipher ? JSON.stringify(responseCipher, null, 2) : 'N/A');
-    assert.ok(page.data.result.responsePlain.includes('demo error'));
-    assert.ok(page.data.result.latency.includes('10'));
-  }
-});
-
 test('network failures have stable errors and are not retried', async () => {
   let posts = 0;
   const cause = new Error('timeout');
@@ -543,7 +489,7 @@ test('local HTTP works without a flag while remote HTTP remains rejected', async
     };
     const client = createClient(options(transport, { baseUrl }));
     assert.deepEqual(await client.send({ mode: 'plain', data: {} }), result({}));
-    assert.equal(requests[0].url, baseUrl.replace(/\/$/, '') + '/plain/server/normal');
+    assert.equal(requests[0].url, baseUrl.replace(/\/$/, '') + '/test/plain');
   }
   for (const baseUrl of [
     'http://kong.example.com', 'http://192.168.1.10:9090',
@@ -664,61 +610,6 @@ test('import is inert without a WeChat environment or random prewarming', () => 
   `], { cwd: require('node:path').resolve(__dirname, '..'), encoding: 'utf8' });
   if (imported.error) throw imported.error;
   assert.equal(imported.status, 0, imported.stderr);
-});
-
-test('demo wrapper returns separate plaintext, ciphertext, and latency values', async () => {
-  const previousWx = global.wx;
-  const requests = [];
-  const next = gateway(firstKey, requests, []);
-  global.wx = {
-    getRandomValues(request) {
-      request.success({ randomValues: nodeCrypto.randomBytes(request.length) });
-    },
-    request(request) {
-      next({
-        url: request.url, method: request.method, data: request.data,
-        headers: request.header, timeoutMs: request.timeout
-      }).then(request.success, request.fail);
-    }
-  };
-  try {
-    const { callApi } = require('../../utils/api');
-    const data = { name: '演示用户' };
-    const outcome = await callApi('bidirectional', data);
-    assert.equal(outcome.ok, true);
-    const result = outcome.details;
-    assert.deepEqual(result.requestPlain, data);
-    assert.deepEqual(result.responsePlain, { code: '0', message: null, data });
-    assert.ok(result.requestCipher.encryptedDataBase64);
-    assert.ok(result.responseCipher.encryptedDataBase64);
-    assert.ok(result.latency.total >= 0);
-    assert.equal(Object.hasOwn(result, 'sessionKey'), false);
-    const { SERVER_BASE_URL } = require('../../config');
-    assert.ok(requests.every((request) => request.url.startsWith(SERVER_BASE_URL + '/')));
-    const plain = await callApi('plain', data);
-    assert.equal(plain.ok, true);
-    assert.deepEqual(plain.details.requestPlain, data);
-    assert.equal(plain.details.requestCipher, null);
-    assert.deepEqual(plain.details.responsePlain, { code: '0', message: null, data });
-    assert.equal(plain.details.responseCipher, null);
-    global.wx.request = (request) => {
-      request.success({ statusCode: 500, data: { status: 500, message: 'demo error' } });
-    };
-    const failure = await callApi('plain', data);
-    assert.equal(failure.ok, false);
-    assert.equal(failure.error.code, 'HTTP_ERROR');
-    assert.deepEqual(failure.details.requestPlain, data);
-    assert.equal(failure.details.requestCipher, null);
-    assert.equal(failure.details.responseCipher, null);
-    assert.deepEqual(failure.details.responsePlain, { status: 500, message: 'demo error' });
-    assert.ok(failure.details.latency.total >= 0);
-  } finally {
-    if (previousWx === undefined) {
-      delete global.wx;
-    } else {
-      global.wx = previousWx;
-    }
-  }
 });
 
 test('WeChat adapter preserves transport options and normalizes cross-realm random bytes', async () => {

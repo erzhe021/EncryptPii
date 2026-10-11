@@ -7,7 +7,7 @@ import com.ikea.crypto.stc.web.advice.CryptoExceptionHandler;
 import com.ikea.crypto.stc.web.advice.RequestDecryptAdvice;
 import com.ikea.crypto.stc.web.advice.ResponseEncryptAdvice;
 import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
-import com.ikea.crypto.stc.web.endpoint.CryptoKeyEndpoint;
+import com.ikea.crypto.stc.web.endpoint.PublicKeyEndpoint;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.WebApplicationContextRunner;
@@ -42,7 +42,7 @@ class SensitiveTransportCryptoAutoConfigurationTest {
                     assertThat(context).hasSingleBean(ResponseEncryptAdvice.class);
                     assertThat(context.getBeansWithAnnotation(RestControllerAdvice.class))
                             .containsOnlyKeys("cryptoExceptionHandler");
-                    assertThat(context).hasSingleBean(CryptoKeyEndpoint.class);
+                    assertThat(context).hasSingleBean(PublicKeyEndpoint.class);
 
                     CryptoServer cryptoServer = context.getBean(CryptoServer.class);
                     assertThat(cryptoServer.getPublicKey()).isNotNull();
@@ -59,7 +59,7 @@ class SensitiveTransportCryptoAutoConfigurationTest {
                     assertThat(context).doesNotHaveBean(CryptoExceptionHandler.class);
                     assertThat(context).doesNotHaveBean(RequestDecryptAdvice.class);
                     assertThat(context).doesNotHaveBean(ResponseEncryptAdvice.class);
-                    assertThat(context).doesNotHaveBean(CryptoKeyEndpoint.class);
+                    assertThat(context).doesNotHaveBean(PublicKeyEndpoint.class);
                 });
     }
 
@@ -70,7 +70,7 @@ class SensitiveTransportCryptoAutoConfigurationTest {
                 .withPropertyValues("sensitive.transport.crypto.endpoint.enabled=false")
                 .run(context -> {
                     assertThat(context).hasSingleBean(CryptoServer.class);
-                    assertThat(context).doesNotHaveBean(CryptoKeyEndpoint.class);
+                    assertThat(context).doesNotHaveBean(PublicKeyEndpoint.class);
                 });
     }
 

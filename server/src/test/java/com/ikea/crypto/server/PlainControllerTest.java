@@ -23,10 +23,10 @@ class PlainControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"data\":\"demo\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cardNumber").value("123456789012"))
-                .andExpect(jsonPath("$.memberTier").value(3))
-                .andExpect(jsonPath("$.points").value(10000))
-                .andExpect(jsonPath("$.remarks").value("remarks for request: demo"));
+                .andExpect(jsonPath("$.data.cardNumber").value("123456789012"))
+                .andExpect(jsonPath("$.data.memberTier").value(3))
+                .andExpect(jsonPath("$.data.points").value(10000))
+                .andExpect(jsonPath("$.data.remarks").value("remarks for request: demo"));
     }
 
     @Test

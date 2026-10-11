@@ -150,7 +150,7 @@ public class ProfileController {
 客户端先请求公钥接口：
 
 ```text
-GET /crypto/server/public-key
+GET /sensitive-transport-crypto/public-key
 ```
 
 可使用 `sensitive.transport.crypto.endpoint.base-path` 修改默认前缀。公钥响应包含 `publicKeyBase64`、`keyId`、`expiresAtEpochMillis` 和 `refreshAtEpochMillis`；客户端应在建议刷新时间前更新缓存的公钥。

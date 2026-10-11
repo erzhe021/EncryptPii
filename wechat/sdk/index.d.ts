@@ -1,6 +1,4 @@
-export type TransportMode = 'plain' | 'bidirectional' | 'request-only' | 'response-only'
-  | 'response-only/client-exception' | 'response-only/system-exception'
-  | 'response-only/business-exception';
+export type TransportMode = 'plain' | 'request-only' | 'response-only' | 'bidirectional';
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
 
 export interface TransportRequest {
@@ -18,6 +16,7 @@ export interface TransportResponse {
 
 export interface ClientOptions {
   baseUrl: string;
+  publicKeyPath: string;
   timeoutMs?: number;
   headers?: Record<string, string>;
   transport: (request: TransportRequest) => Promise<TransportResponse>;
@@ -26,6 +25,7 @@ export interface ClientOptions {
 
 export interface SendOptions {
   mode: TransportMode;
+  endpoint: string;
   data: JsonValue;
   headers?: Record<string, string>;
 }
@@ -103,6 +103,7 @@ export interface WechatPlatform {
 
 export interface WechatClientOptions {
   baseUrl: string;
+  publicKeyPath: string;
   timeoutMs?: number;
   headers?: Record<string, string>;
   platform?: WechatPlatform;

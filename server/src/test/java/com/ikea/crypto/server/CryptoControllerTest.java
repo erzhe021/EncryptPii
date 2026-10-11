@@ -43,11 +43,11 @@ class CryptoControllerTest {
                         .content(objectMapper.writeValueAsString(
                                 new DemoSensitiveRequest("name", "phone", "email", "address"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.cardNumber").value("1234-5678-9012-3456"));
+                .andExpect(jsonPath("$.data.cardNumber").value("1234-5678-9012-3456"));
         mockMvc.perform(post("/crypto/server/response-only")
                         .header("X-Crypto-Gateway-Token", GATEWAY_TOKEN))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("张三"));
+                .andExpect(jsonPath("$.data.name").value("张三"));
     }
 
     @Test
@@ -58,7 +58,7 @@ class CryptoControllerTest {
                         .content(objectMapper.writeValueAsString(
                                 new DemoSensitiveRequest("name", "phone", "email", "address"))))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.name").value("name"))
-                .andExpect(jsonPath("$.remark").value("bidirectional crypto"));
+                .andExpect(jsonPath("$.data.name").value("name"))
+                .andExpect(jsonPath("$.data.remark").value("bidirectional crypto"));
     }
 }

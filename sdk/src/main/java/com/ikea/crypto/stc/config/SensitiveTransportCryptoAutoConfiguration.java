@@ -11,15 +11,15 @@ import com.ikea.crypto.stc.web.advice.CryptoExceptionHandler;
 import com.ikea.crypto.stc.web.advice.RequestDecryptAdvice;
 import com.ikea.crypto.stc.web.advice.ResponseEncryptAdvice;
 import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
-import com.ikea.crypto.stc.web.endpoint.CryptoKeyEndpoint;
+import com.ikea.crypto.stc.web.endpoint.PublicKeyEndpoint;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.vault.authentication.SessionManager;
 import org.springframework.vault.core.VaultTemplate;
@@ -131,7 +131,7 @@ public class SensitiveTransportCryptoAutoConfiguration {
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "sensitive.transport.crypto.endpoint", name = "enabled", havingValue = "true",
             matchIfMissing = true)
-    public CryptoKeyEndpoint cryptoKeyEndpoint(CryptoServer cryptoServer) {
-        return new CryptoKeyEndpoint(cryptoServer);
+    public PublicKeyEndpoint publicKeyEndpoint(CryptoServer cryptoServer) {
+        return new PublicKeyEndpoint(cryptoServer);
     }
 }

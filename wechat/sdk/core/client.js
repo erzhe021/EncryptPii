@@ -89,6 +89,13 @@ function isEncryptedResponse(headers, raw) {
   return Boolean(raw) && typeof raw === 'object' && isCipherEnvelope(raw);
 }
 
+function validatePath(path) {
+  if (typeof path !== 'string' || !/^\/(?!\/)[^\s\\?#]+$/.test(path)) {
+    throw new SdkError('INVALID_ARGUMENT', 'Endpoint must be an absolute path on the configured origin');
+  }
+  return path;
+}
+
 function createClient(options) {
   if (!options || typeof options.transport !== 'function'
     || typeof options.randomBytes !== 'function') {
@@ -108,6 +115,7 @@ function createClient(options) {
     throw new SdkError('INVALID_ARGUMENT', 'Timeout must be a positive number');
   }
   const defaultHeaders = normalizeHeaders(options.headers);
+  const publicKeyPath = validatePath(options.publicKeyPath);
   const transport = options.transport;
   const crypto = createCrypto(options.randomBytes);
 
@@ -144,9 +152,9 @@ function createClient(options) {
     return response.data;
   }
 
-  const keys = createKeyManager(request);
+  const keys = createKeyManager(request, publicKeyPath);
 
-  async function sendOnce(mode, inputData, headers, serverKey, startedAt) {
+  async function sendOnce(mode, endpoint, inputData, headers, serverKey, startedAt) {
     const encrypted = mode.encryptRequest || mode.decryptResponse;
     const encryptionStartedAt = Date.now();
     const session = encrypted
@@ -163,7 +171,7 @@ function createClient(options) {
     let responseHeaders = {};
     let httpError = null;
     try {
-      const response = await fetchRaw(mode.endpoint, { data: body, headers: requestHeaders });
+      const response = await fetchRaw(endpoint, { data: body, headers: requestHeaders });
       raw = response.data;
       responseHeaders = response.headers;
     } catch (error) {
@@ -231,6 +239,7 @@ function createClient(options) {
       throw new SdkError('INVALID_ARGUMENT', 'Unknown transport mode');
     }
     const mode = MODES[input.mode];
+    const endpoint = validatePath(input.endpoint);
     const headers = normalizeHeaders(input.headers);
     const startedAt = Date.now();
     const encrypted = mode.encryptRequest || mode.decryptResponse;
@@ -238,7 +247,7 @@ function createClient(options) {
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const { details, httpError, responseError } =
-        await sendOnce(mode, input.data, headers, serverKey, startedAt);
+        await sendOnce(mode, endpoint, input.data, headers, serverKey, startedAt);
       if (httpError && encrypted && attempt === 0 && isKeyExpiredHttpError(httpError)) {
         if (typeof console !== 'undefined' && typeof console.log === 'function') {
           console.log('Server key expired, attempting to install new key...',

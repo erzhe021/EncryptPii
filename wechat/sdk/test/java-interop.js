@@ -10,6 +10,7 @@ test('SDK request decrypts in JCA and JCA response decrypts in SDK', async () =>
   const privateKey = pair.privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');
   const client = createClient({
     baseUrl: 'https://kong.example.com',
+    publicKeyPath: '/test/key',
     randomBytes: async (length) => new Uint8Array(crypto.randomBytes(length)),
     transport: async (request) => {
       if (request.method === 'GET') {
@@ -47,5 +48,5 @@ test('SDK request decrypts in JCA and JCA response decrypts in SDK', async () =>
     message: null,
     data: { name: '测试用户', nested: { value: 'hello 🌍' } }
   };
-  assert.deepEqual(await client.send({ mode: 'bidirectional', data }), data);
+  assert.deepEqual(await client.send({ mode: 'bidirectional', endpoint: '/test/resource', data }), data);
 });

@@ -33,7 +33,7 @@
 | `/crypto/server/response-only/business-exception` | POST | 独立响应加密路由，转发到业务异常接口（HTTP 200） |
 | `/crypto/server/response-only/client-exception` | POST | 独立响应加密路由，转发到客户端异常接口（HTTP 400） |
 | `/crypto/server/response-only/system-exception` | POST | 独立响应加密路由，转发到服务端异常接口（HTTP 500） |
-| `/crypto/server/public-key` | GET | Kong 从 Vault 获取当前公钥并直接响应，不转发到 Server |
+| `/sensitive-transport-crypto/public-key` | GET | Kong 从 Vault 获取当前公钥并直接响应，不转发到 Server |
 | `/plain/server/normal` | POST | 演示用明文路由；不挂载插件，保留路径转发到 Server |
 
 三个异常路由均配置 `decrypt_request=false`、`encrypt_response=true`，其
@@ -224,7 +224,7 @@ Kong 的 HTTPS 代理、HTTP 代理、Admin API 和 Manager 分别通过本机�
 另开终端访问公钥接口：
 
 ```bash
-curl --cacert certs/kong.crt https://localhost:18443/crypto/server/public-key
+curl --cacert certs/kong.crt https://localhost:18443/sensitive-transport-crypto/public-key
 ```
 
 ## 插件配置

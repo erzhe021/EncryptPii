@@ -8,6 +8,8 @@
 2. 在微信开发者工具中导入 `wechat` 目录并运行。发布前请确认 `project.config.json` 中配置的是团队自己的小程序 AppID。
 3. 在小程序管理后台将服务域名加入 `request` 合法域名；生产环境必须使用 HTTPS。
 
+服务地址、请求超时和公钥路径统一在 `config.js` 的 `SDK_OPTIONS` 中配置；具体业务请求在 `REQUESTS` 中配置 `{ mode, endpoint }`，由 `utils/api.js` 在发送时传入 SDK。SDK 只识别 `plain`、`request-only`、`response-only`、`bidirectional` 四种模式，不依赖小程序配置，也不包含业务接口或异常演示的定义。三个异常演示都使用 `response-only` 模式，仅接口路径不同；加密算法、协议请求头和模式的加解密标志仍由 SDK 管理。
+
 本地开发者工具可直接使用 `http://localhost:9090`，无需额外开关。
 在开发者工具的本地设置中勾选“不校验合法域名、web-view（业务域名）、TLS 版本以及 HTTPS 证书”。
 SDK 只允许 `localhost`、`127.0.0.1` 和 `[::1]` 的 HTTP 地址，不允许远程 HTTP。
@@ -27,7 +29,7 @@ Java Server 默认允许直接访问，无需 `local` profile 或 gateway token�
 
 | 小程序模式 | Server 路由 |
 | --- | --- |
-| 获取公钥 | `GET /crypto/server/public-key` |
+| 获取公钥 | `GET /sensitive-transport-crypto/public-key` |
 | 普通传输 | `POST /plain/server/normal` |
 | 双向加密 | `POST /crypto/server/bidirectional` |
 | 请求加密 | `POST /crypto/server/request-only` |

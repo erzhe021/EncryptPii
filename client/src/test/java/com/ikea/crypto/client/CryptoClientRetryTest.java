@@ -46,7 +46,7 @@ class CryptoClientRetryTest {
         List<String> requestSessionKeys = new CopyOnWriteArrayList<>();
         ObjectMapper objectMapper = new ObjectMapper();
         HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
-        server.createContext("/crypto/server/public-key", exchange -> {
+        server.createContext("/sensitive-transport-crypto/public-key", exchange -> {
             int version = keyRequests.incrementAndGet();
             respond(exchange, 200, objectMapper.writeValueAsString(
                     new PublicKeyResponse(publicKey, "demo-service:" + version, System.currentTimeMillis() + 60_000)));
@@ -75,7 +75,7 @@ class CryptoClientRetryTest {
             String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
             CryptoClientController controller = new CryptoClientController(
                     baseUrl,
-                    "/crypto/server/public-key",
+                    "/sensitive-transport-crypto/public-key",
                     1000,
                     "/crypto/server/bidirectional",
                     "/crypto/server/request-only",
@@ -171,7 +171,7 @@ class CryptoClientRetryTest {
             for (String mode : List.of("bidirectional", "request-only", "response-only")) {
                 CryptoClientController controller = new CryptoClientController(
                         baseUrl,
-                        "/crypto/server/public-key",
+                        "/sensitive-transport-crypto/public-key",
                         1000,
                         "/crypto/server/bidirectional",
                         "/crypto/server/request-only",
@@ -243,6 +243,8 @@ class CryptoClientRetryTest {
                     : "{\"status\":" + status + ",\"message\":\"sensitive error\"}";
             try {
                 var sessionKey = SessionKeyService.decryptSessionKeyBase64(sessionHeader, key.getPrivate());
+                exchange.getResponseHeaders().set(
+                        CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_ENCRYPTED, "true");
                 respond(exchange, status, mapper.writeValueAsString(encryptResponse(body, sessionKey)));
             } catch (Exception failure) {
                 exchange.close();
@@ -254,7 +256,7 @@ class CryptoClientRetryTest {
             for (String variant : List.of("client-exception", "system-exception", "business-exception")) {
                 CryptoClientController controller = new CryptoClientController(
                         "http://127.0.0.1:" + server.getAddress().getPort(),
-                        "/crypto/server/public-key", 1000, "/crypto/server/bidirectional",
+                        "/sensitive-transport-crypto/public-key", 1000, "/crypto/server/bidirectional",
                         "/crypto/server/request-only", "/crypto/server/response-only");
                 MockMvc client = MockMvcBuilders.standaloneSetup(controller).build();
                 var request = post("/crypto/client/response-only/" + variant);

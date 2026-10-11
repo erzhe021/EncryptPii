@@ -16,12 +16,13 @@ const { createWechatClient } = require('@encryptpii/wechat-sdk');
 
 const client = createWechatClient({
   baseUrl: 'https://kong.example.com',
+  publicKeyPath: '/your-public-key-path',
   timeoutMs: 15000,
   headers: { Authorization: 'Bearer <application-token>' }
 });
 
 async function send(data) {
-  return client.send({ mode: 'bidirectional', data });
+  return client.send({ mode: 'bidirectional', endpoint: '/your-resource-path', data });
 }
 ```
 
@@ -55,7 +56,7 @@ production.
 
 ## API
 
-`client.send({ mode, data, headers? })` returns the server's
+`client.send({ mode, endpoint, data, headers? })` returns the server's
 `{ code, message, data }` result envelope. The business payload is in `data`.
 `data` must be JSON serializable. It is snapshotted before asynchronous work.
 
@@ -65,9 +66,11 @@ production.
 | `bidirectional` | Encrypted JSON + session-key headers | Decrypted JSON |
 | `request-only` | Encrypted JSON + session-key headers | JSON |
 | `response-only` | JSON + session-key headers | Decrypted JSON |
-| `response-only/client-exception` | JSON + session-key headers | Decrypted HTTP 400 error |
-| `response-only/system-exception` | JSON + session-key headers | Decrypted HTTP 500 error |
-| `response-only/business-exception` | JSON + session-key headers | Decrypted HTTP 200 business error |
+
+These are the only four modes. A mode selects encryption behavior, not a
+business operation. Supply `endpoint` on each call; multiple endpoints can use
+the same mode. Application-specific requests and error scenarios belong in the
+application, not the SDK.
 
 For encrypted modes, `X-STC-Key-Id` and `X-STC-Session-Key` are the only
 transport for key metadata and the RSA-wrapped AES session key. Encrypted
@@ -89,9 +92,14 @@ need not use the business result envelope. Decryption failures also expose
 diagnostics, with `data: null` and the received ciphertext, and remain errors.
 These diagnostics may contain sensitive data and must not be logged by default.
 
-`createClient({ baseUrl, transport, randomBytes, timeoutMs?, headers? })` supports
+`createClient({ baseUrl, publicKeyPath, transport, randomBytes, timeoutMs?, headers? })` supports
 existing network stacks and future platform adapters:
 
+- `publicKeyPath` is required client configuration; `endpoint` is required on
+  every `send` or `sendDetailed` call. Paths must start with a single `/` and cannot contain
+  whitespace, backslashes, query strings or fragments. Invalid paths or unknown
+  modes fail with `INVALID_ARGUMENT` before any network request.
+  No business routing table is stored in the SDK.
 - `transport({ url, method, data, timeoutMs, headers })` resolves to
   `{ statusCode, data }`, including for non-2xx responses. Return decoded JSON
   bodies. Reject only on network errors. Do not retry POST requests or follow
@@ -110,7 +118,8 @@ backend would require a separate implementation with the same wire format.
 The package preserves the Java/Kong protocol: RSA-OAEP SHA-256 with MGF1 SHA-1,
 AES-256-GCM, a 12-byte IV and a 16-byte authentication tag appended to ciphertext.
 The OAEP seed is supplied explicitly from the platform's secure random source.
-Protocol fields and routing live in `core/protocol.js`.
+Protocol constants and mode encryption flags live in `core/protocol.js`;
+service routing is supplied by the application.
 
 Only HTTP 400 with `code: "KEY_EXPIRED"` and a valid replacement key permits one
 retry, with fresh session material. Network failures, other HTTP errors and
@@ -145,7 +154,9 @@ primitives, failures, concurrency and the WeChat adapter. `npm run test:java`
 additionally requires JDK 17+ on PATH and checks a full round trip with the JCA
 algorithms and default OAEP parameters used by the Java client.
 
-The package is currently version `0.1.0`. Public API and wire-format changes must
+The package is currently version `0.1.0`. Consumers must now explicitly supply
+`publicKeyPath` when creating a client and `endpoint` on each send call, and use
+`bidirectional` for two-way encryption. Public API and wire-format changes must
 be versioned and coordinated with consumers; breaking changes require a major
 version after reaching `1.0.0`. Before production rollout, exercise all modes
 against the deployed Kong/Java services and verify the WeChat npm build on a

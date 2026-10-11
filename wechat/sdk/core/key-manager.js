@@ -1,6 +1,5 @@
 const forge = require('../lib/forge.min.js');
 const { SdkError } = require('./errors');
-const { PUBLIC_KEY_PATH } = require('./protocol');
 
 function isUsable(key) {
   return Boolean(key) && key.refreshAtEpochMillis > Date.now();
@@ -18,7 +17,7 @@ function verifyPublicKey(base64) {
   }
 }
 
-function createKeyManager(request) {
+function createKeyManager(request, publicKeyPath) {
   let cached = null;
   let fetching = null;
 
@@ -46,7 +45,7 @@ function createKeyManager(request) {
       return Promise.resolve(cached);
     }
     if (!fetching) {
-      fetching = request(PUBLIC_KEY_PATH, { method: 'GET', headers })
+      fetching = request(publicKeyPath, { method: 'GET', headers })
         .then((key) => {
           // A concurrent KEY_EXPIRED response may already have installed a newer key.
           if (isUsable(cached)) {

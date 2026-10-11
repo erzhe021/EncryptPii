@@ -158,7 +158,7 @@ upsert_plugin() {
 }
 
 public_key_route="$(
-  upsert_route encryptpii-public-key /crypto/server/public-key GET
+  upsert_route encryptpii-public-key /sensitive-transport-crypto/public-key GET
 )"
 bidirectional_route="$(
   upsert_route encryptpii-bidirectional /crypto/server/bidirectional POST
@@ -173,7 +173,7 @@ response_only_route="$(
 upsert_plugin "$bidirectional_route" true true /crypto/server/bidirectional
 upsert_plugin "$request_only_route" true false /crypto/server/request-only
 upsert_plugin "$response_only_route" false true /crypto/server/response-only
-upsert_plugin "$public_key_route" false false /crypto/server/public-key true
+upsert_plugin "$public_key_route" false false /sensitive-transport-crypto/public-key true
 
 for exception in client-exception system-exception business-exception; do
   exception_path="/crypto/server/response-only/$exception"

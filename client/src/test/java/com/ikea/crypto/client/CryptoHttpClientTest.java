@@ -37,7 +37,7 @@ class CryptoHttpClientTest {
 
     @Test
     void testConstruct() {
-        cryptoHttpClient = new CryptoHttpClient(URI.create("http:/localhost:9090"), "/crypto/server/public-key");
+        cryptoHttpClient = new CryptoHttpClient(URI.create("http:/localhost:9090"), "/sensitive-transport-crypto/public-key");
         assertNotNull(cryptoHttpClient);
     }
 
@@ -127,7 +127,7 @@ class CryptoHttpClientTest {
         try {
             cryptoHttpClient = new CryptoHttpClient(
                     URI.create("http://127.0.0.1:" + server.getAddress().getPort()),
-                    "/crypto/server/public-key");
+                    "/sensitive-transport-crypto/public-key");
             CipherRequestPayload payload = new CipherRequestPayload("iv", "data");
             SessionKeyTransport session = new SessionKeyTransport("key:1", "session");
 

@@ -230,7 +230,7 @@ crypto:
     base-url: http://encryptpii-kong.kong.svc.cluster.local:8000
     key-refresh-margin-ms: ${CRYPTO_SERVER_KEY_REFRESH_MARGIN_MS:1000}
     endpoints:
-      public-key: /crypto/server/public-key
+      public-key: /sensitive-transport-crypto/public-key
       bidirectional: /crypto/server/bidirectional
       request-only: /crypto/server/request-only
       response-only: /crypto/server/response-only
@@ -247,7 +247,7 @@ plain:
 
 | Kong 路径 | 方法 | Server 目标 | 行为 |
 | --- | --- | --- | --- |
-| `/crypto/server/public-key` | GET | 无 | 插件从 Vault 读取当前公钥并直接响应 |
+| `/sensitive-transport-crypto/public-key` | GET | 无 | 插件从 Vault 读取当前公钥并直接响应 |
 | `/crypto/server/bidirectional` | POST | `/crypto/server/bidirectional` | 解密请求并加密响应 |
 | `/crypto/server/request-only` | POST | `/crypto/server/request-only` | 解密请求，响应为明文 |
 | `/crypto/server/response-only` | POST | `/crypto/server/response-only` | 从请求头解密会话密钥并加密响应 |
@@ -433,7 +433,7 @@ Vault 使用手动解封。Pod 重启后如处于 sealed 状态：
 
 ```bash
 kubectl -n kong port-forward service/encryptpii-kong 18443:8443 18000:8000 18001:8001 18002:8002
-curl --cacert certs/kong.crt --fail-with-body https://localhost:18443/crypto/server/public-key
+curl --cacert certs/kong.crt --fail-with-body https://localhost:18443/sensitive-transport-crypto/public-key
 ```
 
 本机端口 `18443`、`18000`、`18001`、`18002` 分别对应 Kong HTTPS Proxy、HTTP Proxy、Admin API 和 Manager。Manager 页面访问时应保持浏览器 host 一致，混用 `localhost` 与 `127.0.0.1` 可能导致 CORS 错误。Vault UI/API 诊断可选用：

@@ -401,21 +401,6 @@ public class KeyRing {
         return now >= retirementTime;
     }
 
-    public boolean isWithinGracePeriod(KeyMetadata metadata) {
-        return isWithinGracePeriod(metadata, System.currentTimeMillis());
-    }
-
-    public boolean isWithinGracePeriod(KeyMetadata metadata, long now) {
-        if (metadata == null) {
-            return false;
-        }
-        long retirementTime = retirementTimeByKeyId.getOrDefault(
-                metadata.keyId(),
-                addGracePeriod(metadata.expiresAtEpochMillis())
-        );
-        return metadata.isExpired(now) && now < retirementTime;
-    }
-
     public boolean isRotationDue(KeyMetadata metadata) {
         return isRotationDue(metadata, System.currentTimeMillis());
     }

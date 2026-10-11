@@ -97,8 +97,8 @@ jq -n \
       name:"encryptpii-server",
       url:"http://encryptpii-server.encryptpii.svc.cluster.local:9090",
       routes:[
-        {name:"encryptpii-public-key",paths:["/crypto/server/public-key"],methods:["GET"],
-         strip_path:false,plugins:[plugin(true;false;false;"/crypto/server/public-key")]},
+        {name:"encryptpii-public-key",paths:["/sensitive-transport-crypto/public-key"],methods:["GET"],
+         strip_path:false,plugins:[plugin(true;false;false;"/sensitive-transport-crypto/public-key")]},
         {name:"encryptpii-bidirectional",paths:["/crypto/server/bidirectional"],methods:["POST"],
          strip_path:false,plugins:[plugin(false;true;true;"/crypto/server/bidirectional")]},
         {name:"encryptpii-request-only",paths:["/crypto/server/request-only"],methods:["POST"],

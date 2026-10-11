@@ -1,13 +1,11 @@
-const { createWechatClient } = require('../sdk/index');
-const { SERVER_BASE_URL } = require('../config');
+const { createWechatClient, SdkError } = require('../sdk/index');
+const { SDK_OPTIONS, REQUESTS } = require('../config');
 
 let client;
 
 function getClient() {
   if (!client) {
-    client = createWechatClient({
-      baseUrl: SERVER_BASE_URL
-    });
+    client = createWechatClient(SDK_OPTIONS);
   }
   return client;
 }
@@ -47,10 +45,13 @@ function fallbackErrorDetails(input, error, elapsedMs) {
 
 // Always resolves to { ok, error, details } so the page never inspects
 // mutated Error objects; details is null when the failure produced none.
-async function callApi(mode, input) {
+async function callApi(requestName, input) {
   const startedAt = Date.now();
   try {
-    const details = await getClient().sendDetailed({ mode, data: input });
+    if (!Object.prototype.hasOwnProperty.call(REQUESTS, requestName)) {
+      throw new SdkError('INVALID_ARGUMENT', 'Unknown application request');
+    }
+    const details = await getClient().sendDetailed({ ...REQUESTS[requestName], data: input });
     return { ok: true, error: null, details: formatDetails(input, details) };
   } catch (error) {
     const elapsedMs = Date.now() - startedAt;

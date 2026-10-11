@@ -2,5 +2,8 @@
   "name": "encryptpii-wechat",
   "version": "1.0.0",
   "description": "EncryptPii WeChat Mini Program",
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
   "dependencies": {}
 }
