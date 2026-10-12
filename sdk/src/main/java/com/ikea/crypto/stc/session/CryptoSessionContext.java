@@ -1,30 +1,32 @@
 package com.ikea.crypto.stc.session;
 
+import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
-import com.ikea.crypto.stc.model.SessionKeyTransport;
+import com.ikea.crypto.stc.model.SessionKeyHeaders;
+
+import java.util.Objects;
+
 /**
- * Context for a crypto session, which can be used to store the request key material.
+ * Crypto material associated with one HTTP request.
  */
-public record CryptoSessionContext(Object requestKeyMaterial) {
+public record CryptoSessionContext(CipherRequestPayload requestPayload, SessionKeyHeaders sessionKeyHeaders) {
 
-    public static final String REQUEST_CONTEXT_KEY = "crypto.session.context";
-
-    public static CryptoSessionContext request(CipherRequestPayload payload) {
-        return new CryptoSessionContext(payload);
+    public CryptoSessionContext {
+        Objects.requireNonNull(sessionKeyHeaders, "Session key headers are required");
     }
 
-    public static CryptoSessionContext request(SessionKeyTransport transport) {
-        return new CryptoSessionContext(transport);
+    public static CryptoSessionContext request(CipherRequestPayload payload, SessionKeyHeaders sessionKeyHeaders) {
+        return new CryptoSessionContext(Objects.requireNonNull(payload, "Request payload is required"), sessionKeyHeaders);
     }
 
-    public static CryptoSessionContext responseOnly(SessionKeyTransport transport) {
-        return new CryptoSessionContext(transport);
+    public static CryptoSessionContext responseOnly(SessionKeyHeaders sessionKeyHeaders) {
+        return new CryptoSessionContext(null, sessionKeyHeaders);
     }
 
-    public Object requireKeyMaterial() {
-        if (requestKeyMaterial == null) {
-            throw new IllegalStateException("Crypto session key material is required");
+    public CipherRequestPayload requireRequestPayload() {
+        if (requestPayload == null) {
+            throw new InvalidCryptoPayloadException("Encrypted request payload is required for request decryption");
         }
-        return requestKeyMaterial;
+        return requestPayload;
     }
 }

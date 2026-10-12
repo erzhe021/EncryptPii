@@ -2,6 +2,8 @@
 
 本 SDK 为 Spring Boot Servlet 应用提供 HTTP 请求解密、响应加密、公钥接口和可选的 Vault KV v2 密钥管理。本文面向接入团队，介绍依赖配置、最小接入方式和生产部署注意事项。
 
+本仓库中 Java SDK 仅由 `server-with-sdk` 使用；它不是 Java 客户端 SDK。原 `client` 模块已移除，微信客户端使用独立的 `wechat/sdk`。SDK 的会话状态仅存于当前 Servlet 请求，不提供无 Web 请求的 ThreadLocal 回退；核心密钥解密不依赖 HTTP 请求上下文。
+
 ## 1. 环境要求
 
 - JDK 17 或更高版本
@@ -173,6 +175,8 @@ Content-Type: application/json
 请求体中不传输 `keyId` 或 `encryptedSessionKey`。协议算法为 RSA-2048 OAEP 和 AES-256-GCM。RSA-OAEP 使用 SHA-256 摘要，MGF1 使用 SHA-1；AES-GCM 使用 12 字节 IV 和 128 位认证标签。客户端还需与服务端使用兼容的 Base64 编码格式。每次请求应生成新的会话密钥和 IV。
 
 仅加密响应的接口虽然请求体可以是明文，客户端仍需发送上述两个加密请求头，以便服务端解密会话密钥并加密响应。
+
+会话密钥会在读取请求时解析验证，再进入 Controller；非法 Base64、无法解密或长度不合法的 AES 密钥返回明文加密协议错误，不执行业务逻辑。
 
 ## 6. 异常处理
 

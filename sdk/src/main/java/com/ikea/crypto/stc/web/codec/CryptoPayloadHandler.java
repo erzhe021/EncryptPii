@@ -9,79 +9,78 @@ import com.ikea.crypto.stc.exception.ResponseEncryptionException;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.CipherResponsePayload;
-import com.ikea.crypto.stc.model.SessionKeyTransport;
+import com.ikea.crypto.stc.model.SessionKeyHeaders;
 import com.ikea.crypto.stc.session.CryptoSessionContext;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
 import com.ikea.crypto.stc.util.EncodingUtils;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.security.GeneralSecurityException;
 
-@Component
-@Slf4j
 public class CryptoPayloadHandler {
 
     private final CryptoServer cryptoServer;
     private final ObjectMapper objectMapper;
+
+    private static final String IV_FIELD = "ivBase64";
+    private static final String ENCRYPTED_DATA_FIELD = "encryptedDataBase64";
 
     public CryptoPayloadHandler(CryptoServer cryptoServer, ObjectMapper objectMapper) {
         this.cryptoServer = cryptoServer;
         this.objectMapper = objectMapper;
     }
 
-    public CryptoSessionContext createSessionContext(String encryptedRequestBody) {
-        return createSessionContext(encryptedRequestBody, null, null);
-    }
-
-    public CryptoSessionContext createSessionContext(String encryptedRequestBody, String keyId, String encryptedSessionKey) {
-        if (keyId == null || keyId.isBlank() || encryptedSessionKey == null || encryptedSessionKey.isBlank()) {
-            throw new InvalidCryptoPayloadException(
-                    "X-STC-Key-Id and X-STC-Session-Key are required; body key transport is unsupported");
+    public CryptoSessionContext createSessionContext(String encryptedRequestBody, SessionKeyHeaders sessionKeyHeaders) {
+        if (sessionKeyHeaders == null) {
+            throw new InvalidCryptoPayloadException("Session key transport headers are required.");
         }
         try {
             var body = objectMapper.readTree(encryptedRequestBody);
             if (body == null || !body.isObject()
                     || body.size() != 2
-                    || !body.has("ivBase64")
-                    || !body.has("encryptedDataBase64")
-                    || !body.get("ivBase64").isTextual()
-                    || !body.get("encryptedDataBase64").isTextual()) {
+                    || !body.has(IV_FIELD)
+                    || !body.has(ENCRYPTED_DATA_FIELD)
+                    || !body.get(IV_FIELD).isTextual()
+                    || !body.get(ENCRYPTED_DATA_FIELD).isTextual()) {
                 throw new InvalidCryptoPayloadException(
                         "Request body may contain only ivBase64 and encryptedDataBase64");
             }
             CipherRequestPayload payload = new CipherRequestPayload(
-                    keyId,
-                    encryptedSessionKey,
-                    body.get("ivBase64").asText(null),
-                    body.get("encryptedDataBase64").asText(null));
+                    body.get(IV_FIELD).asText(null),
+                    body.get(ENCRYPTED_DATA_FIELD).asText(null));
             cryptoServer.validatePayload(payload);
-            return CryptoSessionContext.request(payload);
+            return CryptoSessionContext.request(payload, sessionKeyHeaders);
         } catch (JsonProcessingException e) {
             throw new InvalidCryptoPayloadException("Invalid RSA encrypted request payload", e);
         }
     }
 
-    public String decrypt(String encryptedRequestBody) throws GeneralSecurityException {
-        CryptoSessionContext sessionContext = createSessionContext(encryptedRequestBody);
-        return decrypt(sessionContext);
+    public String decrypt(CryptoSessionContext sessionContext) throws GeneralSecurityException {
+        if (sessionContext == null) {
+            throw new InvalidCryptoPayloadException("Crypto session context is required for request decryption");
+        }
+        CipherRequestPayload payload = sessionContext.requireRequestPayload();
+        SessionKeyHeaders headers = sessionContext.sessionKeyHeaders();
+        SecretKey sessionKey = cryptoServer.decryptSessionKeyToSecretKey(
+                headers.keyId(), headers.encryptedSessionKeyBase64());
+        String decryptedBody = cryptoServer.decrypt(payload, sessionKey);
+        CryptoSessionContextAccessor.setResolvedSessionKey(sessionKey);
+        return decryptedBody;
     }
 
-    public String decrypt(CryptoSessionContext sessionContext) throws GeneralSecurityException {
-        if (sessionContext == null || !(sessionContext.requestKeyMaterial() instanceof CipherRequestPayload payload)) {
-            throw new InvalidCryptoPayloadException(
-                    "Unsupported RSA session key material: " + (sessionContext == null ? null : sessionContext.requestKeyMaterial())
-            );
+    public CryptoSessionContext createResponseSessionContext(SessionKeyHeaders headers) {
+        CryptoSessionContext context = CryptoSessionContext.responseOnly(headers);
+        try {
+            SecretKey sessionKey = cryptoServer.decryptSessionKeyToSecretKey(
+                    headers.keyId(), headers.encryptedSessionKeyBase64());
+            CryptoSessionContextAccessor.setResolvedSessionKey(sessionKey);
+            return context;
+        } catch (GeneralSecurityException e) {
+            throw new InvalidCryptoPayloadException("Failed to decrypt session key", e);
         }
-        return cryptoServer.decrypt(payload);
     }
 
     public Object encrypt(Object responseBody, CryptoSessionContext sessionContext) {
-        if (sessionContext == null || sessionContext.requestKeyMaterial() == null) {
-            throw new InvalidCryptoPayloadException("Session context is required for RSA operations");
-        }
-
         String responseBodyString;
         try {
             responseBodyString = objectMapper.writeValueAsString(responseBody);
@@ -90,31 +89,17 @@ public class CryptoPayloadHandler {
         }
 
         try {
-            if (sessionContext.requestKeyMaterial() instanceof SessionKeyTransport transport) {
-                SecretKey sessionKey = CryptoSessionContextAccessor.getResolvedSessionKey();
-                if (sessionKey == null) {
-                    sessionKey = cryptoServer.decryptSessionKeyToSecretKey(
-                            transport.keyId(), transport.encryptedSessionKeyBase64());
-                }
-                byte[] iv = GcmIvGenerator.generateIv();
-                String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(responseBodyString, sessionKey, iv);
-                return new CipherResponsePayload(EncodingUtils.toBase64(iv), encryptedDataBase64);
+            SecretKey sessionKey = CryptoSessionContextAccessor.getResolvedSessionKey();
+            if (sessionKey == null) {
+                SessionKeyHeaders headers = sessionContext.sessionKeyHeaders();
+                sessionKey = cryptoServer.decryptSessionKeyToSecretKey(
+                        headers.keyId(), headers.encryptedSessionKeyBase64());
             }
-            if (sessionContext.requestKeyMaterial() instanceof CipherRequestPayload requestPayload) {
-                cryptoServer.validatePayload(requestPayload);
-                SecretKey sessionKey = CryptoSessionContextAccessor.getResolvedSessionKey();
-                if (sessionKey == null) {
-                    sessionKey = cryptoServer.decryptSessionKeyToSecretKey(
-                            requestPayload.keyId(), requestPayload.encryptedSessionKeyBase64());
-                }
-                byte[] iv = GcmIvGenerator.generateIv();
-                String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(responseBodyString, sessionKey, iv);
-                return new CipherResponsePayload(EncodingUtils.toBase64(iv), encryptedDataBase64);
-            }
+            byte[] iv = GcmIvGenerator.generateIv();
+            String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(responseBodyString, sessionKey, iv);
+            return new CipherResponsePayload(EncodingUtils.toBase64(iv), encryptedDataBase64);
         } catch (GeneralSecurityException e) {
             throw new ResponseEncryptionException("Failed to encrypt response body", e);
         }
-
-        throw new InvalidCryptoPayloadException("Unsupported RSA session key material: " + sessionContext.requestKeyMaterial());
     }
 }

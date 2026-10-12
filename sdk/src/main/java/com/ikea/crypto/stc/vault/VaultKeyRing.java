@@ -2,6 +2,7 @@ package com.ikea.crypto.stc.vault;
 
 import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.config.VaultProperties;
+import com.ikea.crypto.stc.exception.CryptoServerSideException;
 import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.key.rotation.VaultRotationCoordinator;
 import lombok.Getter;
@@ -9,7 +10,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
-import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -79,86 +79,92 @@ public class VaultKeyRing extends KeyRing {
 
     private void loadKeysFromVault() throws GeneralSecurityException, IOException, InterruptedException {
         Optional<VaultClient.VaultSecretEntry> latestOpt = repository.readSecretVersionRaw(getKeyAlias(), null);
-
         if (latestOpt.isEmpty()) {
-            if (properties.isAutoBootstrap()) {
-                log.warn("No RSA keys found in Vault at path '{}'. Auto-generating initial key pair...", properties.getSecretPath());
-                rotationCoordinator.bootstrapInitialKey(this, getKeyAlias());
-                return;
-            } else {
-                throw new IllegalStateException("No RSA keys found in Vault at path: " + properties.getSecretPath());
-            }
+            bootstrapInitialKey();
+            return;
         }
 
         VaultClient.VaultSecretEntry latestSecret = latestOpt.get();
-        int currentVersion = latestSecret.version();
-        KeyEntry activeEntry = codec.deserializeKeyEntry(
-                latestSecret.data(),
-                currentVersion,
-                latestSecret.createdTime(),
-                getKeyAlias(),
-                getValidityMillis()
-        );
-
-        // Stop backtracking if active key itself has expired beyond grace period
+        KeyEntry activeEntry = deserializeKeyEntry(latestSecret, latestSecret.version());
         if (isExpiredBeyondGrace(activeEntry.metadata())) {
-            if (isAutoRotate()) {
-                logRotationDue(getKeyAlias(), activeEntry.metadata(), System.currentTimeMillis());
-                rotateKey();
-            } else {
-                log.warn("Active RSA key is beyond its grace period and automatic rotation is disabled: keyId={}",
-                        activeEntry.metadata().keyId());
-                registerKeyEntry(activeEntry, true);
-            }
+            handleExpiredActiveKey(activeEntry);
             return;
         }
 
         registerKeyEntry(activeEntry, true);
-        log.info("Loaded active key from Vault KV v2: keyId={}, version={}", activeEntry.metadata().keyId(), currentVersion);
+        log.info("Loaded active key from Vault KV v2: keyId={}, version={}",
+                activeEntry.metadata().keyId(), latestSecret.version());
+        loadHistoricalKeys(latestSecret.version(), activeEntry.metadata().createdAtEpochMillis());
+        rotateLoadedKeyIfDue();
+        purgeExpiredKeys();
+    }
 
-        // Backtrack historical versions within grace period
-        long nextVersionRotationTime = activeEntry.metadata().createdAtEpochMillis();
+    private void bootstrapInitialKey() throws GeneralSecurityException, IOException, InterruptedException {
+        if (!properties.isAutoBootstrap()) {
+            throw new IllegalStateException("No RSA keys found in Vault at path: " + properties.getSecretPath());
+        }
+        log.warn("No RSA keys found in Vault at path '{}'. Auto-generating initial key pair...", properties.getSecretPath());
+        rotationCoordinator.bootstrapInitialKey(this, getKeyAlias());
+    }
+
+    private KeyEntry deserializeKeyEntry(VaultClient.VaultSecretEntry secret, int version)
+            throws GeneralSecurityException {
+        return codec.deserializeKeyEntry(
+                secret.data(), version, secret.createdTime(), getKeyAlias(), getValidityMillis());
+    }
+
+    private void handleExpiredActiveKey(KeyEntry activeEntry) throws GeneralSecurityException, IOException {
+        if (isAutoRotate()) {
+            logRotationDue(getKeyAlias(), activeEntry.metadata(), System.currentTimeMillis());
+            rotateKey();
+            return;
+        }
+        log.warn("Active RSA key is beyond its grace period and automatic rotation is disabled: keyId={}",
+                activeEntry.metadata().keyId());
+        registerKeyEntry(activeEntry, true);
+    }
+
+    private void loadHistoricalKeys(int currentVersion, long nextVersionRotationTime) {
         for (int v = currentVersion - 1; v >= 1; v--) {
-            try {
-                Optional<VaultClient.VaultSecretEntry> historicalOpt = repository.readSecretVersionRaw(getKeyAlias(), v);
-                if (historicalOpt.isEmpty()) {
-                    continue;
-                }
-                VaultClient.VaultSecretEntry historicalSecret = historicalOpt.get();
-                KeyEntry historicalEntry = codec.deserializeKeyEntry(
-                        historicalSecret.data(),
-                        v,
-                        historicalSecret.createdTime(),
-                        getKeyAlias(),
-                        getValidityMillis()
-                );
-
-                long historicalRetirementTime = nextVersionRotationTime + getGracePeriodMillis();
-                if (System.currentTimeMillis() >= historicalRetirementTime) {
+            Optional<KeyEntry> historical = readHistoricalKey(v);
+            if (historical.isPresent()) {
+                KeyEntry historicalEntry = historical.get();
+                if (isRetiredBeyondGrace(nextVersionRotationTime)) {
                     log.info("Historical key '{}' (version {}) has expired beyond grace period. Stopping backwards scan.",
                             historicalEntry.metadata().keyId(), v);
-                    break;
+                    return;
                 }
-
                 registerKeyEntry(historicalEntry, false, nextVersionRotationTime);
                 nextVersionRotationTime = historicalEntry.metadata().createdAtEpochMillis();
                 log.info("Loaded historical key from Vault: keyId={}, version={}", historicalEntry.metadata().keyId(), v);
-            } catch (Exception e) {
-                log.warn("Failed to load historical key version {} from Vault: {}", v, e.getMessage());
             }
         }
+    }
 
+    private Optional<KeyEntry> readHistoricalKey(int version) {
+        try {
+            Optional<VaultClient.VaultSecretEntry> secret = repository.readSecretVersionRaw(getKeyAlias(), version);
+            if (secret.isEmpty()) {
+                return Optional.empty();
+            }
+            return Optional.of(deserializeKeyEntry(secret.get(), version));
+        } catch (IOException | GeneralSecurityException | IllegalArgumentException e) {
+            log.warn("Failed to load historical key version {} from Vault", version, e);
+            return Optional.empty();
+        }
+    }
+
+    private void rotateLoadedKeyIfDue() throws GeneralSecurityException, IOException {
         KeyEntry loadedActive = getActiveKeyEntry();
-        if (isAutoRotate() && (loadedActive == null || isRotationDue(loadedActive.metadata()))) {
-            if (loadedActive != null) {
-                logRotationDue(getKeyAlias(), loadedActive.metadata(), System.currentTimeMillis());
-            } else {
-                log.warn("RSA key rotation triggered because no active key was loaded: alias={}", getKeyAlias());
-            }
-            rotateKey();
+        if (!isAutoRotate() || (loadedActive != null && !isRotationDue(loadedActive.metadata()))) {
+            return;
         }
-
-        purgeExpiredKeys();
+        if (loadedActive == null) {
+            log.warn("RSA key rotation triggered because no active key was loaded: alias={}", getKeyAlias());
+        } else {
+            logRotationDue(getKeyAlias(), loadedActive.metadata(), System.currentTimeMillis());
+        }
+        rotateKey();
     }
 
     @Override
@@ -203,52 +209,76 @@ public class VaultKeyRing extends KeyRing {
             return localEntry;
         }
 
-        String alias = keyId.substring(0, keyId.indexOf(':'));
-        String versionStr = keyId.substring(keyId.indexOf(':') + 1);
-        int version;
-        try {
-            version = Integer.parseInt(versionStr);
-        } catch (NumberFormatException e) {
-            log.warn("Invalid version in keyId '{}', cannot fetch from Vault", keyId);
+        int separator = keyId.indexOf(':');
+        String alias = keyId.substring(0, separator);
+        if (alias.isBlank()) {
             return Optional.empty();
         }
+        Optional<Integer> version = parseVaultVersion(keyId.substring(separator + 1), keyId);
+        return version.flatMap(value -> fetchAndCacheVersion(keyId, alias, value));
+    }
 
+    private Optional<Integer> parseVaultVersion(String versionStr, String keyId) {
+        try {
+            int version = Integer.parseInt(versionStr);
+            return version > 0 && versionStr.equals(Integer.toString(version))
+                    ? Optional.of(version) : Optional.empty();
+        } catch (NumberFormatException e) {
+            log.warn("Invalid version in keyId '{}', cannot fetch from Vault", keyId, e);
+            return Optional.empty();
+        }
+    }
+
+    private Optional<KeyEntry> fetchAndCacheVersion(String keyId, String alias, int version) {
         try {
             log.info("Cache miss for keyId '{}' in local memory, performing on-demand fetch from Vault...", keyId);
             Optional<KeyEntry> remoteOpt = repository.readKeyVersion(alias, version);
-            if (remoteOpt.isPresent()) {
-                KeyEntry remoteEntry = remoteOpt.get();
-                Optional<KeyEntry> nextEntry = repository.readKeyVersion(alias, version + 1);
-                long rotatedAt = nextEntry.map(entry -> entry.metadata().createdAtEpochMillis())
-                        .orElse(remoteEntry.metadata().expiresAtEpochMillis());
-                if (System.currentTimeMillis() >= rotatedAt + getGracePeriodMillis()) {
-                    log.warn("Key '{}' fetched from Vault has expired beyond grace period and is rejected.", keyId);
-                    return Optional.empty();
-                }
-
-                // If remote key version is newer than local active key and is unexpired, promote to active
-                KeyEntry activeEntry = getActiveKeyEntry();
-                boolean makeActive = (activeEntry == null
-                        || (remoteEntry.metadata().version() != null
-                            && activeEntry.metadata().version() != null
-                            && Objects.requireNonNull(remoteEntry.metadata().version()) > Objects.requireNonNull(activeEntry.metadata().version())
-                            && !remoteEntry.metadata().isExpired()));
-
-                if (nextEntry.isPresent()) {
-                    registerKeyEntry(remoteEntry, makeActive, rotatedAt);
-                } else {
-                    registerKeyEntry(remoteEntry, makeActive);
-                }
-                log.info("Successfully fetched and cached keyId '{}' on-demand from Vault (makeActive={})", keyId, makeActive);
-                return Optional.of(remoteEntry);
-            } else {
+            if (remoteOpt.isEmpty()) {
                 log.warn("KeyId '{}' not found in Vault", keyId);
+                return Optional.empty();
             }
-        } catch (Exception e) {
-            log.error("Failed to fetch keyId '{}' on-demand from Vault: {}", keyId, e.getMessage(), e);
+            Optional<KeyEntry> nextEntry = version == Integer.MAX_VALUE
+                    ? Optional.empty() : repository.readKeyVersion(alias, version + 1);
+            return cacheRemoteKey(keyId, remoteOpt.get(), nextEntry);
+        } catch (IOException | GeneralSecurityException | IllegalArgumentException e) {
+            throw new CryptoServerSideException("Failed to fetch key from Vault: " + keyId, e);
         }
+    }
 
-        return Optional.empty();
+    private Optional<KeyEntry> cacheRemoteKey(String keyId, KeyEntry remoteEntry, Optional<KeyEntry> nextEntry) {
+        long rotatedAt = nextEntry.map(entry -> entry.metadata().createdAtEpochMillis())
+                .orElse(remoteEntry.metadata().expiresAtEpochMillis());
+        if (isRetiredBeyondGrace(rotatedAt)) {
+            log.warn("Key '{}' fetched from Vault has expired beyond grace period and is rejected.", keyId);
+            return Optional.empty();
+        }
+        boolean makeActive = nextEntry.isEmpty() && shouldPromote(remoteEntry);
+        Long retirementTime = nextEntry.isPresent() ? rotatedAt : null;
+        registerKeyEntry(remoteEntry, makeActive, retirementTime);
+        log.info("Successfully fetched and cached keyId '{}' on-demand from Vault (makeActive={})", keyId, makeActive);
+        return Optional.of(remoteEntry);
+    }
+
+    private boolean shouldPromote(KeyEntry remoteEntry) {
+        if (remoteEntry.metadata().isExpired()) {
+            return false;
+        }
+        KeyEntry activeEntry = getActiveKeyEntry();
+        if (activeEntry == null) {
+            return true;
+        }
+        if (!remoteEntry.metadata().keyAlias().equals(activeEntry.metadata().keyAlias())) {
+            return false;
+        }
+        Long remoteVersion = remoteEntry.metadata().version();
+        Long activeVersion = activeEntry.metadata().version();
+        return remoteVersion != null && activeVersion != null
+                && remoteVersion > activeVersion;
+    }
+
+    private boolean isRetiredBeyondGrace(long rotatedAt) {
+        long now = System.currentTimeMillis();
+        return now >= rotatedAt && now - rotatedAt >= getGracePeriodMillis();
     }
 
     public synchronized KeyEntry rotateKey(String targetKeyAlias, boolean force) throws GeneralSecurityException, IOException {
@@ -257,11 +287,8 @@ public class VaultKeyRing extends KeyRing {
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while rotating key in Vault", e);
-        } catch (GeneralSecurityException e) {
-            log.error("GeneralSecurityException during key rotation for alias '{}': {}", targetKeyAlias, e.getMessage(), e);
-            throw e;
-        } catch (IOException e) {
-            log.error("IOException during key rotation for alias '{}': {}", targetKeyAlias, e.getMessage(), e);
+        } catch (GeneralSecurityException | IOException e) {
+            log.error("Failed to rotate key in Vault for alias '{}'", targetKeyAlias, e);
             throw e;
         }
     }
@@ -278,7 +305,7 @@ public class VaultKeyRing extends KeyRing {
 
     /**
      * Actively checks Vault for the latest key version. If Vault has a newer version than local memory,
-     * updates local memory.
+     * updates local memory. Returns the latest local entry for the requested alias, or null if absent.
      */
     public synchronized KeyEntry syncLatestKeyFromVault(String targetKeyAlias) throws GeneralSecurityException, IOException {
         String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : getKeyAlias();
@@ -286,12 +313,13 @@ public class VaultKeyRing extends KeyRing {
         if (latestOpt.isPresent()) {
             KeyEntry remoteEntry = latestOpt.get();
             long currentLocal = getCurrentVersion(alias);
-            if (remoteEntry.metadata().version() != null && Objects.requireNonNull(remoteEntry.metadata().version()) > currentLocal) {
+            Long remoteVersion = remoteEntry.metadata().version();
+            if (remoteVersion != null && remoteVersion > currentLocal) {
                 registerKeyEntry(remoteEntry, true);
-                log.info("Synced newer key version {} from Vault into local memory", remoteEntry.metadata().version());
+                log.info("Synced newer key version {} from Vault into local memory", remoteVersion);
                 return remoteEntry;
             }
         }
-        return getActiveKeyEntry();
+        return findActiveKeyEntry(alias).orElse(null);
     }
 }

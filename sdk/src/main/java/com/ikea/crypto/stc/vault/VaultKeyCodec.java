@@ -80,6 +80,7 @@ public class VaultKeyCodec {
             try {
                 return Instant.parse(createdTimeStr).toEpochMilli();
             } catch (Exception ignored) {
+                //
             }
         }
         return defaultTime;

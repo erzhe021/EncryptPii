@@ -1,5 +1,4 @@
 rootProject.name = 'EncryptPii'
 include 'server'
-include 'client'
 include 'server-with-sdk'
 include 'sdk'

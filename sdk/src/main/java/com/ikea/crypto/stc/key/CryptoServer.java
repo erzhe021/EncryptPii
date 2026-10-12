@@ -1,6 +1,5 @@
 package com.ikea.crypto.stc.key;
 
-import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import com.ikea.crypto.stc.exception.*;
@@ -8,7 +7,6 @@ import com.ikea.crypto.stc.key.rotation.RotationLog;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.KeyMetadata;
 import com.ikea.crypto.stc.model.PublicKeyResponse;
-import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
 import com.ikea.crypto.stc.util.EncodingUtils;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
 import lombok.extern.slf4j.Slf4j;
@@ -18,9 +16,6 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.SecretKey;
 import java.io.IOException;
 import java.security.GeneralSecurityException;
-import java.security.KeyPair;
-import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -28,80 +23,6 @@ import java.util.Optional;
 
 @Slf4j
 public record CryptoServer(KeyRing keyRing) {
-
-    /**
-     * Backward-compatible constructor using a single static keypair with 1 year validity.
-     */
-    public CryptoServer(PrivateKey privateKey, PublicKey publicKey) {
-        this(privateKey, publicKey, true, new KeyLifecycleProperties());
-    }
-
-    public CryptoServer(PrivateKey privateKey, PublicKey publicKey, boolean autoRotate) {
-        this(privateKey, publicKey, autoRotate, new KeyLifecycleProperties());
-    }
-
-    private CryptoServer(
-            PrivateKey privateKey,
-            PublicKey publicKey,
-            boolean autoRotate,
-            KeyLifecycleProperties lifecycleProperties
-    ) {
-        this(createInMemoryKeyRing(
-                privateKey,
-                publicKey,
-                autoRotate,
-                lifecycleProperties.getRotationBeforeExpiryMillis(),
-                lifecycleProperties
-        ));
-    }
-
-    public CryptoServer(
-            PrivateKey privateKey,
-            PublicKey publicKey,
-            boolean autoRotate,
-            long rotationBeforeExpiryMillis
-    ) {
-        this(createInMemoryKeyRing(
-                privateKey,
-                publicKey,
-                autoRotate,
-                rotationBeforeExpiryMillis,
-                new KeyLifecycleProperties()
-        ));
-    }
-
-    private static KeyRing createInMemoryKeyRing(
-            PrivateKey privateKey,
-            PublicKey publicKey,
-            boolean autoRotate,
-            long rotationBeforeExpiryMillis,
-            KeyLifecycleProperties lifecycleProperties
-    ) {
-
-        String keyAlias = "in-memory-test-key";
-        long validityMillis = lifecycleProperties.getValidityMillis();
-
-        KeyRing ring = new KeyRing(
-                keyAlias,
-                validityMillis,
-                lifecycleProperties.getGracePeriodMillis(),
-                autoRotate,
-                rotationBeforeExpiryMillis
-        );
-
-        String keyId = KeyMetadata.buildKeyId(keyAlias, 1);
-        long now = System.currentTimeMillis();
-        long expiresAt = now + validityMillis;
-        KeyMetadata metadata = new KeyMetadata(keyId, now, expiresAt);
-        KeyRing.KeyEntry entry = new KeyRing.KeyEntry(metadata, new KeyPair(publicKey, privateKey));
-
-        ring.registerKeyEntry(entry, true);
-        return ring;
-    }
-
-    public PublicKey publicKey() {
-        return keyRing.getActiveKeyEntry().publicKey();
-    }
 
     /**
      * Returns the active RSA public key for clients.
@@ -215,13 +136,6 @@ public record CryptoServer(KeyRing keyRing) {
     }
 
     /**
-     * Rotates to a new RSA key version for the default key alias.
-     */
-    public PublicKeyResponse rotateKey() {
-        return rotateKey(null);
-    }
-
-    /**
      * Rotates to a new RSA key version for the specified key alias.
      * Generates a new key pair with incremented version and makes it the active key.
      */
@@ -254,14 +168,10 @@ public record CryptoServer(KeyRing keyRing) {
     }
 
     /**
-     * Decrypts the request payload. Tries the specified keyId first, then falls back to other known keys
-     * during the rotation transition period.
+     * Decrypts the request payload with an already resolved AES session key.
      */
-    public String decrypt(CipherRequestPayload payload) throws GeneralSecurityException {
+    public String decrypt(CipherRequestPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
         validatePayload(payload);
-        SecretKey sessionKey = decryptSessionKeyToSecretKey(payload.keyId(), payload.encryptedSessionKeyBase64());
-        // Store the resolved session key in the request-scoped context for potential reuse
-        CryptoSessionContextAccessor.setResolvedSessionKey(sessionKey);
         return decryptWithAes(payload, sessionKey);
     }
 
@@ -271,102 +181,145 @@ public record CryptoServer(KeyRing keyRing) {
      */
     public SecretKey decryptSessionKeyToSecretKey(String keyId, String encryptedSessionKeyBase64) throws GeneralSecurityException {
         log.debug("start to decrypt session key, keyId={}, from encryptedSessionKeyBase64", keyId);
+        validateEncryptedSessionKey(encryptedSessionKeyBase64);
+        String requestedAlias = resolveRequestedAlias(keyId);
+        Optional<KeyRing.KeyEntry> requestedEntry = StringUtils.hasText(keyId)
+                ? keyRing.findKeyEntry(keyId)
+                : Optional.empty();
+        KeyRing.KeyEntry activeEntry = keyRing.getActiveKeyEntry();
+        return tryDecryptRequestedKey(encryptedSessionKeyBase64, requestedEntry)
+                .or(() -> tryDecryptActiveKey(encryptedSessionKeyBase64, requestedAlias, activeEntry))
+                .or(() -> tryDecryptHistoricalKeys(encryptedSessionKeyBase64, requestedAlias, activeEntry))
+                .or(() -> decryptWithLatestVaultKey(encryptedSessionKeyBase64, requestedAlias, activeEntry))
+                .orElseThrow(() -> sessionKeyDecryptionFailure(
+                        keyId, requestedAlias, requestedEntry));
+    }
+
+    private void validateEncryptedSessionKey(String encryptedSessionKeyBase64) {
         if (!StringUtils.hasLength(encryptedSessionKeyBase64)) {
             throw new InvalidCryptoPayloadException("Encrypted session key is required but was not provided.");
         }
-        String requestedAlias = null;
-        if (keyId != null && !keyId.isBlank()) {
-            requestedAlias = new KeyMetadata(keyId, 0, 0).keyAlias();
-            if (!StringUtils.hasText(requestedAlias)
-                    || keyRing.findActiveKeyEntry(requestedAlias).isEmpty()) {
-                throw new InvalidKeyException();
-            }
-        }
+    }
 
-        // 1. If keyId is provided, try that specific key first
-        Optional<KeyRing.KeyEntry> requestedEntry = Optional.empty();
-        if (keyId != null && !keyId.isBlank()) {
-            requestedEntry = keyRing.findKeyEntry(keyId);
-            if (requestedEntry.isPresent()) {
-                try {
-                    return SessionKeyService.decryptSessionKeyBase64(
-                            encryptedSessionKeyBase64, requestedEntry.get().privateKey());
-                } catch (GeneralSecurityException e) {
-                    log.warn("Failed to decrypt session key with matched keyId={}, attempting keyring fallback", keyId, e);
-                }
-            }
-        }
+    private Optional<SecretKey> tryDecryptRequestedKey(
+            String encryptedSessionKeyBase64,
+            Optional<KeyRing.KeyEntry> requestedEntry
+    ) {
+        return requestedEntry.flatMap(entry ->
+                tryDecryptSessionKey(encryptedSessionKeyBase64, entry, "matched key"));
+    }
 
-        // 2. Try the active key
-        KeyRing.KeyEntry activeEntry = keyRing.getActiveKeyEntry();
-        if (activeEntry != null && (requestedAlias == null
-                || requestedAlias.equals(activeEntry.metadata().keyAlias()))) {
-            try {
-                return SessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, activeEntry.privateKey());
-            } catch (GeneralSecurityException e) {
-                log.warn("Decryption with active key failed, trying historical transition keys in keyring...", e);
-            }
+    private Optional<SecretKey> tryDecryptActiveKey(
+            String encryptedSessionKeyBase64,
+            String requestedAlias,
+            KeyRing.KeyEntry activeEntry
+    ) {
+        if (activeEntry == null || !matchesAlias(requestedAlias, activeEntry)) {
+            return Optional.empty();
         }
+        return tryDecryptSessionKey(encryptedSessionKeyBase64, activeEntry, "active key");
+    }
 
-        // 3. Fallback across all available keys (grace period support for old clients during rotation)
-        for (KeyRing.KeyEntry entry : keyRing.getAllKeyEntries()) {
-            if (requestedAlias != null && !requestedAlias.equals(entry.metadata().keyAlias())) {
-                continue;
-            }
-            if (activeEntry != null && entry.metadata().keyId().equals(activeEntry.metadata().keyId())) {
-                continue;
-            }
-            try {
-                SecretKey decrypted = SessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, entry.privateKey());
-                log.info("Successfully decrypted session key using historical transition key: {}", entry.metadata().keyId());
-                return decrypted;
-            } catch (GeneralSecurityException e) {
-                log.warn("Fallback decryption failed for keyId={}", entry.metadata().keyId(), e);
-            }
+    private Optional<SecretKey> tryDecryptHistoricalKeys(
+            String encryptedSessionKeyBase64,
+            String requestedAlias,
+            KeyRing.KeyEntry activeEntry
+    ) {
+        return keyRing.getAllKeyEntries().stream()
+                .filter(entry -> matchesAlias(requestedAlias, entry))
+                .filter(entry -> !isActiveKey(entry, activeEntry))
+                .map(entry -> tryDecryptSessionKey(encryptedSessionKeyBase64, entry, "historical key"))
+                .flatMap(Optional::stream)
+                .findFirst();
+    }
+
+    private boolean matchesAlias(String requestedAlias, KeyRing.KeyEntry entry) {
+        return requestedAlias == null || requestedAlias.equals(entry.metadata().keyAlias());
+    }
+
+    private String resolveRequestedAlias(String keyId) {
+        if (!StringUtils.hasText(keyId)) {
+            return null;
         }
-
-        // 4. Fallback on-demand sync from Vault (in case another pod rotated without notifying this pod)
-        if (keyRing instanceof VaultKeyRing vaultKeyRing) {
-            try {
-                KeyRing.KeyEntry latestEntry = vaultKeyRing.syncLatestKeyFromVault(requestedAlias);
-                if (latestEntry != null && (activeEntry == null || !latestEntry.metadata().keyId().equals(activeEntry.metadata().keyId()))) {
-                    try {
-                        SecretKey decrypted = SessionKeyService.decryptSessionKeyBase64(encryptedSessionKeyBase64, latestEntry.privateKey());
-                        log.info("Successfully decrypted session key after on-demand Vault sync of latest key: {}", latestEntry.metadata().keyId());
-                        return decrypted;
-                    } catch (GeneralSecurityException ignored) {
-                    }
-                }
-            } catch (Exception e) {
-                log.warn("Failed on-demand sync from Vault during decryption fallback: {}", e.getMessage());
-            }
+        String requestedAlias = new KeyMetadata(keyId, 0, 0).keyAlias();
+        if (!StringUtils.hasText(requestedAlias) || keyRing.findActiveKeyEntry(requestedAlias).isEmpty()) {
+            throw new InvalidKeyException();
         }
+        return requestedAlias;
+    }
 
-        if (requestedAlias != null) {
-            KeyMetadata requestedMetadata = new KeyMetadata(keyId, 0, 0);
-            KeyRing.KeyEntry currentEntry = keyRing.findActiveKeyEntry(requestedMetadata.keyAlias()).orElse(null);
-            if (currentEntry == null) {
-                throw new InvalidKeyException();
-            }
-            KeyMetadata activeMetadata = currentEntry.metadata();
-            Long requestedVersion = requestedMetadata.version();
-            Long activeVersion = activeMetadata.version();
-            if (requestedEntry.isEmpty()
-                    && (requestedVersion == null || activeVersion == null || !requestedVersion.equals(activeVersion))) {
-                throw new KeyExpiredException(getPublicKey(activeMetadata.keyAlias()));
-            }
+    private Optional<SecretKey> tryDecryptSessionKey(
+            String encryptedSessionKeyBase64,
+            KeyRing.KeyEntry entry,
+            String keyDescription
+    ) {
+        try {
+            SecretKey sessionKey = SessionKeyService.decryptSessionKeyBase64(
+                    encryptedSessionKeyBase64, entry.privateKey());
+            log.info("Successfully decrypted session key using {}: {}", keyDescription, entry.metadata().keyId());
+            return Optional.of(sessionKey);
+        } catch (GeneralSecurityException e) {
+            log.warn("Failed to decrypt session key using {}: {}", keyDescription, entry.metadata().keyId(), e);
+            return Optional.empty();
         }
+    }
 
+    private Optional<SecretKey> decryptWithLatestVaultKey(
+            String encryptedSessionKeyBase64,
+            String requestedAlias,
+            KeyRing.KeyEntry activeEntry
+    ) {
+        if (!(keyRing instanceof VaultKeyRing vaultKeyRing)) {
+            return Optional.empty();
+        }
+        try {
+            KeyRing.KeyEntry latestEntry = vaultKeyRing.syncLatestKeyFromVault(requestedAlias);
+            if (latestEntry == null || isActiveKey(latestEntry, activeEntry)) {
+                return Optional.empty();
+            }
+            return tryDecryptSessionKey(encryptedSessionKeyBase64, latestEntry, "latest Vault key");
+        } catch (Exception e) {
+            log.warn("Failed on-demand sync from Vault during decryption fallback: {}", e.getMessage());
+            return Optional.empty();
+        }
+    }
+
+    private boolean isActiveKey(KeyRing.KeyEntry entry, KeyRing.KeyEntry activeEntry) {
+        return activeEntry != null && entry.metadata().keyId().equals(activeEntry.metadata().keyId());
+    }
+
+    private RuntimeException sessionKeyDecryptionFailure(
+            String keyId,
+            String requestedAlias,
+            Optional<KeyRing.KeyEntry> requestedEntry
+    ) {
+        throwIfKeyExpired(keyId, requestedAlias, requestedEntry);
         log.warn("Failed to decrypt session key with keyId={}, all known keys exhausted", keyId);
-        throw new SessionKeyDecryptionException("Failed to decrypt session key: keyId may be expired, unknown, or ciphertext invalid.");
+        return new SessionKeyDecryptionException(
+                "Failed to decrypt session key: keyId may be expired, unknown, or ciphertext invalid.");
+    }
+
+    private void throwIfKeyExpired(
+            String keyId,
+            String requestedAlias,
+            Optional<KeyRing.KeyEntry> requestedEntry
+    ) {
+        if (requestedAlias == null) {
+            return;
+        }
+        KeyRing.KeyEntry activeEntry = keyRing.findActiveKeyEntry(requestedAlias).orElseThrow(InvalidKeyException::new);
+        KeyMetadata requestedMetadata = new KeyMetadata(keyId, 0, 0);
+        Long requestedVersion = requestedMetadata.version();
+        Long activeVersion = activeEntry.metadata().version();
+        if (requestedEntry.isEmpty()
+                && (requestedVersion == null || !requestedVersion.equals(activeVersion))) {
+            throw new KeyExpiredException(getPublicKey(activeEntry.metadata().keyAlias()));
+        }
     }
 
     public void validatePayload(CipherRequestPayload payload) {
         if (payload == null) {
             throw new InvalidCryptoPayloadException("Encrypted request payload cannot be null.");
-        }
-        if (!StringUtils.hasLength(payload.encryptedSessionKeyBase64())) {
-            throw new InvalidCryptoPayloadException("Encrypted session key is required but was not provided.");
         }
         if (!StringUtils.hasLength(payload.ivBase64())) {
             throw new InvalidCryptoPayloadException("IV is required but was not provided.");

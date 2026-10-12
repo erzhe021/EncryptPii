@@ -1,6 +1,7 @@
 package com.ikea.crypto.stc.web.advice;
 
 import com.ikea.crypto.stc.annotation.EncryptResponse;
+import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.exception.ResponseEncryptionException;
 import com.ikea.crypto.stc.session.CryptoSessionContext;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
@@ -8,7 +9,6 @@ import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.MediaType;
-import com.ikea.crypto.stc.constant.CryptoConstants;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.server.ServerHttpRequest;
 import org.springframework.http.server.ServerHttpResponse;
@@ -31,6 +31,7 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
     @Override
     public boolean supports(MethodParameter returnType,
                             Class<? extends HttpMessageConverter<?>> converterType) {
+        // Exception handlers may return a different type; beforeBodyWrite checks the original route.
         return true;
     }
 
@@ -42,31 +43,27 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
                                   ServerHttpRequest request,
                                   ServerHttpResponse response) {
         log.debug("【api post-called】start to encrypting response body");
-        CryptoSessionContext sessionContext = CryptoSessionContextAccessor.getCryptoSessionContext();
-        EncryptResponse encryptResponse = findEncryptResponse(returnType);
-        // Exception handlers have their own return type; preserve the original route's policy.
-        if (encryptResponse == null && sessionContext != null && request instanceof ServletServerHttpRequest servletRequest) {
-            Object handler = servletRequest.getServletRequest()
-                    .getAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE);
-            if (handler instanceof HandlerMethod handlerMethod) {
-                encryptResponse = findEncryptResponse(handlerMethod.getReturnType());
-            }
-        }
-        if (encryptResponse == null || "false".equalsIgnoreCase(
-                response.getHeaders().getFirst(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_ENCRYPTED))) {
-            CryptoSessionContextAccessor.clearCryptoSessionContext();
-            return body;
-        }
-        if (body == null) {
-            CryptoSessionContextAccessor.clearCryptoSessionContext();
-            return null;
-        }
         try {
-            // Get the CryptoSessionContext for response encryption
+            CryptoSessionContext sessionContext = CryptoSessionContextAccessor.getCryptoSessionContext();
+            EncryptResponse encryptResponse = findEncryptResponse(returnType);
+            if (encryptResponse == null && sessionContext != null
+                    && request instanceof ServletServerHttpRequest servletRequest) {
+                Object handler = servletRequest.getServletRequest()
+                        .getAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE);
+                if (handler instanceof HandlerMethod handlerMethod) {
+                    encryptResponse = findEncryptResponse(handlerMethod.getReturnType());
+                }
+            }
+
+            if (encryptResponse == null || "false".equalsIgnoreCase(
+                    response.getHeaders().getFirst(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_ENCRYPTED))
+                    || body == null) {
+                return body;
+            }
             if (sessionContext == null) {
                 throw new ResponseEncryptionException("No request session context available for response encryption");
             }
-            // Encrypt the response body using the handler
+
             Object encryptedBody = payloadHandler.encrypt(body, sessionContext);
             response.getHeaders().set(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_ENCRYPTED, "true");
             return encryptedBody;

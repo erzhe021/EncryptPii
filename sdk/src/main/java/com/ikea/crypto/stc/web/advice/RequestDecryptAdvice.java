@@ -2,9 +2,9 @@ package com.ikea.crypto.stc.web.advice;
 
 import com.ikea.crypto.stc.annotation.DecryptRequest;
 import com.ikea.crypto.stc.annotation.EncryptResponse;
-import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
 import com.ikea.crypto.stc.constant.CryptoConstants;
-import com.ikea.crypto.stc.model.SessionKeyTransport;
+import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
+import com.ikea.crypto.stc.model.SessionKeyHeaders;
 import com.ikea.crypto.stc.session.CryptoSessionContext;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
 import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
@@ -52,14 +52,13 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
         if (!decryptRequest && !encryptResponse) {
             return inputMessage;
         }
-        String keyId = inputMessage.getHeaders().getFirst(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID);
-        String encryptedSessionKey = inputMessage.getHeaders()
-                .getFirst(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY);
+        SessionKeyHeaders sessionKeyHeaders = sessionKeyHeaders(inputMessage.getHeaders());
+
         try {
             CryptoSessionContext sessionContext;
             if (decryptRequest) {
                 String encryptedBody = new String(inputMessage.getBody().readAllBytes(), StandardCharsets.UTF_8);
-                sessionContext = payloadHandler.createSessionContext(encryptedBody, keyId, encryptedSessionKey);
+                sessionContext = payloadHandler.createSessionContext(encryptedBody, sessionKeyHeaders);
                 String decryptedBody = payloadHandler.decrypt(sessionContext);
                 CryptoSessionContextAccessor.setCryptoSessionContext(sessionContext);
                 return new HttpInputMessage() {
@@ -74,11 +73,7 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
                     }
                 };
             }
-            if (keyId == null || keyId.isBlank() || encryptedSessionKey == null || encryptedSessionKey.isBlank()) {
-                throw new InvalidCryptoPayloadException(
-                        "X-STC-Key-Id and X-STC-Session-Key are required; body key transport is unsupported");
-            }
-            sessionContext = CryptoSessionContext.responseOnly(new SessionKeyTransport(keyId, encryptedSessionKey));
+            sessionContext = payloadHandler.createResponseSessionContext(sessionKeyHeaders);
             CryptoSessionContextAccessor.setCryptoSessionContext(sessionContext);
             return inputMessage;
         } catch (GeneralSecurityException e) {
@@ -102,17 +97,16 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
                                   Type targetType,
                                   Class<? extends HttpMessageConverter<?>> converterType) {
         if (findDecryptRequest(parameter) == null && findEncryptResponse(parameter) != null) {
-            String keyId = inputMessage.getHeaders().getFirst(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID);
-            String encryptedSessionKey = inputMessage.getHeaders()
-                    .getFirst(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY);
-            if (keyId == null || keyId.isBlank() || encryptedSessionKey == null || encryptedSessionKey.isBlank()) {
-                throw new InvalidCryptoPayloadException(
-                        "X-STC-Key-Id and X-STC-Session-Key are required; body key transport is unsupported");
-            }
             CryptoSessionContextAccessor.setCryptoSessionContext(
-                    CryptoSessionContext.responseOnly(new SessionKeyTransport(keyId, encryptedSessionKey)));
+                    payloadHandler.createResponseSessionContext(sessionKeyHeaders(inputMessage.getHeaders())));
         }
         return body;
+    }
+
+    private SessionKeyHeaders sessionKeyHeaders(HttpHeaders headers) {
+        return new SessionKeyHeaders(
+                headers.getFirst(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_KEY_ID),
+                headers.getFirst(CryptoConstants.HEADER_SENSITIVE_TRANSPORT_CRYPTO_SESSION_KEY));
     }
 
     private DecryptRequest findDecryptRequest(MethodParameter methodParameter) {

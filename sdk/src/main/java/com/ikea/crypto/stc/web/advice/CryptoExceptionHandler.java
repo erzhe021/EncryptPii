@@ -67,9 +67,7 @@ public class CryptoExceptionHandler {
                 message,
                 getPath(request)
         );
-        return ResponseEntity.status(status)
-                .headers(plainCryptoHeaders())
-                .body(body);
+        return ResponseEntity.status(status).headers(plainCryptoHeaders()).body(body);
     }
 
     private HttpHeaders plainCryptoHeaders() {

@@ -1,8 +1,11 @@
 package com.ikea.crypto.stc.model;
 
+import lombok.extern.slf4j.Slf4j;
+
 /**
  * KeyMetadata represents the lifecycle and identity of an asymmetric key pair.
  */
+@Slf4j
 public record KeyMetadata(
         String keyId,
         long createdAtEpochMillis,
@@ -24,7 +27,8 @@ public record KeyMetadata(
         if (keyId != null && keyId.contains(":")) {
             try {
                 return Long.parseLong(keyId.substring(keyId.indexOf(':') + 1));
-            } catch (NumberFormatException ignored) {
+            } catch (NumberFormatException e) {
+                log.warn("Cannot parse key version: keyId={}", keyId, e);
                 return null;
             }
         }

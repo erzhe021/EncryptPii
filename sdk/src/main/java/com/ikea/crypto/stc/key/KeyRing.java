@@ -1,6 +1,5 @@
 package com.ikea.crypto.stc.key;
 
-import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.key.rotation.RotationLog;
 import com.ikea.crypto.stc.model.KeyMetadata;
@@ -50,25 +49,6 @@ public class KeyRing {
     private final Map<String, KeyEntry> keyEntriesById = new ConcurrentHashMap<>();
     private final Map<String, Long> retirementTimeByKeyId = new ConcurrentHashMap<>();
 
-    public KeyRing(String keyAlias) {
-        this(keyAlias, new KeyLifecycleProperties());
-    }
-
-    private KeyRing(String keyAlias, KeyLifecycleProperties lifecycleProperties) {
-        this(keyAlias, lifecycleProperties.getValidityMillis(), lifecycleProperties.getGracePeriodMillis(),
-                true, lifecycleProperties.getRotationBeforeExpiryMillis());
-    }
-
-    public KeyRing(String keyAlias, long validityMillis, long gracePeriodMillis) {
-        this(keyAlias, validityMillis, gracePeriodMillis, true,
-                defaultRotationWindowMillis(gracePeriodMillis));
-    }
-
-    public KeyRing(String keyAlias, long validityMillis, long gracePeriodMillis, boolean autoRotate) {
-        this(keyAlias, validityMillis, gracePeriodMillis, autoRotate,
-                defaultRotationWindowMillis(gracePeriodMillis));
-    }
-
     public KeyRing(
             String keyAlias,
             long validityMillis,
@@ -99,13 +79,6 @@ public class KeyRing {
         this.rotationBeforeExpiryMillis = rotationBeforeExpiryMillis;
     }
 
-    private static long defaultRotationWindowMillis(long gracePeriodMillis) {
-        if (gracePeriodMillis == Long.MAX_VALUE) {
-            throw new IllegalArgumentException("No rotation window can be greater than the grace period");
-        }
-        return gracePeriodMillis + 1;
-    }
-
     /**
      * Initializes the key ring. Generates an initial key if none exists and optionally replaces expired keys.
      * Obsolete keys beyond the grace period are automatically cleaned up.
@@ -124,6 +97,7 @@ public class KeyRing {
 
     /**
      * Registers a key entry into the keyring in memory (e.g. from Vault or external KMS).
+     * Only entries explicitly marked active replace the active key; historical cache loads do not.
      */
     public synchronized void registerKeyEntry(KeyEntry entry, boolean makeActive) {
         registerKeyEntry(entry, makeActive, null);
@@ -139,10 +113,7 @@ public class KeyRing {
             retirementTimeByKeyId.put(entry.metadata().keyId(), addGracePeriod(retiredAtEpochMillis));
         }
         logCurrentEntries(keyEntriesById);
-        boolean becomesActive = makeActive
-                || activeKeyEntry == null
-                || entry.metadata().expiresAtEpochMillis() > activeKeyEntry.metadata().expiresAtEpochMillis();
-        if (becomesActive) {
+        if (makeActive) {
             if (previousActiveForAlias != null
                     && !previousActiveForAlias.metadata().keyId().equals(entry.metadata().keyId())) {
                 retirementTimeByKeyId.put(
@@ -179,6 +150,8 @@ public class KeyRing {
         try {
             return Math.addExact(rotationTimeMillis, gracePeriodMillis);
         } catch (ArithmeticException e) {
+            log.warn("Grace period deadline overflow: rotationTimeMillis={}, gracePeriodMillis={}; using Long.MAX_VALUE",
+                    rotationTimeMillis, gracePeriodMillis, e);
             return Long.MAX_VALUE;
         }
     }
@@ -246,23 +219,14 @@ public class KeyRing {
      * by scanning existing keys in the key ring.
      */
     public synchronized long getNextVersion(String keyAlias) {
-        long maxVersion = 0;
         String targetName = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : this.keyAlias;
-        String prefix = targetName + ":";
-        for (String id : keyEntriesById.keySet()) {
-            if (id != null && id.startsWith(prefix)) {
-                String verStr = id.substring(prefix.length());
-                try {
-                    long ver = Long.parseLong(verStr);
-                    if (ver > maxVersion) {
-                        maxVersion = ver;
-                    }
-                } catch (NumberFormatException ignored) {
-                    // ignore non-numeric version suffix
-                }
-            }
+        long maxVersion = getMaxVersion(targetName);
+        try {
+            return Math.incrementExact(maxVersion);
+        } catch (ArithmeticException e) {
+            log.error("Cannot increment key version for keyAlias={}: version range exhausted", targetName, e);
+            throw new IllegalStateException("Key version range exhausted for keyAlias: " + targetName, e);
         }
-        return maxVersion + 1;
     }
 
     /**
@@ -294,7 +258,8 @@ public class KeyRing {
                     if (ver > maxVersion) {
                         maxVersion = ver;
                     }
-                } catch (NumberFormatException ignored) {
+                } catch (NumberFormatException e) {
+                    log.warn("Skipping invalid key version while scanning keyring: keyId={}", id, e);
                 }
             }
         }
@@ -351,20 +316,17 @@ public class KeyRing {
      * Purges retired keys whose grace period has expired at current time:
      * - Removes them from keyEntriesById (in-memory)
      * Active key is never purged.
-     *
-     * @return the number of keys purged
      */
-    public synchronized int purgeExpiredKeys() {
-        return purgeExpiredKeys(System.currentTimeMillis());
+    public synchronized void purgeExpiredKeys() {
+        purgeExpiredKeys(System.currentTimeMillis());
     }
 
     /**
      * Purges expired keys whose grace period has expired at the given timestamp.
      *
      * @param now timestamp in epoch millis to evaluate expiration against
-     * @return the number of keys purged
      */
-    public synchronized int purgeExpiredKeys(long now) {
+    public synchronized void purgeExpiredKeys(long now) {
         List<String> keysToPurge = new ArrayList<>();
         for (Map.Entry<String, KeyEntry> mapEntry : keyEntriesById.entrySet()) {
             KeyEntry entry = mapEntry.getValue();
@@ -378,7 +340,6 @@ public class KeyRing {
             purgeKey(keyId);
         }
 
-        return keysToPurge.size();
     }
 
     private synchronized void purgeKey(String keyId) {

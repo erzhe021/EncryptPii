@@ -1,10 +1,11 @@
 package com.ikea.crypto.stc.model;
 
+import java.io.Serializable;
+
 public record PublicKeyResponse(
         String publicKeyBase64,
         String keyId,
         long expiresAtEpochMillis,
-        /** Timestamp at which clients should fetch a replacement key. */
-        long refreshAtEpochMillis
-) {
+        long refreshAtEpochMillis //Timestamp at which clients should fetch a replacement key
+) implements Serializable {
 }
