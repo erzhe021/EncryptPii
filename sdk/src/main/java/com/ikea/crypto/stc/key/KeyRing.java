@@ -18,7 +18,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * It supports automatic key rotation based on configured validity and grace periods, ensuring that
  * keys are rotated before they expire while allowing for a transition period where both old and new
  * keys can be used. The class provides methods to initialize the key ring, register new keys,
- * find keys by ID or alias, and purge expired keys beyond their grace period.
+ * find keys by ID or alias, and purge expired keys beyond their grace period. Each instance manages
+ * exactly one configured key alias.
  */
 @Slf4j
 public class KeyRing {
@@ -72,7 +73,7 @@ public class KeyRing {
             );
         }
 
-        this.keyAlias = keyAlias;
+        this.keyAlias = keyAlias.trim();
         this.validityMillis = validityMillis;
         this.gracePeriodMillis = gracePeriodMillis;
         this.autoRotate = autoRotate;
@@ -107,10 +108,17 @@ public class KeyRing {
         if (entry == null) {
             return;
         }
+        String entryAlias = entry.metadata().keyAlias();
+        if (!keyAlias.equals(entryAlias)) {
+            throw new IllegalArgumentException(
+                    "Key alias '" + entryAlias + "' does not match this key ring's alias '" + keyAlias + "'");
+        }
         KeyEntry previousActiveForAlias = findLatestKeyEntryForAlias(entry.metadata().keyAlias());
         keyEntriesById.put(entry.metadata().keyId(), entry);
         if (retiredAtEpochMillis != null) {
             retirementTimeByKeyId.put(entry.metadata().keyId(), addGracePeriod(retiredAtEpochMillis));
+        } else {
+            retirementTimeByKeyId.remove(entry.metadata().keyId());
         }
         logCurrentEntries(keyEntriesById);
         if (makeActive) {
@@ -189,12 +197,16 @@ public class KeyRing {
      * Finds the active or latest valid key entry for a specific key alias.
      */
     public Optional<KeyEntry> findActiveKeyEntry(String keyAlias) {
-        purgeExpiredKeys();
         if (keyAlias == null || keyAlias.isBlank()) {
+            purgeExpiredKeys();
             return Optional.ofNullable(activeKeyEntry);
         }
         String targetAlias = keyAlias.trim();
-        if (activeKeyEntry != null && targetAlias.equals(activeKeyEntry.metadata().keyAlias())) {
+        if (!this.keyAlias.equals(targetAlias)) {
+            return Optional.empty();
+        }
+        purgeExpiredKeys();
+        if (activeKeyEntry != null) {
             return Optional.of(activeKeyEntry);
         }
         String prefix = targetAlias + ":";
@@ -219,7 +231,7 @@ public class KeyRing {
      * by scanning existing keys in the key ring.
      */
     public synchronized long getNextVersion(String keyAlias) {
-        String targetName = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : this.keyAlias;
+        String targetName = resolveKeyAlias(keyAlias);
         long maxVersion = getMaxVersion(targetName);
         try {
             return Math.incrementExact(maxVersion);
@@ -233,7 +245,7 @@ public class KeyRing {
      * Determines the current highest known version number in memory for the given key alias.
      */
     public long getCurrentVersion(String keyAlias) {
-        String targetName = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : this.keyAlias;
+        String targetName = resolveKeyAlias(keyAlias);
         long maxVersion = getMaxVersion(targetName);
         if (maxVersion > 0) {
             return maxVersion;
@@ -264,6 +276,17 @@ public class KeyRing {
             }
         }
         return maxVersion;
+    }
+
+    protected final String resolveKeyAlias(String requestedAlias) {
+        String targetAlias = requestedAlias == null || requestedAlias.isBlank()
+                ? keyAlias
+                : requestedAlias.trim();
+        if (!keyAlias.equals(targetAlias)) {
+            throw new IllegalArgumentException(
+                    "Key alias '" + targetAlias + "' does not match this key ring's alias '" + keyAlias + "'");
+        }
+        return targetAlias;
     }
 
     public KeyPair generateKeyPair() throws GeneralSecurityException {
@@ -301,7 +324,7 @@ public class KeyRing {
      */
     public synchronized KeyEntry rotateKey(String targetKeyAlias) throws GeneralSecurityException, IOException {
         long now = System.currentTimeMillis();
-        String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : this.keyAlias;
+        String alias = resolveKeyAlias(targetKeyAlias);
         long nextVersion = getNextVersion(alias);
         String newKeyId = KeyMetadata.buildKeyId(alias, nextVersion);
 
@@ -357,10 +380,10 @@ public class KeyRing {
         if (metadata == null) {
             return false;
         }
-        long retirementTime = retirementTimeByKeyId.getOrDefault(
-                metadata.keyId(),
-                addGracePeriod(metadata.expiresAtEpochMillis())
-        );
+        Long retirementTime = retirementTimeByKeyId.get(metadata.keyId());
+        if (retirementTime == null) {
+            retirementTime = addGracePeriod(metadata.expiresAtEpochMillis());
+        }
         return now >= retirementTime;
     }
 

@@ -1,7 +1,7 @@
 package com.ikea.crypto.stc.crypto;
 
 import com.ikea.crypto.stc.constant.CryptoConstants;
-import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
+import com.ikea.crypto.stc.exception.InvalidCryptoRequestException;
 import com.ikea.crypto.stc.util.EncodingUtils;
 import lombok.extern.slf4j.Slf4j;
 
@@ -23,7 +23,7 @@ public final class SessionKeyService {
         try {
             encryptedSessionKey = EncodingUtils.fromBase64(encryptedSessionKeyBase64);
         } catch (IllegalArgumentException e) {
-            throw new InvalidCryptoPayloadException("Invalid Base64 format in encrypted session key.", e);
+            throw new InvalidCryptoRequestException("Invalid Base64 format in encrypted session key.", e);
         }
         return decryptSessionKey(encryptedSessionKey, privateKey);
     }
@@ -34,7 +34,7 @@ public final class SessionKeyService {
         cipher.init(Cipher.DECRYPT_MODE, privateKey);
         byte[] sessionKey = cipher.doFinal(encryptedSessionKey);
         if (sessionKey.length != 16 && sessionKey.length != 24 && sessionKey.length != 32) {
-            throw new InvalidCryptoPayloadException("Invalid AES session key length.");
+            throw new InvalidCryptoRequestException("Invalid session key length.");
         }
         return new SecretKeySpec(sessionKey, CryptoConstants.ALGORITHM_AES);
     }

@@ -3,7 +3,7 @@ package com.ikea.crypto.stc.web.advice;
 import com.ikea.crypto.stc.annotation.DecryptRequest;
 import com.ikea.crypto.stc.annotation.EncryptResponse;
 import com.ikea.crypto.stc.constant.CryptoConstants;
-import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
+import com.ikea.crypto.stc.exception.InvalidCryptoRequestException;
 import com.ikea.crypto.stc.model.SessionKeyHeaders;
 import com.ikea.crypto.stc.session.CryptoSessionContext;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
@@ -77,7 +77,7 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
             CryptoSessionContextAccessor.setCryptoSessionContext(sessionContext);
             return inputMessage;
         } catch (GeneralSecurityException e) {
-            throw new InvalidCryptoPayloadException("Failed to decrypt request body", e);
+            throw new InvalidCryptoRequestException("Failed to decrypt request body", e);
         }
     }
 

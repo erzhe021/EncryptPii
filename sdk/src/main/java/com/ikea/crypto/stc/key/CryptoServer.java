@@ -197,7 +197,7 @@ public record CryptoServer(KeyRing keyRing) {
 
     private void validateEncryptedSessionKey(String encryptedSessionKeyBase64) {
         if (!StringUtils.hasLength(encryptedSessionKeyBase64)) {
-            throw new InvalidCryptoPayloadException("Encrypted session key is required but was not provided.");
+            throw new InvalidCryptoRequestException("Encrypted session key is required but was not provided.");
         }
     }
 
@@ -319,13 +319,13 @@ public record CryptoServer(KeyRing keyRing) {
 
     public void validatePayload(CipherRequestPayload payload) {
         if (payload == null) {
-            throw new InvalidCryptoPayloadException("Encrypted request payload cannot be null.");
+            throw new InvalidCryptoRequestException("Encrypted request payload cannot be null.");
         }
         if (!StringUtils.hasLength(payload.ivBase64())) {
-            throw new InvalidCryptoPayloadException("IV is required but was not provided.");
+            throw new InvalidCryptoRequestException("IV is required but was not provided.");
         }
         if (!StringUtils.hasLength(payload.encryptedDataBase64())) {
-            throw new InvalidCryptoPayloadException("Encrypted data is required but was not provided.");
+            throw new InvalidCryptoRequestException("Encrypted data is required but was not provided.");
         }
     }
 
@@ -340,7 +340,7 @@ public record CryptoServer(KeyRing keyRing) {
             log.warn("GCM authentication tag verification failed, ciphertext may have been tampered with or corrupted");
             throw new DataTamperedException("Encrypted data authentication failed: data corrupted or tampered with.", e);
         } catch (IllegalArgumentException e) {
-            throw new InvalidCryptoPayloadException("Invalid Base64 format in encrypted data or IV.", e);
+            throw new InvalidCryptoRequestException("Invalid Base64 format in encrypted data or IV.", e);
         }
     }
 }

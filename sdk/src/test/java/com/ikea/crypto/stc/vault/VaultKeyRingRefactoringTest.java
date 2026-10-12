@@ -12,6 +12,11 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.time.Instant;
 import java.util.Optional;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -105,15 +110,47 @@ class VaultKeyRingRefactoringTest {
     }
 
     @Test
-    void fetchingOtherAliasDoesNotReplaceDefaultActiveKey() throws Exception {
+    void fetchingOtherAliasDoesNotReachVaultOrReplaceDefaultActiveKey() throws Exception {
         stubVersion(2, 2, now - 10_000);
         KeyEntry active = keyRing.findKeyEntry("test:2").orElseThrow();
-        stubAliasVersion("other", 9, 9, now);
 
-        KeyEntry other = keyRing.findKeyEntry("other:9").orElseThrow();
+        assertTrue(keyRing.findKeyEntry("other:9").isEmpty());
 
         assertSame(active, keyRing.getActiveKeyEntry());
-        assertSame(other, keyRing.findActiveKeyEntry("other").orElseThrow());
+        verify(client, never()).readSecretVersion("test-token", "keys/other", 9);
+    }
+
+    @Test
+    void concurrentCacheMissesDoNotSerializeVaultReads() throws Exception {
+        CountDownLatch versionOneReads = new CountDownLatch(2);
+        CountDownLatch releaseReads = new CountDownLatch(1);
+        when(client.readSecretVersion(anyString(), anyString(), any())).thenAnswer(invocation -> {
+            Integer version = invocation.getArgument(2);
+            if (version == 1) {
+                versionOneReads.countDown();
+                if (!releaseReads.await(2, TimeUnit.SECONDS)) {
+                    throw new AssertionError("Timed out waiting to release Vault reads");
+                }
+                return Optional.of(new VaultClient.VaultSecretEntry(
+                        keyData, 1, Instant.ofEpochMilli(now).toString()));
+            }
+            return Optional.empty();
+        });
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            Future<Optional<KeyEntry>> first = executor.submit(() -> keyRing.findKeyEntry("test:1"));
+            Future<Optional<KeyEntry>> second = executor.submit(() -> keyRing.findKeyEntry("test:1"));
+
+            assertTrue(versionOneReads.await(2, TimeUnit.SECONDS));
+            releaseReads.countDown();
+            KeyEntry firstEntry = first.get(2, TimeUnit.SECONDS).orElseThrow();
+            KeyEntry secondEntry = second.get(2, TimeUnit.SECONDS).orElseThrow();
+            assertSame(firstEntry, secondEntry);
+        } finally {
+            releaseReads.countDown();
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -158,16 +195,13 @@ class VaultKeyRingRefactoringTest {
     }
 
     @Test
-    void syncingUnchangedAliasReturnsItsEntryRatherThanGlobalActive() throws Exception {
+    void syncingOnlyAllowsTheConfiguredAlias() throws Exception {
         stubVersion(2, 2, now);
         KeyEntry testEntry = keyRing.findKeyEntry("test:2").orElseThrow();
-        stubAliasVersion("other", null, 9, now);
-        KeyEntry otherEntry = keyRing.syncLatestKeyFromVault("other");
-        stubVersion(null, 2, now);
 
         assertSame(testEntry, keyRing.syncLatestKeyFromVault(" test "));
-        assertSame(otherEntry, keyRing.getActiveKeyEntry());
-        assertNull(keyRing.syncLatestKeyFromVault("missing"));
+        assertSame(testEntry, keyRing.getActiveKeyEntry());
+        assertThrows(IllegalArgumentException.class, () -> keyRing.syncLatestKeyFromVault("other"));
     }
 
     @Test

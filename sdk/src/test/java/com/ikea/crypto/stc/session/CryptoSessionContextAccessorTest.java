@@ -1,5 +1,6 @@
 package com.ikea.crypto.stc.session;
 
+import com.ikea.crypto.stc.exception.InvalidCryptoRequestException;
 import com.ikea.crypto.stc.model.SessionKeyHeaders;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -66,9 +67,9 @@ class CryptoSessionContextAccessorTest {
 
     @Test
     void headersRejectInvalidValuesAtConstruction() {
-        assertThrows(com.ikea.crypto.stc.exception.InvalidCryptoPayloadException.class,
+        assertThrows(InvalidCryptoRequestException.class,
                 () -> new SessionKeyHeaders(" ", "wrapped"));
-        assertThrows(com.ikea.crypto.stc.exception.InvalidCryptoPayloadException.class,
+        assertThrows(InvalidCryptoRequestException.class,
                 () -> new SessionKeyHeaders("test:1", null));
     }
 

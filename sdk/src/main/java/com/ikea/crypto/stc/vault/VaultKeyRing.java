@@ -13,7 +13,7 @@ import java.security.GeneralSecurityException;
 import java.util.Optional;
 
 /**
- * VaultKeyRing coordinates in-memory key storage with HashiCorp Vault KV v2.
+ * VaultKeyRing coordinates in-memory key storage for one configured alias with HashiCorp Vault KV v2.
  * Delegates authentication, serialization, repository I/O, and rotation coordination
  * to dedicated single-responsibility components.
  */
@@ -202,8 +202,7 @@ public class VaultKeyRing extends KeyRing {
         return fetchAndCacheFromVault(keyId);
     }
 
-    private synchronized Optional<KeyEntry> fetchAndCacheFromVault(String keyId) {
-        // Double check local memory under lock
+    private Optional<KeyEntry> fetchAndCacheFromVault(String keyId) {
         Optional<KeyEntry> localEntry = super.findKeyEntry(keyId);
         if (localEntry.isPresent()) {
             return localEntry;
@@ -211,7 +210,7 @@ public class VaultKeyRing extends KeyRing {
 
         int separator = keyId.indexOf(':');
         String alias = keyId.substring(0, separator);
-        if (alias.isBlank()) {
+        if (alias.isBlank() || !getKeyAlias().equals(alias)) {
             return Optional.empty();
         }
         Optional<Integer> version = parseVaultVersion(keyId.substring(separator + 1), keyId);
@@ -245,7 +244,12 @@ public class VaultKeyRing extends KeyRing {
         }
     }
 
-    private Optional<KeyEntry> cacheRemoteKey(String keyId, KeyEntry remoteEntry, Optional<KeyEntry> nextEntry) {
+    private synchronized Optional<KeyEntry> cacheRemoteKey(
+            String keyId, KeyEntry remoteEntry, Optional<KeyEntry> nextEntry) {
+        Optional<KeyEntry> localEntry = super.findKeyEntry(keyId);
+        if (localEntry.isPresent()) {
+            return localEntry;
+        }
         long rotatedAt = nextEntry.map(entry -> entry.metadata().createdAtEpochMillis())
                 .orElse(remoteEntry.metadata().expiresAtEpochMillis());
         if (isRetiredBeyondGrace(rotatedAt)) {
@@ -282,8 +286,9 @@ public class VaultKeyRing extends KeyRing {
     }
 
     public synchronized KeyEntry rotateKey(String targetKeyAlias, boolean force) throws GeneralSecurityException, IOException {
+        String alias = resolveKeyAlias(targetKeyAlias);
         try {
-            return rotationCoordinator.rotate(this, targetKeyAlias, force);
+            return rotationCoordinator.rotate(this, alias, force);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while rotating key in Vault", e);
@@ -308,7 +313,7 @@ public class VaultKeyRing extends KeyRing {
      * updates local memory. Returns the latest local entry for the requested alias, or null if absent.
      */
     public synchronized KeyEntry syncLatestKeyFromVault(String targetKeyAlias) throws GeneralSecurityException, IOException {
-        String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : getKeyAlias();
+        String alias = resolveKeyAlias(targetKeyAlias);
         Optional<KeyEntry> latestOpt = repository.readLatestKey(alias);
         if (latestOpt.isPresent()) {
             KeyEntry remoteEntry = latestOpt.get();

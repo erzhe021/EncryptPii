@@ -16,7 +16,7 @@ class KeyRingExceptionHandlingTest {
         register("test:3");
         register("test:invalid");
         register("test:9223372036854775808");
-        register("other:10");
+        assertThrows(IllegalArgumentException.class, () -> register("other:10"));
 
         assertEquals(3, keyRing.getCurrentVersion("test"));
         assertEquals(4, keyRing.getNextVersion("test"));
@@ -59,7 +59,7 @@ class KeyRingExceptionHandlingTest {
     }
 
     @Test
-    void callerControlsActiveKeyRegardlessOfExpiryOrAlias() {
+    void keyRingRejectsEntriesForAliasesOtherThanItsConfiguredAlias() {
         long now = System.currentTimeMillis();
         KeyRing.KeyEntry active = entry("test:2", now + 60_000);
         KeyRing.KeyEntry historical = entry("test:1", now + 120_000);
@@ -67,12 +67,12 @@ class KeyRingExceptionHandlingTest {
         keyRing.registerKeyEntry(active, true);
 
         keyRing.registerKeyEntry(historical, false);
-        keyRing.registerKeyEntry(other, false);
 
         assertSame(active, keyRing.getActiveKeyEntry());
-        assertSame(other, keyRing.findActiveKeyEntry("other").orElseThrow());
-        keyRing.registerKeyEntry(other, true);
-        assertSame(other, keyRing.getActiveKeyEntry());
+        assertTrue(keyRing.findActiveKeyEntry("other").isEmpty());
+        assertThrows(IllegalArgumentException.class, () -> keyRing.registerKeyEntry(other, false));
+        assertThrows(IllegalArgumentException.class, () -> keyRing.rotateKey("other"));
+        assertSame(active, keyRing.getActiveKeyEntry());
     }
 
     @Test
@@ -85,6 +85,19 @@ class KeyRingExceptionHandlingTest {
 
         assertFalse(keyRing.isExpiredBeyondGrace(old.metadata(), 599));
         assertTrue(keyRing.isExpiredBeyondGrace(old.metadata(), 600));
+    }
+
+    @Test
+    void reRegisteringWithoutRetirementTimeClearsPreviousOverride() {
+        KeyRing.KeyEntry old = entry("test:1", 1_000);
+        KeyRing.KeyEntry successor = new KeyRing.KeyEntry(
+                new KeyMetadata("test:2", 500, 1_500), new KeyPair(null, null));
+        keyRing.registerKeyEntry(old, true);
+        keyRing.registerKeyEntry(successor, true);
+
+        keyRing.registerKeyEntry(old, false);
+
+        assertTrue(keyRing.isExpiredBeyondGrace(old.metadata(), 1_200));
     }
 
     private KeyRing.KeyEntry entry(String keyId, long expiresAt) {
