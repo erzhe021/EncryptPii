@@ -2,6 +2,7 @@ package com.ikea.crypto.server.config;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.stc.config.SensitiveTransportCryptoAutoConfiguration;
+import com.ikea.crypto.stc.config.SensitiveTransportCryptoProperties;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.web.advice.CryptoExceptionHandler;
 import com.ikea.crypto.stc.web.advice.RequestDecryptAdvice;
@@ -47,6 +48,20 @@ class SensitiveTransportCryptoAutoConfigurationTest {
                     CryptoServer cryptoServer = context.getBean(CryptoServer.class);
                     assertThat(cryptoServer.getPublicKey()).isNotNull();
                     assertThat(cryptoServer.getPublicKey().publicKeyBase64()).isNotBlank();
+                });
+    }
+
+    @Test
+    void endpointBasePathCanBeCustomized() {
+        contextRunner
+                .withPropertyValues(
+                        "sensitive.transport.crypto.enabled=true",
+                        "sensitive.transport.crypto.endpoint.base-path=/custom-crypto"
+                )
+                .run(context -> {
+                    SensitiveTransportCryptoProperties properties =
+                            context.getBean(SensitiveTransportCryptoProperties.class);
+                    assertThat(properties.getEndpoint().getBasePath()).isEqualTo("/custom-crypto");
                 });
     }
 

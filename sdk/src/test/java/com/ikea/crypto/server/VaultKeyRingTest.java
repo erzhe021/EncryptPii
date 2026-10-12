@@ -3,7 +3,7 @@ package com.ikea.crypto.server;
 import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
-import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.stc.crypto.GcmIvGenerator;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.key.KeyRing;
@@ -23,7 +23,6 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.security.PublicKey;
-import java.security.SecureRandom;
 import java.time.Duration;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -79,7 +78,7 @@ public class VaultKeyRingTest {
         KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
         keyGenerator.init(256);
         SecretKey sessionKey = keyGenerator.generateKey();
-        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+        byte[] iv = GcmIvGenerator.generateIv();
         String encryptedData = AesGcmCipher.encryptAsBase64("vault-data-before-rotation", sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, oldPublicKey);
 
@@ -319,7 +318,7 @@ public class VaultKeyRingTest {
         KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
         keyGenerator.init(256);
         SecretKey sessionKey = keyGenerator.generateKey();
-        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+        byte[] iv = GcmIvGenerator.generateIv();
         String encryptedData = AesGcmCipher.encryptAsBase64("secret-data-for-pod2", sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, pod1V2.publicKey());
 

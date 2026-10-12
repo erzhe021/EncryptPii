@@ -40,10 +40,10 @@ public class SensitiveTransportCryptoProperties {
         private boolean enabled = true;
 
         /**
-         * Base path for server crypto endpoints.
-         * Default is /crypto/server.
+         * Base path for public key endpoints.
+         * Default is /sensitive-transport-crypto.
          */
-        private String basePath = "/crypto/server";
+        private String basePath = "/sensitive-transport-crypto";
     }
 
 }

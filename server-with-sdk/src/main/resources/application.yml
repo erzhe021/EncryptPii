@@ -33,4 +33,4 @@ sensitive:
 
 logging:
   level:
-    com.ikea.crypto: INFO # default is INFO, you can change it to DEBUG for more detailed logs
+    com.ikea.crypto: DEBUG # default is INFO, you can change it to DEBUG for more detailed logs

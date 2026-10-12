@@ -15,8 +15,11 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * KeyRing manages the active RSA key pair as well as historical key pairs
- * in memory for smooth rotation and graceful fallback during transition periods.
+ * KeyRing is responsible for managing RSA key pairs, including the active key and historical keys.
+ * It supports automatic key rotation based on configured validity and grace periods, ensuring that
+ * keys are rotated before they expire while allowing for a transition period where both old and new
+ * keys can be used. The class provides methods to initialize the key ring, register new keys,
+ * find keys by ID or alias, and purge expired keys beyond their grace period.
  */
 @Slf4j
 public class KeyRing {
@@ -25,7 +28,6 @@ public class KeyRing {
         public PrivateKey privateKey() {
             return keyPair.getPrivate();
         }
-
         public PublicKey publicKey() {
             return keyPair.getPublic();
         }
@@ -439,7 +441,7 @@ public class KeyRing {
         event.put("remainingValidityMillis", remainingMillis);
         event.put("configuredRotationBeforeExpiryMillis", rotationBeforeExpiryMillis);
         event.put("effectiveRotationWindowMillis", getEffectiveRotationWindowMillis());
-        log.warn("RSA key rotation triggered: {}", RotationLog.toJson(event));
+        log.info("RSA key rotation triggered: {}", RotationLog.toJson(event));
     }
 
     public synchronized KeyEntry rotateIfDue(String targetKeyAlias)

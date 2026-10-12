@@ -3,7 +3,7 @@ package com.ikea.crypto.stc.web.codec;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
-import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.stc.crypto.GcmIvGenerator;
 import com.ikea.crypto.stc.exception.InvalidCryptoPayloadException;
 import com.ikea.crypto.stc.exception.ResponseEncryptionException;
 import com.ikea.crypto.stc.key.CryptoServer;
@@ -18,7 +18,6 @@ import org.springframework.stereotype.Component;
 
 import javax.crypto.SecretKey;
 import java.security.GeneralSecurityException;
-import java.security.SecureRandom;
 
 @Component
 @Slf4j
@@ -97,7 +96,7 @@ public class CryptoPayloadHandler {
                     sessionKey = cryptoServer.decryptSessionKeyToSecretKey(
                             transport.keyId(), transport.encryptedSessionKeyBase64());
                 }
-                byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+                byte[] iv = GcmIvGenerator.generateIv();
                 String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(responseBodyString, sessionKey, iv);
                 return new CipherResponsePayload(EncodingUtils.toBase64(iv), encryptedDataBase64);
             }
@@ -108,7 +107,7 @@ public class CryptoPayloadHandler {
                     sessionKey = cryptoServer.decryptSessionKeyToSecretKey(
                             requestPayload.keyId(), requestPayload.encryptedSessionKeyBase64());
                 }
-                byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+                byte[] iv = GcmIvGenerator.generateIv();
                 String encryptedDataBase64 = AesGcmCipher.encryptAsBase64(responseBodyString, sessionKey, iv);
                 return new CipherResponsePayload(EncodingUtils.toBase64(iv), encryptedDataBase64);
             }

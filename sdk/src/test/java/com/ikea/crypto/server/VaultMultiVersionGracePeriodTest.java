@@ -4,7 +4,7 @@ import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
-import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.stc.crypto.GcmIvGenerator;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import com.ikea.crypto.stc.exception.KeyExpiredException;
 import com.ikea.crypto.stc.key.CryptoServer;
@@ -26,7 +26,6 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.security.SecureRandom;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -195,7 +194,7 @@ class VaultMultiVersionGracePeriodTest {
         KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
         keyGenerator.init(256);
         SecretKey sessionKey = keyGenerator.generateKey();
-        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+        byte[] iv = GcmIvGenerator.generateIv();
 
         String encSessionKeyV2 = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, keyPairV2.getPublic());
         String encDataV2 = AesGcmCipher.encryptAsBase64("data-from-v2-client", sessionKey, iv);

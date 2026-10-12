@@ -172,7 +172,7 @@ public record CryptoServer(KeyRing keyRing) {
             event.put("activeKeyExpiresAt", Instant.ofEpochMilli(result.metadata().expiresAtEpochMillis()).toString());
             event.put("completedAt", Instant.ofEpochMilli(completedTime).toString());
             event.put("durationMillis", (System.nanoTime() - startNanos) / 1_000_000);
-            log.warn("Automatic RSA key rotation completed: {}", RotationLog.toJson(event));
+            log.info("Automatic RSA key rotation completed: {}", RotationLog.toJson(event));
             return result;
         } catch (GeneralSecurityException | IOException e) {
             logAutomaticRotationFailure(keyAlias, triggerMetadata, triggerTime, startNanos, e);

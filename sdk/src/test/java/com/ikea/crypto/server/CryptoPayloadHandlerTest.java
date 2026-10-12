@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
-import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.stc.crypto.GcmIvGenerator;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import com.ikea.crypto.stc.model.CipherResponsePayload;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
@@ -24,7 +24,6 @@ import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
-import java.security.SecureRandom;
 import java.net.URI;
 import java.util.Map;
 
@@ -60,7 +59,7 @@ class CryptoPayloadHandlerTest {
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
         SecretKey sessionKey = keyGenerator.generateKey();
 
-        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+        byte[] iv = GcmIvGenerator.generateIv();
         String plaintext = "{\"message\":\"hello payload handler\"}";
 
         String encryptedData = AesGcmCipher.encryptAsBase64(plaintext, sessionKey, iv);
@@ -115,7 +114,7 @@ class CryptoPayloadHandlerTest {
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
         SecretKey sessionKey = keyGenerator.generateKey();
 
-        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+        byte[] iv = GcmIvGenerator.generateIv();
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, keyPair.getPublic());
 
         CipherRequestPayload requestPayload = new CipherRequestPayload(

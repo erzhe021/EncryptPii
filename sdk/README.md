@@ -189,7 +189,7 @@ SDK 自动注册 `CryptoExceptionHandler`，处理 SDK 加密协议异常，并�
 | `sensitive.transport.crypto.enabled` | `true` | 是否启用 SDK 自动配置 |
 | `sensitive.transport.crypto.auto-rotate` | `true` | 是否自动轮换密钥 |
 | `sensitive.transport.crypto.endpoint.enabled` | `true` | 是否暴露公钥接口 |
-| `sensitive.transport.crypto.endpoint.base-path` | `/crypto/server` | 公钥接口基础路径 |
+| `sensitive.transport.crypto.endpoint.base-path` | `/sensitive-transport-crypto` | 公钥接口基础路径，可通过应用配置自定义 |
 | `sensitive.transport.crypto.key-lifecycle.validity-millis` | 365 天 | 密钥有效期 |
 | `sensitive.transport.crypto.key-lifecycle.rotation-before-expiry-millis` | 30 天 | 到期前触发自动轮换的时间窗口 |
 | `sensitive.transport.crypto.key-lifecycle.grace-period-millis` | 1 天 | 替换密钥激活后，旧密钥的解密宽限期 |

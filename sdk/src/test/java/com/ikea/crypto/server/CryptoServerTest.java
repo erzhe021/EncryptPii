@@ -3,7 +3,7 @@ package com.ikea.crypto.server;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.config.KeyLifecycleProperties;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
-import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.stc.crypto.GcmIvGenerator;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.KeyMetadata;
@@ -26,7 +26,6 @@ import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyFactory;
 import java.security.PublicKey;
-import java.security.SecureRandom;
 import java.security.spec.X509EncodedKeySpec;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -73,7 +72,7 @@ class CryptoServerTest {
         keyGenerator.init(CryptoConstants.AES_KEY_SIZE_BITS);
         SecretKey sessionKey = keyGenerator.generateKey();
 
-        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+        byte[] iv = GcmIvGenerator.generateIv();
         String plaintext = "Secret Message from Client";
 
         String encryptedData = AesGcmCipher.encryptAsBase64(plaintext, sessionKey, iv);

@@ -1,7 +1,7 @@
 package com.ikea.crypto.server;
 
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
-import com.ikea.crypto.stc.crypto.CryptoSessionMaterialFactory;
+import com.ikea.crypto.stc.crypto.GcmIvGenerator;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.key.KeyRing;
@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
 import java.security.PublicKey;
-import java.security.SecureRandom;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -51,7 +50,7 @@ class KeyRotationTest {
         KeyGenerator keyGenerator = KeyGenerator.getInstance("AES");
         keyGenerator.init(256);
         SecretKey sessionKey = keyGenerator.generateKey();
-        byte[] iv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+        byte[] iv = GcmIvGenerator.generateIv();
         String encryptedData = AesGcmCipher.encryptAsBase64("data-from-old-client", sessionKey, iv);
         String encryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(sessionKey, oldPublicKey);
 
@@ -84,7 +83,7 @@ class KeyRotationTest {
 
         // 6. Client encrypts with new key - decrypted successfully as well
         SecretKey newSessionKey = keyGenerator.generateKey();
-        byte[] newIv = CryptoSessionMaterialFactory.generateIv(new SecureRandom());
+        byte[] newIv = GcmIvGenerator.generateIv();
         String newEncryptedData = AesGcmCipher.encryptAsBase64("data-from-new-client", newSessionKey, newIv);
         String newEncryptedSessionKey = SessionKeyService.encryptSessionKeyAsBase64(newSessionKey, newKeyEntry.publicKey());
 
