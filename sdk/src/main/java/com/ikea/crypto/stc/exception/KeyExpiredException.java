@@ -2,6 +2,10 @@ package com.ikea.crypto.stc.exception;
 
 import com.ikea.crypto.stc.model.PublicKeyResponse;
 
+/**
+ * Thrown when the key version has expired.
+ * This can occur when the key is no longer valid for cryptographic operations due to expiration or revocation.
+ */
 public class KeyExpiredException extends CryptoClientSideException {
     private final PublicKeyResponse latestKey;
 

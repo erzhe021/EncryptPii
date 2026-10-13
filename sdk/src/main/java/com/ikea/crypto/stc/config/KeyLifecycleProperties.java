@@ -2,7 +2,6 @@ package com.ikea.crypto.stc.config;
 
 import jakarta.validation.constraints.Min;
 import lombok.Data;
-import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 /**
@@ -10,7 +9,6 @@ import org.springframework.validation.annotation.Validated;
  */
 @Data
 @Validated
-@ConfigurationProperties(prefix = "sensitive.transport.crypto.key-lifecycle")
 public class KeyLifecycleProperties {
 
     /**

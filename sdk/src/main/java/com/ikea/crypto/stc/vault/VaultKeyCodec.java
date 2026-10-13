@@ -2,9 +2,9 @@ package com.ikea.crypto.stc.vault;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.ikea.crypto.stc.constant.CryptoConstants;
+import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.model.KeyMetadata;
 import com.ikea.crypto.stc.util.EncodingUtils;
-import com.ikea.crypto.stc.key.KeyRing;
 import lombok.extern.slf4j.Slf4j;
 
 import java.security.*;
@@ -15,8 +15,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * Handles serialization and deserialization between Java RSA cryptographic keys
- * and Vault KV JSON representation.
+ * VaultKeyCodec provides methods to serialize and deserialize RSA KeyPairs for storage in HashiCorp Vault.
+ * <p>
+ * This class handles the conversion of KeyPair objects into a key-value map suitable for Vault storage,
+ * as well as the reconstruction of KeyRing.KeyEntry objects from Vault JSON data nodes.
+ * </p>
  */
 @Slf4j
 public class VaultKeyCodec {

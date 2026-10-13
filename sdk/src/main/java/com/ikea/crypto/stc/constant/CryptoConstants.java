@@ -1,5 +1,12 @@
 package com.ikea.crypto.stc.constant;
 
+/**
+ * CryptoConstants contains constant values used in the sensitive transport crypto functionality.
+ * <p>
+ * These constants include algorithm names, cipher transformations, key sizes, and header names for
+ * transporting crypto session keys securely.
+ * </p>
+ */
 public final class CryptoConstants {
 
     private CryptoConstants() {

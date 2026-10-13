@@ -11,6 +11,13 @@ import javax.crypto.spec.SecretKeySpec;
 import java.security.GeneralSecurityException;
 import java.security.PrivateKey;
 
+/**
+ * SessionKeyService provides utility methods for decrypting session keys that are encrypted using RSA.
+ * <p>
+ * This class is designed to handle the decryption of session keys that are transmitted in Base64 format.
+ * It uses a provided RSA private key to perform the decryption and returns the resulting AES secret key.
+ * </p>
+ */
 @Slf4j
 public final class SessionKeyService {
     private SessionKeyService() {
@@ -34,7 +41,7 @@ public final class SessionKeyService {
         cipher.init(Cipher.DECRYPT_MODE, privateKey);
         byte[] sessionKey = cipher.doFinal(encryptedSessionKey);
         if (sessionKey.length != 16 && sessionKey.length != 24 && sessionKey.length != 32) {
-            throw new InvalidCryptoRequestException("Invalid session key length.");
+            throw new InvalidCryptoRequestException("Invalid AES session key length.");
         }
         return new SecretKeySpec(sessionKey, CryptoConstants.ALGORITHM_AES);
     }

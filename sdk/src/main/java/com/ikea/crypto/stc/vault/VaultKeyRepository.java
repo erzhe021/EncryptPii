@@ -15,35 +15,30 @@ import java.util.Optional;
  * Repository responsible for reading and writing RSA cryptographic keys to/from HashiCorp Vault KV v2.
  */
 @Slf4j
-public record VaultKeyRepository(VaultProperties properties,
+public record VaultKeyRepository(VaultProperties vaultProperties,
                                  KeyLifecycleProperties lifecycleProperties,
                                  VaultClient vaultClient,
-                                 VaultAuthenticator authenticator,
                                  VaultKeyCodec codec) {
 
     /**
-     * Resolves the secret path in Vault for the given key alias.
+     * Resolves the configured Vault secret path. This key ring uses one alias and one secret path.
      */
     public String resolveSecretPath(String alias) {
-        if (alias == null || alias.isBlank() || alias.equals(properties.getKeyAlias())) {
-            return properties.getSecretPath();
+        if (alias != null && !alias.isBlank()
+                && !vaultProperties.getKeyAlias().equals(alias.trim())) {
+            throw new IllegalArgumentException(
+                    "Key alias '" + alias.trim() + "' does not match the configured Vault alias '"
+                            + vaultProperties.getKeyAlias() + "'");
         }
-        String defaultPath = properties.getSecretPath();
-        int lastSlash = defaultPath.lastIndexOf('/');
-        if (lastSlash >= 0) {
-            return defaultPath.substring(0, lastSlash + 1) + alias;
-        }
-        return defaultPath + "-" + alias;
+        return vaultProperties.getSecretPath();
     }
 
     /**
      * Reads raw secret version data from Vault. When version is null, reads latest.
      */
-    public Optional<VaultClient.VaultSecretEntry> readSecretVersionRaw(String alias, Integer version)
-            throws IOException {
-        String vaultToken = authenticator.authenticate();
+    public Optional<VaultClient.VaultSecretEntry> readSecretVersionRaw(String alias, Integer version) throws IOException {
         String secretPath = resolveSecretPath(alias);
-        return vaultClient.readSecretVersion(vaultToken, secretPath, version);
+        return vaultClient.readSecretVersion(secretPath, version);
     }
 
     /**
@@ -63,7 +58,7 @@ public record VaultKeyRepository(VaultProperties properties,
             return Optional.empty();
         }
         VaultClient.VaultSecretEntry entry = entryOpt.get();
-        String effectiveAlias = (alias != null && !alias.isBlank()) ? alias.trim() : properties.getKeyAlias();
+        String effectiveAlias = (alias != null && !alias.isBlank()) ? alias.trim() : vaultProperties.getKeyAlias();
         KeyRing.KeyEntry keyEntry = codec.deserializeKeyEntry(
                 entry.data(),
                 entry.version(),
@@ -79,11 +74,10 @@ public record VaultKeyRepository(VaultProperties properties,
      */
     public VaultClient.VaultWriteResult writeKeyWithCas(String alias, KeyPair keyPair, Integer cas)
             throws IOException {
-        String vaultToken = authenticator.authenticate();
         String secretPath = resolveSecretPath(alias);
         Map<String, Object> payload = codec.serializeKeyPair(keyPair);
 
-        VaultClient.VaultWriteResult result = vaultClient.writeSecret(vaultToken, secretPath, payload, cas);
+        VaultClient.VaultWriteResult result = vaultClient.writeSecret(secretPath, payload, cas);
         if (result.version() <= 0) {
             throw new IllegalStateException("Failed to retrieve valid version from Vault after writing to path: " + secretPath);
         }

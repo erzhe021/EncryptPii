@@ -18,6 +18,10 @@ import org.springframework.web.method.HandlerMethod;
 import org.springframework.web.servlet.HandlerMapping;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseBodyAdvice;
 
+/**
+ * A Spring ControllerAdvice that intercepts HTTP responses to encrypt the response body if annotated with @EncryptResponse.
+ * It retrieves the cryptographic session context and uses it to encrypt the response before sending it back to the client.
+ */
 @ControllerAdvice
 @Slf4j
 public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {

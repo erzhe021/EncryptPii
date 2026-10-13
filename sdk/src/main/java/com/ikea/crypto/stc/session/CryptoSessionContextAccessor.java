@@ -6,7 +6,8 @@ import org.springframework.web.context.request.RequestContextHolder;
 import javax.crypto.SecretKey;
 
 /**
- * Stores crypto state exclusively in the current Servlet request.
+ * Utility class for managing the cryptographic session context and resolved session key within the current request scope.
+ * This class provides methods to set, get, and clear the cryptographic session context and resolved session key.
  */
 public final class CryptoSessionContextAccessor {
     private static final String SESSION_KEY_ATTRIBUTE = "crypto.session.key";

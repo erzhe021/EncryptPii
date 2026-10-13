@@ -5,94 +5,39 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.stc.exception.VaultCasMismatchException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatusCode;
-import org.springframework.http.client.ClientHttpRequestFactory;
 import org.springframework.vault.VaultException;
-import org.springframework.vault.authentication.SessionManager;
-import org.springframework.vault.authentication.KubernetesAuthentication;
-import org.springframework.vault.authentication.KubernetesAuthenticationOptions;
-import org.springframework.vault.authentication.SimpleSessionManager;
-import org.springframework.vault.authentication.TokenAuthentication;
-import org.springframework.vault.client.ClientHttpRequestFactoryFactory;
-import org.springframework.vault.client.RestTemplateBuilder;
 import org.springframework.vault.core.VaultTemplate;
-import org.springframework.vault.support.ClientOptions;
-import org.springframework.vault.support.SslConfiguration;
 import org.springframework.vault.support.Versioned;
 import org.springframework.web.client.HttpClientErrorException;
 
-import java.net.URI;
-import java.time.Duration;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Spring Vault based client for HashiCorp Vault KV v2 and Kubernetes auth.
+ * A client for interacting with HashiCorp Vault, providing methods to read and write secrets.
  */
 @Slf4j
 public class VaultClient {
 
-    private final URI vaultUri;
-    private final ClientHttpRequestFactory requestFactory;
     private final ObjectMapper objectMapper;
     private final VaultTemplate vaultTemplate;
-    private final SessionManager sessionManager;
 
-    public VaultClient(String vaultAddr) {
-        this.vaultUri = URI.create(vaultAddr);
-        this.requestFactory = ClientHttpRequestFactoryFactory.create(
-                new ClientOptions(Duration.ofSeconds(10), Duration.ofSeconds(10)),
-                SslConfiguration.unconfigured()
-        );
-        this.objectMapper = new ObjectMapper();
-        this.vaultTemplate = null;
-        this.sessionManager = null;
-    }
-
-    public VaultClient(VaultTemplate vaultTemplate, SessionManager sessionManager) {
-        this.vaultUri = null;
-        this.requestFactory = null;
+    public VaultClient(VaultTemplate vaultTemplate) {
         this.objectMapper = new ObjectMapper();
         this.vaultTemplate = Objects.requireNonNull(vaultTemplate, "vaultTemplate must not be null");
-        this.sessionManager = Objects.requireNonNull(sessionManager, "sessionManager must not be null");
-    }
-
-    public boolean usesSpringCloudVault() {
-        return vaultTemplate != null;
-    }
-
-    public String getSessionToken() {
-        if (vaultTemplate == null) {
-            throw new IllegalStateException("Spring Cloud Vault is not configured for this VaultClient");
-        }
-        return sessionManager.getSessionToken().getToken();
     }
 
     public record VaultSecretEntry(JsonNode data, int version, String createdTime) {}
 
     public record VaultWriteResult(int version, String createdTime) {}
 
-    public String loginWithKubernetes(String authPath, String role, String jwt) {
-        KubernetesAuthenticationOptions options = KubernetesAuthenticationOptions.builder()
-                .path(stripAuthPrefix(authPath))
-                .role(role)
-                .jwtSupplier(() -> jwt)
-                .build();
-        KubernetesAuthentication authentication = new KubernetesAuthentication(options, restTemplateBuilder().build());
-        String token = authentication.login().getToken();
-        if (token.isBlank()) {
-            throw new IllegalStateException("Vault Kubernetes login did not return a client token");
-        }
-        log.info("Successfully authenticated to Vault via Kubernetes auth method (role: {})", role);
-        return token;
-    }
-
-    public Optional<VaultSecretEntry> readSecretVersion(String vaultToken, String path, Integer version) {
+    public Optional<VaultSecretEntry> readSecretVersion(String path, Integer version) {
         try {
             KvPath kvPath = normalizePath(path);
             Versioned<Map<String, Object>> secret = version == null
-                    ? authenticatedTemplate(vaultToken).opsForVersionedKeyValue(kvPath.mountPath()).get(kvPath.secretPath())
-                    : authenticatedTemplate(vaultToken).opsForVersionedKeyValue(kvPath.mountPath()).get(kvPath.secretPath(), Versioned.Version.from(version));
+                    ? vaultTemplate.opsForVersionedKeyValue(kvPath.mountPath()).get(kvPath.secretPath())
+                    : vaultTemplate.opsForVersionedKeyValue(kvPath.mountPath()).get(kvPath.secretPath(), Versioned.Version.from(version));
 
             if (secret == null || secret.getData() == null) {
                 return Optional.empty();
@@ -103,11 +48,9 @@ public class VaultClient {
                 return Optional.empty();
             }
 
-            int targetVersion = version != null ? version : 1;
-
             int resolvedVersion = metadata != null
                     ? metadata.getVersion().getVersion()
-                    : targetVersion;
+                    : version != null ? version : 1;
             String createdTime = metadata != null
                     ? metadata.getCreatedAt().toString()
                     : null;
@@ -119,21 +62,20 @@ public class VaultClient {
         }
     }
 
-    public Optional<JsonNode> readSecret(String vaultToken, String path) {
-        return readSecretVersion(vaultToken, path, null).map(VaultSecretEntry::data);
+    public Optional<JsonNode> readSecret(String path) {
+        return readSecretVersion(path, null).map(VaultSecretEntry::data);
     }
 
-    public VaultWriteResult writeSecret(String vaultToken, String path, Map<String, Object> data) {
-        return writeSecret(vaultToken, path, data, null);
+    public VaultWriteResult writeSecret(String path, Map<String, Object> data) {
+        return writeSecret(path, data, null);
     }
 
-    public VaultWriteResult writeSecret(String vaultToken, String path, Map<String, Object> data, Integer cas) {
+    public VaultWriteResult writeSecret(String path, Map<String, Object> data, Integer cas) {
         try {
             KvPath kvPath = normalizePath(path);
-            Versioned.Metadata metadata = authenticatedTemplate(vaultToken)
-                    .opsForVersionedKeyValue(kvPath.mountPath())
+            Versioned.Metadata metadata = vaultTemplate.opsForVersionedKeyValue(kvPath.mountPath())
                     .put(kvPath.secretPath(), cas == null ? data : Versioned.create(data, Versioned.Version.from(cas)));
-            return toWriteResult(vaultToken, path, metadata);
+            return toWriteResult(path, metadata);
         } catch (HttpClientErrorException e) {
             if (e.getStatusCode() == HttpStatusCode.valueOf(400) && (cas != null || e.getResponseBodyAsString().contains("check-and-set"))) {
                 throw new VaultCasMismatchException("Vault CAS check failed for path " + path + ": " + e.getResponseBodyAsString(),
@@ -148,11 +90,11 @@ public class VaultClient {
         }
     }
 
-    private VaultWriteResult toWriteResult(String vaultToken, String path, Versioned.Metadata metadata) {
+    private VaultWriteResult toWriteResult(String path, Versioned.Metadata metadata) {
         int version = metadata != null ? metadata.getVersion().getVersion() : -1;
         String createdTime = metadata != null ? metadata.getCreatedAt().toString() : null;
         if (version <= 0) {
-            Optional<VaultSecretEntry> latest = readSecretVersion(vaultToken, path, null);
+            Optional<VaultSecretEntry> latest = readSecretVersion(path, null);
             if (latest.isPresent()) {
                 version = latest.get().version();
                 createdTime = latest.get().createdTime();
@@ -162,27 +104,6 @@ public class VaultClient {
             throw new IllegalStateException("Failed to retrieve valid version from Vault after writing to path: " + path);
         }
         return new VaultWriteResult(version, createdTime);
-    }
-
-    private VaultTemplate authenticatedTemplate(String vaultToken) {
-        if (vaultTemplate != null) {
-            return vaultTemplate;
-        }
-        return new VaultTemplate(restTemplateBuilder(), new SimpleSessionManager(new TokenAuthentication(vaultToken)));
-    }
-
-    private RestTemplateBuilder restTemplateBuilder() {
-        return RestTemplateBuilder.builder()
-                .endpoint(org.springframework.vault.client.VaultEndpoint.from(vaultUri))
-                .requestFactory(requestFactory);
-    }
-
-    private String stripAuthPrefix(String authPath) {
-        if (authPath == null || authPath.isBlank()) {
-            return "kubernetes";
-        }
-        String normalized = authPath.trim();
-        return normalized.startsWith("auth/") ? normalized.substring("auth/".length()) : normalized;
     }
 
     private KvPath normalizePath(String path) {

@@ -50,7 +50,7 @@ implementation project(':sdk')
 
 确保 Vault 已启用 KV v2，并为服务身份配置仅能访问本服务密钥路径的策略。示例配置：
 
-以下生命周期数值是显式的生产配置示例，会覆盖 SDK 默认值；例如示例将宽限期设为 10 天，而 `KeyLifecycleProperties` 默认是 1 天。未配置时实际默认值以本文“重要配置项”表格为准。
+以下生命周期数值是显式的生产配置示例，会覆盖 SDK 默认值；例如示例将宽限期设为 10 天，而 SDK 默认值是 1 天。未配置时实际默认值以本文“重要配置项”表格为准。
 
 ```yaml
 sensitive:
@@ -107,6 +107,8 @@ sensitive:
 ```
 
 SDK 会在应用启动时生成内存 RSA 密钥。该密钥不会持久化，应用重启后会变化；不适合多实例部署或需要跨重启保留客户端公钥状态的环境。
+
+SDK 配置统一绑定到 `SensitiveTransportCryptoProperties`；生命周期和 Vault 设置分别作为 `key-lifecycle`、`vault` 子配置。现有 YAML 配置前缀保持不变。
 
 ## 4. 标注需要加解密的接口
 

@@ -25,8 +25,6 @@ public class VaultKeyRing extends KeyRing {
     @Getter
     private final VaultClient vaultClient;
     @Getter
-    private final VaultAuthenticator authenticator;
-    @Getter
     private final VaultKeyCodec codec;
     @Getter
     private final VaultKeyRepository repository;
@@ -34,33 +32,23 @@ public class VaultKeyRing extends KeyRing {
     private final VaultRotationCoordinator rotationCoordinator;
 
     public VaultKeyRing(
-            VaultProperties properties,
-            KeyLifecycleProperties lifecycleProperties,
+            VaultProperties vaultProperties,
+            KeyLifecycleProperties keyLifecycleProperties,
             VaultClient vaultClient,
             boolean autoRotate
     ) {
-        this(properties, lifecycleProperties, vaultClient, autoRotate,
-                lifecycleProperties.getRotationBeforeExpiryMillis());
-    }
-
-    public VaultKeyRing(
-            VaultProperties properties,
-            KeyLifecycleProperties lifecycleProperties,
-            VaultClient vaultClient,
-            boolean autoRotate,
-            long rotationBeforeExpiryMillis
-    ) {
-        super(properties.getKeyAlias(), lifecycleProperties.getValidityMillis(),
-                lifecycleProperties.getGracePeriodMillis(),
-                autoRotate, rotationBeforeExpiryMillis);
-        this.properties = properties;
+        super(vaultProperties.getKeyAlias(),
+                keyLifecycleProperties.getValidityMillis(),
+                keyLifecycleProperties.getGracePeriodMillis(),
+                autoRotate,
+                keyLifecycleProperties.getRotationBeforeExpiryMillis());
+        this.properties = vaultProperties;
         this.vaultClient = vaultClient;
-        this.authenticator = new VaultAuthenticator(properties, vaultClient);
         this.codec = new VaultKeyCodec();
         this.repository = new VaultKeyRepository(
-                properties, lifecycleProperties, vaultClient, this.authenticator, this.codec);
+                vaultProperties, keyLifecycleProperties, vaultClient, this.codec);
         this.rotationCoordinator = new VaultRotationCoordinator(
-                this.repository, properties, lifecycleProperties, this.codec);
+                this.repository, vaultProperties, keyLifecycleProperties, this.codec);
     }
 
     /**
@@ -169,16 +157,21 @@ public class VaultKeyRing extends KeyRing {
 
     @Override
     public synchronized KeyEntry rotateKey() throws GeneralSecurityException, IOException {
-        return rotateKey(getKeyAlias(), false);
+        return rotateKey(getKeyAlias());
     }
 
     @Override
-    public synchronized KeyEntry rotateKey(String targetKeyAlias) throws GeneralSecurityException, IOException {
-        return rotateKey(targetKeyAlias, false);
-    }
-
-    public synchronized KeyEntry forceRotateKey(String targetKeyAlias) throws GeneralSecurityException, IOException {
-        return rotateKey(targetKeyAlias, true);
+    public synchronized KeyEntry rotateKey(String keyAlias) throws GeneralSecurityException, IOException {
+        String alias = resolveKeyAlias(keyAlias);
+        try {
+            return rotationCoordinator.rotate(this, alias);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IOException("Interrupted while rotating key in Vault", e);
+        } catch (GeneralSecurityException | IOException e) {
+            log.error("Failed to rotate key in Vault for alias '{}'", alias, e);
+            throw e;
+        }
     }
 
     /**
@@ -285,23 +278,10 @@ public class VaultKeyRing extends KeyRing {
         return now >= rotatedAt && now - rotatedAt >= getGracePeriodMillis();
     }
 
-    public synchronized KeyEntry rotateKey(String targetKeyAlias, boolean force) throws GeneralSecurityException, IOException {
-        String alias = resolveKeyAlias(targetKeyAlias);
-        try {
-            return rotationCoordinator.rotate(this, alias, force);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-            throw new IOException("Interrupted while rotating key in Vault", e);
-        } catch (GeneralSecurityException | IOException e) {
-            log.error("Failed to rotate key in Vault for alias '{}'", targetKeyAlias, e);
-            throw e;
-        }
-    }
-
     @Override
-    protected synchronized KeyEntry rotateIfDueKey(String targetKeyAlias) throws GeneralSecurityException, IOException {
+    protected synchronized KeyEntry rotateIfDueKey(String keyAlias) throws GeneralSecurityException, IOException {
         try {
-            return rotationCoordinator.rotate(this, targetKeyAlias, false, true);
+            return rotationCoordinator.rotateIfDue(this, keyAlias);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             throw new IOException("Interrupted while proactively rotating key in Vault", e);
@@ -312,8 +292,8 @@ public class VaultKeyRing extends KeyRing {
      * Actively checks Vault for the latest key version. If Vault has a newer version than local memory,
      * updates local memory. Returns the latest local entry for the requested alias, or null if absent.
      */
-    public synchronized KeyEntry syncLatestKeyFromVault(String targetKeyAlias) throws GeneralSecurityException, IOException {
-        String alias = resolveKeyAlias(targetKeyAlias);
+    public synchronized KeyEntry syncLatestKeyFromVault(String keyAlias) throws GeneralSecurityException, IOException {
+        String alias = resolveKeyAlias(keyAlias);
         Optional<KeyEntry> latestOpt = repository.readLatestKey(alias);
         if (latestOpt.isPresent()) {
             KeyEntry remoteEntry = latestOpt.get();

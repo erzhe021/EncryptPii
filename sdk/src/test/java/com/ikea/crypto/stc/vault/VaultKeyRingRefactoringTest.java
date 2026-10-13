@@ -34,8 +34,6 @@ class VaultKeyRingRefactoringTest {
     void setUp() throws Exception {
         properties.setKeyAlias("test");
         properties.setSecretPath("keys/test");
-        properties.setAuthMethod(VaultProperties.AuthMethod.TOKEN);
-        properties.setToken("test-token");
         properties.setAutoBootstrap(false);
         lifecycle.setValidityMillis(3_600_000);
         lifecycle.setRotationBeforeExpiryMillis(600_000);
@@ -55,7 +53,16 @@ class VaultKeyRingRefactoringTest {
 
         assertEquals("test:3", keyRing.getActiveKeyEntry().metadata().keyId());
         assertEquals(2, keyRing.getAllKeyEntries().size());
-        verify(client).readSecretVersion("test-token", "keys/test", 1);
+        verify(client).readSecretVersion("keys/test", 1);
+    }
+
+    @Test
+    void repositoryUsesOneConfiguredSecretPathForItsAlias() {
+        assertEquals("keys/test", keyRing.getRepository().resolveSecretPath("test"));
+        assertEquals("keys/test", keyRing.getRepository().resolveSecretPath(" test "));
+        assertEquals("keys/test", keyRing.getRepository().resolveSecretPath(null));
+        assertThrows(IllegalArgumentException.class,
+                () -> keyRing.getRepository().resolveSecretPath("other"));
     }
 
     @Test
@@ -66,13 +73,13 @@ class VaultKeyRingRefactoringTest {
         keyRing.initialize();
 
         assertEquals(1, keyRing.getAllKeyEntries().size());
-        verify(client, never()).readSecretVersion("test-token", "keys/test", 1);
+        verify(client, never()).readSecretVersion("keys/test", 1);
     }
 
     @Test
     void initializationSkipsMalformedHistoricalKey() throws Exception {
         stubVersion(null, 3, now);
-        when(client.readSecretVersion("test-token", "keys/test", 2)).thenReturn(Optional.of(
+        when(client.readSecretVersion("keys/test", 2)).thenReturn(Optional.of(
                 new VaultClient.VaultSecretEntry(new ObjectMapper().createObjectNode(), 2,
                         Instant.ofEpochMilli(now - 5_000).toString())));
         stubVersion(1, 1, now - 10_000);
@@ -106,7 +113,7 @@ class VaultKeyRingRefactoringTest {
         stubVersion(Integer.MAX_VALUE, Integer.MAX_VALUE, now);
 
         assertTrue(keyRing.findKeyEntry("test:" + Integer.MAX_VALUE).isPresent());
-        verify(client, never()).readSecretVersion("test-token", "keys/test", Integer.MIN_VALUE);
+        verify(client, never()).readSecretVersion("keys/test", Integer.MIN_VALUE);
     }
 
     @Test
@@ -117,15 +124,15 @@ class VaultKeyRingRefactoringTest {
         assertTrue(keyRing.findKeyEntry("other:9").isEmpty());
 
         assertSame(active, keyRing.getActiveKeyEntry());
-        verify(client, never()).readSecretVersion("test-token", "keys/other", 9);
+        verify(client, never()).readSecretVersion("keys/other", 9);
     }
 
     @Test
     void concurrentCacheMissesDoNotSerializeVaultReads() throws Exception {
         CountDownLatch versionOneReads = new CountDownLatch(2);
         CountDownLatch releaseReads = new CountDownLatch(1);
-        when(client.readSecretVersion(anyString(), anyString(), any())).thenAnswer(invocation -> {
-            Integer version = invocation.getArgument(2);
+        when(client.readSecretVersion(anyString(), any())).thenAnswer(invocation -> {
+            Integer version = invocation.getArgument(1);
             if (version == 1) {
                 versionOneReads.countDown();
                 if (!releaseReads.await(2, TimeUnit.SECONDS)) {
@@ -214,7 +221,7 @@ class VaultKeyRingRefactoringTest {
     }
 
     private void stubAliasVersion(String alias, Integer requestedVersion, int version, long createdAt) {
-        when(client.readSecretVersion("test-token", "keys/" + alias, requestedVersion))
+        when(client.readSecretVersion("keys/" + alias, requestedVersion))
                 .thenReturn(Optional.of(new VaultClient.VaultSecretEntry(
                         keyData, version, Instant.ofEpochMilli(createdAt).toString())));
     }

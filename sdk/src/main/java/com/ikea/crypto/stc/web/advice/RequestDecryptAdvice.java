@@ -23,6 +23,10 @@ import java.lang.reflect.Type;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
+/**
+ * A Spring ControllerAdvice that intercepts HTTP requests to decrypt the request body if annotated with @DecryptRequest
+ * and sets up the cryptographic session context for further processing.
+ */
 @ControllerAdvice
 @Slf4j
 public class RequestDecryptAdvice implements RequestBodyAdvice {

@@ -322,9 +322,9 @@ public class KeyRing {
      * Previous keys remain in the keyring for decrypting requests in transition.
      * Any historical keys that have expired beyond the grace period are purged.
      */
-    public synchronized KeyEntry rotateKey(String targetKeyAlias) throws GeneralSecurityException, IOException {
+    public synchronized KeyEntry rotateKey(String keyAlias) throws GeneralSecurityException, IOException {
         long now = System.currentTimeMillis();
-        String alias = resolveKeyAlias(targetKeyAlias);
+        String alias = resolveKeyAlias(keyAlias);
         long nextVersion = getNextVersion(alias);
         String newKeyId = KeyMetadata.buildKeyId(alias, nextVersion);
 
@@ -411,12 +411,12 @@ public class KeyRing {
                 : metadata.expiresAtEpochMillis();
     }
 
-    public void logRotationDue(String targetKeyAlias, KeyMetadata metadata, long now) {
+    public void logRotationDue(String keyAlias, KeyMetadata metadata, long now) {
         long remainingMillis = metadata.expiresAtEpochMillis() - now;
         String reason = metadata.isExpired(now) ? "expired" : "within-rotation-window";
         Map<String, Object> event = new LinkedHashMap<>();
         event.put("event", "rsa_key_rotation_triggered");
-        event.put("alias", (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : keyAlias);
+        event.put("alias", (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : this.keyAlias);
         event.put("keyId", metadata.keyId());
         event.put("reason", reason);
         event.put("now", Instant.ofEpochMilli(now).toString());
@@ -428,9 +428,9 @@ public class KeyRing {
         log.info("RSA key rotation triggered: {}", RotationLog.toJson(event));
     }
 
-    public synchronized KeyEntry rotateIfDue(String targetKeyAlias)
+    public synchronized KeyEntry rotateIfDue(String keyAlias)
             throws GeneralSecurityException, IOException {
-        String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : keyAlias;
+        String alias = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : this.keyAlias;
         KeyEntry current = findActiveKeyEntry(alias)
                 .orElseThrow(() -> new IllegalStateException("No active RSA key found for keyAlias: " + alias));
         if (autoRotate && isRotationDue(current.metadata())) {

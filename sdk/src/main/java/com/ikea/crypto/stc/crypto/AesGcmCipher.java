@@ -10,6 +10,13 @@ import javax.crypto.spec.GCMParameterSpec;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 
+/**
+ * AesGcmCipher provides utility methods for AES encryption and decryption using GCM mode.
+ * <p>
+ * This class is designed to be used for encrypting and decrypting data with a given secret key and initialization vector (IV).
+ * It supports both byte array and Base64 string representations of the encrypted data.
+ * </p>
+ */
 @Slf4j
 public final class AesGcmCipher {
     private AesGcmCipher() {

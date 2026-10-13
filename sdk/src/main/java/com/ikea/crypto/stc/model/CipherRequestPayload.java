@@ -1,11 +1,10 @@
 package com.ikea.crypto.stc.model;
 
 /**
- * Encrypted request body. Key metadata and the wrapped session key are
- * transported separately in STC headers.
+ * Represents the payload for a cipher request, containing the initialization vector (IV) and the encrypted data.
  *
- * @param ivBase64            The IV used for AES-GCM encryption.
- * @param encryptedDataBase64 The ciphertext encrypted with the AES session key.
+ * @param ivBase64            The initialization vector (IV) encoded in Base64.
+ * @param encryptedDataBase64 The encrypted data encoded in Base64.
  */
 public record CipherRequestPayload(
         String ivBase64,

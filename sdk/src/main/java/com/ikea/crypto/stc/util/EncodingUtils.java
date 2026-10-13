@@ -2,6 +2,9 @@ package com.ikea.crypto.stc.util;
 
 import java.util.Base64;
 
+/**
+ * Utility class for encoding and decoding data in Base64 format.
+ */
 public final class EncodingUtils {
     private EncodingUtils() {
     }

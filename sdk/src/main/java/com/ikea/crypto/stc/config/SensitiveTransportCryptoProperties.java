@@ -1,13 +1,14 @@
 package com.ikea.crypto.stc.config;
 
+import jakarta.validation.Valid;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * Configuration properties for sensitive transport crypto functionality.
+ * Configuration vaultProperties for sensitive transport crypto functionality.
  * <p>
- * These properties can be set in the application's configuration files (e.g., application.properties or application.yml)
+ * These vaultProperties can be set in the application's configuration files (e.g., application.vaultProperties or application.yml)
  * to customize the behavior of the sensitive transport crypto features.
  * </p>
  */
@@ -27,8 +28,21 @@ public class SensitiveTransportCryptoProperties {
     private boolean autoRotate = true;
 
     /**
+     * Key validity, rotation, and transition grace-period configuration.
+     */
+    @Valid
+    private KeyLifecycleProperties keyLifecycle = new KeyLifecycleProperties();
+
+    /**
+     * Vault integration and key storage configuration.
+     */
+    @Valid
+    private VaultProperties vault = new VaultProperties();
+
+    /**
      * Endpoint configuration for public key retrieval.
      */
+    @Valid
     private EndpointProperties endpoint = new EndpointProperties();
 
     @Data

@@ -1,7 +1,8 @@
 package com.ikea.crypto.stc.exception;
 
 /**
- * Thrown when the client request payload is malformed (e.g. invalid JSON, missing required fields).
+ * Thrown when the request to the cryptographic service is invalid.
+ * This can occur due to malformed request payloads, unsupported operations, or missing required parameters.
  */
 public class InvalidCryptoRequestException extends CryptoClientSideException {
 

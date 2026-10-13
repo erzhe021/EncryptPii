@@ -1,8 +1,8 @@
 package com.ikea.crypto.stc.exception;
 
 /**
- * Thrown when the cryptographic key or key storage is unavailable on the server side
- * (e.g. Vault connection failure, empty keyring, or active key not found).
+ * Thrown when the requested cryptographic key is not available.
+ * This can occur when the key has been deleted, is not yet generated, or is otherwise inaccessible.
  */
 public class KeyNotAvailableException extends CryptoServerSideException {
     public KeyNotAvailableException(String message) {

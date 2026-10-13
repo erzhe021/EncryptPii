@@ -5,6 +5,9 @@ import org.springframework.core.annotation.AnnotatedElementUtils;
 
 import java.lang.annotation.Annotation;
 
+/**
+ * Utility class for handling annotations in Spring MVC method parameters.
+ */
 public final class CryptoAdviceSupport {
     private CryptoAdviceSupport() {
     }

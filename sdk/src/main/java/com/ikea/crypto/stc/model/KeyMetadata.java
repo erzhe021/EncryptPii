@@ -3,7 +3,11 @@ package com.ikea.crypto.stc.model;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * KeyMetadata represents the lifecycle and identity of an asymmetric key pair.
+ * Represents metadata for a cryptographic key, including its identifier, creation time, and expiration time.
+ *
+ * @param keyId                The unique identifier for the key, typically in the format "keyAlias:version".
+ * @param createdAtEpochMillis The epoch time in milliseconds when the key was created.
+ * @param expiresAtEpochMillis The epoch time in milliseconds when the key will expire.
  */
 @Slf4j
 public record KeyMetadata(

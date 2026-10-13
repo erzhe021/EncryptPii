@@ -20,6 +20,11 @@ import javax.crypto.SecretKey;
 import java.security.GeneralSecurityException;
 import java.util.Objects;
 
+/**
+ * Handles the processing of encrypted payloads for both requests and responses.
+ * This class is responsible for creating session contexts, decrypting request bodies,
+ * and encrypting response bodies using the provided CryptoServer and ObjectMapper.
+ */
 public class CryptoPayloadHandler {
 
     private final CryptoServer cryptoServer;

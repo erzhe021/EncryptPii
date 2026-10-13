@@ -21,6 +21,14 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * CryptoServer provides cryptographic services for clients, including RSA public key retrieval,
+ * AES session key decryption, and automatic RSA key rotation.
+ * <p>
+ * This class interacts with a KeyRing to manage RSA keys and perform cryptographic operations.
+ * It handles key rotation, session key decryption, and validation of encrypted payloads.
+ * </p>
+ */
 @Slf4j
 public record CryptoServer(KeyRing keyRing) {
 
@@ -146,24 +154,6 @@ public record CryptoServer(KeyRing keyRing) {
         } catch (GeneralSecurityException | IOException e) {
             log.error("Failed to rotate RSA key for keyAlias: {}", keyAlias, e);
             throw new KeyNotAvailableException("Failed to rotate RSA key for keyAlias: " + keyAlias, e);
-        }
-    }
-
-    /**
-     * Forces rotation to a new RSA key version for the specified key alias, bypassing double-checked refresh.
-     */
-    public PublicKeyResponse forceRotateKey(String keyAlias) {
-        try {
-            KeyRing.KeyEntry newEntry;
-            if (keyRing instanceof VaultKeyRing vaultKeyRing) {
-                newEntry = vaultKeyRing.forceRotateKey(keyAlias);
-            } else {
-                newEntry = keyRing.rotateKey(keyAlias);
-            }
-            return toPublicKeyResponse(newEntry);
-        } catch (GeneralSecurityException | IOException e) {
-            log.error("Failed to force rotate RSA key for keyAlias: {}", keyAlias, e);
-            throw new KeyNotAvailableException("Failed to force rotate RSA key for keyAlias: " + keyAlias, e);
         }
     }
 

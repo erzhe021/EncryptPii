@@ -21,7 +21,6 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
-import org.springframework.vault.authentication.SessionManager;
 import org.springframework.vault.core.VaultTemplate;
 import org.springframework.web.servlet.mvc.method.annotation.RequestBodyAdvice;
 
@@ -42,56 +41,48 @@ import java.security.KeyPairGenerator;
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(RequestBodyAdvice.class)
-@ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "enabled", havingValue = "true",
-        matchIfMissing = true)
-@EnableConfigurationProperties({
-        SensitiveTransportCryptoProperties.class,
-        KeyLifecycleProperties.class,
-        VaultProperties.class
-})
+@ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "enabled", havingValue = "true", matchIfMissing = true)
+@EnableConfigurationProperties(SensitiveTransportCryptoProperties.class)
 public class SensitiveTransportCryptoAutoConfiguration {
 
     @Bean
-    public CryptoTimeConfigurationValidator cryptoTimeConfigurationValidator(
-            KeyLifecycleProperties lifecycleProperties) {
-        return new CryptoTimeConfigurationValidator(lifecycleProperties);
+    public CryptoTimeConfigurationValidator cryptoTimeConfigurationValidator(SensitiveTransportCryptoProperties cryptoProperties) {
+        return new CryptoTimeConfigurationValidator(cryptoProperties);
     }
 
     @Bean
     @ConditionalOnMissingBean
     public CryptoServer cryptoServer(
-            VaultProperties vaultProperties,
             SensitiveTransportCryptoProperties cryptoProperties,
-            KeyLifecycleProperties lifecycleProperties,
-            ObjectProvider<VaultTemplate> vaultTemplateProvider,
-            ObjectProvider<SessionManager> sessionManagerProvider
+            ObjectProvider<VaultTemplate> vaultTemplateProvider
     ) throws GeneralSecurityException, IOException {
+        VaultProperties vaultProperties = cryptoProperties.getVault();
+        KeyLifecycleProperties keyLifecycleProperties = cryptoProperties.getKeyLifecycle();
         if (vaultProperties != null && vaultProperties.isEnabled()) {
             VaultTemplate vaultTemplate = vaultTemplateProvider.getObject();
             log.info("Vault key management is enabled. Loading and managing keys via Spring Cloud Vault");
-            VaultClient vaultClient = new VaultClient(vaultTemplate, sessionManagerProvider.getObject());
+            VaultClient vaultClient = new VaultClient(vaultTemplate);
             VaultKeyRing vaultKeyRing = new VaultKeyRing(
                     vaultProperties,
-                    lifecycleProperties,
+                    keyLifecycleProperties,
                     vaultClient,
-                    cryptoProperties.isAutoRotate(),
-                    lifecycleProperties.getRotationBeforeExpiryMillis()
+                    cryptoProperties.isAutoRotate()
             );
             vaultKeyRing.initialize();
             return new CryptoServer(vaultKeyRing);
         }
 
         log.warn("Vault key management is disabled. Initializing CryptoServer with an in-memory RSA keypair for local/testing environment.");
-        long inMemoryValidityMillis = lifecycleProperties.getValidityMillis();
+        long inMemoryValidityMillis = keyLifecycleProperties.getValidityMillis();
         KeyPairGenerator keyGen = KeyPairGenerator.getInstance(CryptoConstants.ALGORITHM_RSA);
         keyGen.initialize(CryptoConstants.RSA_KEY_SIZE_BITS);
         KeyPair keyPair = keyGen.generateKeyPair();
         KeyRing keyRing = new KeyRing(
                 "in-memory-test-key",
                 inMemoryValidityMillis,
-                lifecycleProperties.getGracePeriodMillis(),
+                keyLifecycleProperties.getGracePeriodMillis(),
                 cryptoProperties.isAutoRotate(),
-                lifecycleProperties.getRotationBeforeExpiryMillis()
+                keyLifecycleProperties.getRotationBeforeExpiryMillis()
         );
         long now = System.currentTimeMillis();
         KeyMetadata metadata = new KeyMetadata(
@@ -129,8 +120,7 @@ public class SensitiveTransportCryptoAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
-    @ConditionalOnProperty(prefix = "sensitive.transport.crypto.endpoint", name = "enabled", havingValue = "true",
-            matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "sensitive.transport.crypto.endpoint", name = "enabled", havingValue = "true", matchIfMissing = true)
     public PublicKeyEndpoint publicKeyEndpoint(CryptoServer cryptoServer) {
         return new PublicKeyEndpoint(cryptoServer);
     }

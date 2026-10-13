@@ -17,7 +17,12 @@ class ServerOnlyAutoConfigurationTest {
     private final WebApplicationContextRunner webRunner = new WebApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(SensitiveTransportCryptoAutoConfiguration.class))
             .withBean(ObjectMapper.class, ObjectMapper::new)
-            .withPropertyValues("sensitive.transport.crypto.vault.enabled=false");
+            .withPropertyValues(
+                    "sensitive.transport.crypto.vault.enabled=false",
+                    "sensitive.transport.crypto.vault.key-alias=test-service",
+                    "sensitive.transport.crypto.key-lifecycle.validity-millis=120000",
+                    "sensitive.transport.crypto.key-lifecycle.rotation-before-expiry-millis=20000",
+                    "sensitive.transport.crypto.key-lifecycle.grace-period-millis=10000");
 
     @Test
     void servletApplicationReceivesServerComponents() {
@@ -26,7 +31,16 @@ class ServerOnlyAutoConfigurationTest {
                     .hasSingleBean(CryptoServer.class)
                     .hasSingleBean(CryptoPayloadHandler.class)
                     .hasSingleBean(RequestDecryptAdvice.class)
-                    .hasSingleBean(ResponseEncryptAdvice.class);
+                    .hasSingleBean(ResponseEncryptAdvice.class)
+                    .hasSingleBean(SensitiveTransportCryptoProperties.class)
+                    .doesNotHaveBean(KeyLifecycleProperties.class)
+                    .doesNotHaveBean(VaultProperties.class)
+                    .satisfies(applicationContext -> {
+                        SensitiveTransportCryptoProperties properties =
+                                applicationContext.getBean(SensitiveTransportCryptoProperties.class);
+                        assertThat(properties.getVault().getKeyAlias()).isEqualTo("test-service");
+                        assertThat(properties.getKeyLifecycle().getValidityMillis()).isEqualTo(120000);
+                    });
         });
     }
 
@@ -37,6 +51,13 @@ class ServerOnlyAutoConfigurationTest {
                     .doesNotHaveBean(CryptoServer.class)
                     .doesNotHaveBean(CryptoPayloadHandler.class);
         });
+    }
+
+    @Test
+    void nestedConfigurationIsValidated() {
+        webRunner.withPropertyValues(
+                "sensitive.transport.crypto.vault.cas-max-retries=0").run(context ->
+                assertThat(context).hasFailed());
     }
 
     @Test

@@ -4,6 +4,12 @@ import com.ikea.crypto.stc.constant.CryptoConstants;
 
 import java.security.SecureRandom;
 
+/**
+ * GcmIvGenerator is a utility class for generating random Initialization Vectors (IVs) for AES-GCM encryption.
+ * <p>
+ * This class provides a method to generate a secure random IV of the appropriate length for AES-GCM encryption.
+ * </p>
+ */
 public final class GcmIvGenerator {
 
     private static final SecureRandom secureRandom = new SecureRandom();

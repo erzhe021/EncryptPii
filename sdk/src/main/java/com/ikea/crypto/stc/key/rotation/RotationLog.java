@@ -5,6 +5,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.Map;
 
+/**
+ * Utility class for logging RSA key rotation events in JSON format.
+ */
 public final class RotationLog {
 
     private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();

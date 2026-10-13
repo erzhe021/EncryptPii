@@ -1,11 +1,13 @@
 package com.ikea.crypto.stc.vault;
 
 import com.ikea.crypto.stc.config.KeyLifecycleProperties;
+import com.ikea.crypto.stc.config.SensitiveTransportCryptoProperties;
 import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.key.KeyRing;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import org.springframework.vault.core.VaultTemplate;
 
 import java.io.IOException;
 import java.security.GeneralSecurityException;
@@ -16,25 +18,20 @@ import java.security.GeneralSecurityException;
  */
 @Slf4j
 @Component
+@ConditionalOnProperty(prefix = "sensitive.transport.crypto.vault", name = "enabled", havingValue = "true")
 public class VaultKeySynchronizer {
 
     private final VaultProperties properties;
     private final KeyLifecycleProperties lifecycleProperties;
     private final VaultClient vaultClient;
 
-    @Autowired
-    public VaultKeySynchronizer(VaultProperties properties, KeyLifecycleProperties lifecycleProperties) {
-        this(properties, lifecycleProperties, new VaultClient(properties.getAddr()));
-    }
-
     public VaultKeySynchronizer(
-            VaultProperties properties,
-            KeyLifecycleProperties lifecycleProperties,
-            VaultClient vaultClient
+            SensitiveTransportCryptoProperties cryptoProperties,
+            VaultTemplate vaultTemplate
     ) {
-        this.properties = properties;
-        this.lifecycleProperties = lifecycleProperties;
-        this.vaultClient = vaultClient;
+        this.properties = cryptoProperties.getVault();
+        this.lifecycleProperties = cryptoProperties.getKeyLifecycle();
+        this.vaultClient = new VaultClient(vaultTemplate);
     }
 
     /**
@@ -43,8 +40,7 @@ public class VaultKeySynchronizer {
      * @return Fully populated in-memory KeyRing
      */
     public KeyRing syncToKeyRing() throws GeneralSecurityException, IOException {
-        VaultKeyRing vaultKeyRing = new VaultKeyRing(
-                properties, lifecycleProperties, vaultClient, true);
+        VaultKeyRing vaultKeyRing = new VaultKeyRing(properties, lifecycleProperties, vaultClient, true);
         vaultKeyRing.initialize();
         return vaultKeyRing;
     }

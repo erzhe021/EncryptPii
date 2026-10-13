@@ -7,7 +7,10 @@ import com.ikea.crypto.stc.model.SessionKeyHeaders;
 import java.util.Objects;
 
 /**
- * Crypto material associated with one HTTP request.
+ * Represents the context for a cryptographic session, including the request payload and session key headers.
+ *
+ * @param requestPayload   The payload for the cipher request, which may be null for response-only contexts.
+ * @param sessionKeyHeaders The headers required for the session key request, which must not be null.
  */
 public record CryptoSessionContext(CipherRequestPayload requestPayload, SessionKeyHeaders sessionKeyHeaders) {
 

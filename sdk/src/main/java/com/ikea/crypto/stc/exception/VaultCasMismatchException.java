@@ -3,8 +3,9 @@ package com.ikea.crypto.stc.exception;
 import lombok.Getter;
 
 /**
- * Thrown when Vault KV v2 Check-And-Set (CAS) validation fails, indicating another pod
- * has concurrently updated the secret.
+ * Thrown when a Vault operation fails due to a CAS (Check-And-Set) mismatch.
+ * This indicates that the expected version of the data does not match the actual version in the Vault,
+ * which can occur in concurrent modification scenarios.
  */
 public class VaultCasMismatchException extends RuntimeException {
 

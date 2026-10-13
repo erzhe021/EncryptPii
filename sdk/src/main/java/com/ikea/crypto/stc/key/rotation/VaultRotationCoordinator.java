@@ -43,23 +43,23 @@ public class VaultRotationCoordinator {
      * Executes distributed key rotation for the specified key alias.
      *
      * @param keyRing        in-memory key ring to query and update
-     * @param targetKeyAlias target key alias to rotate
-     * @param force          if true, bypasses double-checked refresh
+     * @param keyAlias target key alias to rotate
      * @return the active KeyEntry (either freshly rotated or synchronized from another winning pod)
      */
-    public KeyRing.KeyEntry rotate(KeyRing keyRing, String targetKeyAlias, boolean force)
+    public KeyRing.KeyEntry rotate(KeyRing keyRing, String keyAlias)
             throws GeneralSecurityException, IOException, InterruptedException {
-        return rotate(keyRing, targetKeyAlias, force, false);
+        return rotate(keyRing, keyAlias, false);
     }
 
-    public KeyRing.KeyEntry rotate(
-            KeyRing keyRing,
-            String targetKeyAlias,
-            boolean force,
-            boolean proactiveOnly
-    ) throws GeneralSecurityException, IOException, InterruptedException {
+    public KeyRing.KeyEntry rotateIfDue(KeyRing keyRing, String keyAlias)
+            throws GeneralSecurityException, IOException, InterruptedException {
+        return rotate(keyRing, keyAlias, true);
+    }
+
+    private KeyRing.KeyEntry rotate(KeyRing keyRing, String keyAlias, boolean proactiveOnly)
+            throws GeneralSecurityException, IOException, InterruptedException {
         long now = System.currentTimeMillis();
-        String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : properties.getKeyAlias();
+        String alias = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : properties.getKeyAlias();
 
         // 1. 双重检查（Double-Checked Refresh）
         Optional<VaultClient.VaultSecretEntry> latestOpt = repository.readSecretVersionRaw(alias, null);
@@ -71,7 +71,7 @@ public class VaultRotationCoordinator {
                 : keyRing.findActiveKeyEntry(alias).orElse(null);
         boolean localExpired = (currentLocalEntry == null || currentLocalEntry.metadata().isExpired(now));
 
-        if (!force && latestOpt.isPresent()) {
+        if (latestOpt.isPresent()) {
             VaultClient.VaultSecretEntry latestSecret = latestOpt.get();
             int vaultVersion = latestSecret.version();
             KeyRing.KeyEntry vaultEntry = codec.deserializeKeyEntry(
@@ -105,9 +105,9 @@ public class VaultRotationCoordinator {
      * Bootstraps the initial key in Vault with CAS=0, avoiding a redundant double-check query
      * when Vault is already known to be empty (avoiding duplicate 404s).
      */
-    public void bootstrapInitialKey(KeyRing keyRing, String targetKeyAlias)
+    public void bootstrapInitialKey(KeyRing keyRing, String keyAlias)
             throws GeneralSecurityException, IOException, InterruptedException {
-        String alias = (targetKeyAlias != null && !targetKeyAlias.isBlank()) ? targetKeyAlias.trim() : properties.getKeyAlias();
+        String alias = (keyAlias != null && !keyAlias.isBlank()) ? keyAlias.trim() : properties.getKeyAlias();
         executeCasWrite(keyRing, alias, 0, System.currentTimeMillis());
     }
 
