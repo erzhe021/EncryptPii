@@ -25,7 +25,7 @@ public class VaultClient {
 
     public VaultClient(VaultTemplate vaultTemplate) {
         this.objectMapper = new ObjectMapper();
-        this.vaultTemplate = Objects.requireNonNull(vaultTemplate, "vaultTemplate must not be null");
+        this.vaultTemplate = Objects.requireNonNull(vaultTemplate, "VaultTemplate is required to access Vault.");
     }
 
     public record VaultSecretEntry(JsonNode data, int version, String createdTime) {}

@@ -29,6 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "spring.cloud.vault.enabled=false",
         "spring.cloud.vault.token=test-token",
+        "sensitive.transport.crypto.key-store=memory",
         "sensitive.transport.crypto.vault.enabled=false"
 })
 @AutoConfigureMockMvc
@@ -60,6 +61,13 @@ class SdkServerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.keyId").isNotEmpty())
                 .andExpect(jsonPath("$.publicKeyBase64").isNotEmpty());
+    }
+
+    @Test
+    void publicKeyCanBeRetrievedByStableMemoryAlias() throws Exception {
+        mvc.perform(get("/sensitive-transport-crypto/public-key/in-memory-test-key"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.keyId").value(keyId));
     }
 
     @Test
@@ -124,6 +132,15 @@ class SdkServerIntegrationTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(header().string("X-STC-Encrypted", "false"))
                 .andExpect(jsonPath("$.message").value("Invalid Base64 format in encrypted session key."));
+    }
+
+    @Test
+    void invalidIvLengthProducesPlainClientError() throws Exception {
+        mvc.perform(sessionRequest("/crypto/server/bidirectional").content(
+                        "{\"ivBase64\":\"AA==\",\"encryptedDataBase64\":\"AAAAAAAAAAAAAAAAAAAAAA==\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("X-STC-Encrypted", "false"))
+                .andExpect(jsonPath("$.message").value("IV must contain exactly 12 bytes."));
     }
 
     @Test

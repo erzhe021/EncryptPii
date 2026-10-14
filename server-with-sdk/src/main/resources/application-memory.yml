@@ -1,0 +1,12 @@
+spring:
+  cloud:
+    vault:
+      enabled: false
+      token: ""
+
+sensitive:
+  transport:
+    crypto:
+      key-store: memory
+      memory:
+        key-alias: demo-service

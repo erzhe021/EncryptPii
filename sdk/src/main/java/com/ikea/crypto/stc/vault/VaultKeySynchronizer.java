@@ -18,7 +18,7 @@ import java.security.GeneralSecurityException;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(prefix = "sensitive.transport.crypto.vault", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "key-store", havingValue = "vault", matchIfMissing = true)
 public class VaultKeySynchronizer {
 
     private final VaultProperties properties;

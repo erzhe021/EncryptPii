@@ -57,7 +57,7 @@ public class KeyRing {
             boolean autoRotate,
             long rotationBeforeExpiryMillis
     ) {
-        Assert.hasText(keyAlias, "keyAlias must not be null or blank");
+        Assert.hasText(keyAlias, "Key alias is required and must contain non-whitespace characters.");
 
         if (validityMillis <= 0) {
             throw new IllegalArgumentException("validityMillis must be greater than zero");

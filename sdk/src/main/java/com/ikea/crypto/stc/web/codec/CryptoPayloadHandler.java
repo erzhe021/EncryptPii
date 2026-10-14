@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.GcmIvGenerator;
 import com.ikea.crypto.stc.exception.InvalidCryptoRequestException;
+import com.ikea.crypto.stc.exception.CryptoServerSideException;
 import com.ikea.crypto.stc.exception.ResponseEncryptionException;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
@@ -17,6 +18,7 @@ import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
 import com.ikea.crypto.stc.util.EncodingUtils;
 
 import javax.crypto.SecretKey;
+import java.io.IOException;
 import java.security.GeneralSecurityException;
 import java.util.Objects;
 
@@ -67,14 +69,14 @@ public class CryptoPayloadHandler {
             return CryptoSessionContext.request(payload, sessionKeyHeaders);
         } catch (JsonProcessingException e) {
             throw new InvalidCryptoRequestException("Invalid encrypted request payload", e);
-        } catch (java.io.IOException e) {
-            throw new InvalidCryptoRequestException("Failed to read encrypted request payload", e);
+        } catch (IOException e) {
+            throw new CryptoServerSideException("Failed to read encrypted request payload", e);
         }
     }
 
     public String decrypt(CryptoSessionContext sessionContext) throws GeneralSecurityException {
         if (sessionContext == null) {
-            throw new InvalidCryptoRequestException("Crypto session context is required for request decryption");
+            throw new CryptoServerSideException("Crypto session context is required for request decryption");
         }
         CipherRequestPayload payload = sessionContext.requireRequestPayload();
         SessionKeyHeaders headers = sessionContext.sessionKeyHeaders();
@@ -96,7 +98,7 @@ public class CryptoPayloadHandler {
             CryptoSessionContextAccessor.setResolvedSessionKey(sessionKey);
             return context;
         } catch (GeneralSecurityException e) {
-            throw new InvalidCryptoRequestException("Failed to decrypt session key", e);
+            throw new CryptoServerSideException("Failed to initialize session key decryption", e);
         }
     }
 

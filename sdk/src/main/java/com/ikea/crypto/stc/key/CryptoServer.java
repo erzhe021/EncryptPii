@@ -1,5 +1,6 @@
 package com.ikea.crypto.stc.key;
 
+import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.crypto.AesGcmCipher;
 import com.ikea.crypto.stc.crypto.SessionKeyService;
 import com.ikea.crypto.stc.exception.*;
@@ -13,8 +14,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.util.StringUtils;
 
 import javax.crypto.BadPaddingException;
+import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.SecretKey;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
@@ -248,9 +251,11 @@ public record CryptoServer(KeyRing keyRing) {
                     encryptedSessionKeyBase64, entry.privateKey());
             log.info("Successfully decrypted session key using {}: {}", keyDescription, entry.metadata().keyId());
             return Optional.of(sessionKey);
-        } catch (GeneralSecurityException e) {
+        } catch (BadPaddingException | IllegalBlockSizeException e) {
             log.warn("Failed to decrypt session key using {}: {}", keyDescription, entry.metadata().keyId(), e);
             return Optional.empty();
+        } catch (GeneralSecurityException e) {
+            throw new CryptoServerSideException("Failed to initialize RSA session key decryption", e);
         }
     }
 
@@ -268,9 +273,8 @@ public record CryptoServer(KeyRing keyRing) {
                 return Optional.empty();
             }
             return tryDecryptSessionKey(encryptedSessionKeyBase64, latestEntry, "latest Vault key");
-        } catch (Exception e) {
-            log.warn("Failed on-demand sync from Vault during decryption fallback: {}", e.getMessage());
-            return Optional.empty();
+        } catch (GeneralSecurityException | IOException | IllegalStateException e) {
+            throw new CryptoServerSideException("Failed to synchronize the latest decryption key from Vault", e);
         }
     }
 
@@ -309,7 +313,7 @@ public record CryptoServer(KeyRing keyRing) {
 
     public void validatePayload(CipherRequestPayload payload) {
         if (payload == null) {
-            throw new InvalidCryptoRequestException("Encrypted request payload cannot be null.");
+            throw new InvalidCryptoRequestException("Encrypted request payload is required but was not provided.");
         }
         if (!StringUtils.hasLength(payload.ivBase64())) {
             throw new InvalidCryptoRequestException("IV is required but was not provided.");
@@ -320,17 +324,27 @@ public record CryptoServer(KeyRing keyRing) {
     }
 
     private String decryptWithAes(CipherRequestPayload payload, SecretKey sessionKey) throws GeneralSecurityException {
+        byte[] encryptedData;
+        byte[] iv;
         try {
-            return AesGcmCipher.decryptFromBase64(
-                    payload.encryptedDataBase64(),
-                    sessionKey,
-                    payload.ivBase64()
-            );
+            encryptedData = EncodingUtils.fromBase64(payload.encryptedDataBase64());
+            iv = EncodingUtils.fromBase64(payload.ivBase64());
+        } catch (IllegalArgumentException e) {
+            throw new InvalidCryptoRequestException("Invalid Base64 format in encrypted data or IV.", e);
+        }
+        if (iv.length != CryptoConstants.GCM_IV_LENGTH_BYTES) {
+            throw new InvalidCryptoRequestException("IV must contain exactly 12 bytes.");
+        }
+        if (encryptedData.length < CryptoConstants.GCM_TAG_LENGTH_BITS / Byte.SIZE) {
+            throw new InvalidCryptoRequestException("Encrypted data must include a 16-byte GCM authentication tag.");
+        }
+        try {
+            return new String(AesGcmCipher.decrypt(encryptedData, sessionKey, iv), StandardCharsets.UTF_8);
         } catch (BadPaddingException e) {
             log.warn("GCM authentication tag verification failed, ciphertext may have been tampered with or corrupted");
             throw new DataTamperedException("Encrypted data authentication failed: data corrupted or tampered with.", e);
-        } catch (IllegalArgumentException e) {
-            throw new InvalidCryptoRequestException("Invalid Base64 format in encrypted data or IV.", e);
+        } catch (GeneralSecurityException e) {
+            throw new CryptoServerSideException("Failed to initialize AES request decryption", e);
         }
     }
 }

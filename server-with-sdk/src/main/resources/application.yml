@@ -4,14 +4,14 @@ server:
 spring:
   cloud:
     vault:
-      enabled: true
       uri: ${VAULT_ADDR:http://127.0.0.1:8200}
-      authentication: TOKEN
-      token: ${VAULT_TOKEN}
-      kubernetes:
-        role: crypto-server
-        kubernetes-path: kubernetes
-        service-account-token-file: :/var/run/secrets/kubernetes.io/serviceaccount/token
+      authentication: TOKEN # use TOKEN for local development, KUBERNETES for production
+      token: ${VAULT_TOKEN} # use VAULT_TOKEN for local development, KUBERNETES for production
+      # uncomment the following lines for production deployment with Kubernetes
+#      kubernetes:
+#        role: crypto-server
+#        kubernetes-path: kubernetes
+#        service-account-token-file: /var/run/secrets/kubernetes.io/serviceaccount/token
 
 sensitive:
   transport:
@@ -26,7 +26,7 @@ sensitive:
         enabled: true #default is true, if set to false, the crypto server will not expose any endpoints
         base-path: /sensitive-transport-crypto # default is /sensitive-transport-crypto, you can change it to any other path, but make sure to update the client configuration accordingly
       vault:
-        enabled: true #default is false, if set to true, the crypto server will use vault to store the transport key
+        enabled: true # default is true; key-store=VAULT requires Vault
         auto-bootstrap: true # default is true, if set to false, the key must be created manually in vault
         secret-path: secret/data/sensitive-transport-crypto/demo-service # change to your desired path in vault, make sure to update the client configuration accordingly
         key-alias: demo-service #change to your desired key alias in vault, make sure to update the client configuration accordingly

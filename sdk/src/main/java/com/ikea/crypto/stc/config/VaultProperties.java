@@ -16,19 +16,19 @@ import org.springframework.validation.annotation.Validated;
 public class VaultProperties {
 
     /**
-     * Whether Vault key management is enabled. Defaults to false.
+     * Whether Vault key management is enabled. Required when key-store is VAULT.
      */
-    private boolean enabled = false;
+    private boolean enabled = true;
 
     /**
      * Vault KV v2 secret path (relative to /v1/), e.g. secret/data/sensitive-transport-crypto/demo-service
      */
-    private String secretPath = "replace-with-your-vault-secret-path";
+    private String secretPath;
 
     /**
      * Logical key alias used in keyId format <keyAlias>:<version>.
      */
-    private String keyAlias = "replace-with-your-key-alias";
+    private String keyAlias;
 
     /**
      * Automatically bootstrap and initialize keys in Vault if none exist.

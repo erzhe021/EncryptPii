@@ -1,6 +1,6 @@
 package com.ikea.crypto.stc.session;
 
-import com.ikea.crypto.stc.exception.InvalidCryptoRequestException;
+import com.ikea.crypto.stc.exception.CryptoServerSideException;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.SessionKeyHeaders;
 
@@ -28,7 +28,7 @@ public record CryptoSessionContext(CipherRequestPayload requestPayload, SessionK
 
     public CipherRequestPayload requireRequestPayload() {
         if (requestPayload == null) {
-            throw new InvalidCryptoRequestException("Encrypted request payload is required for request decryption.");
+            throw new CryptoServerSideException("A response-only crypto session context cannot be used for request decryption.");
         }
         return requestPayload;
     }

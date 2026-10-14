@@ -1,7 +1,9 @@
 package com.ikea.crypto.stc.web.codec;
 
+import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ikea.crypto.stc.exception.InvalidCryptoRequestException;
+import com.ikea.crypto.stc.exception.CryptoServerSideException;
 import com.ikea.crypto.stc.exception.ResponseEncryptionException;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.model.SessionKeyHeaders;
@@ -15,7 +17,9 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
+import java.io.IOException;
 import java.security.GeneralSecurityException;
+import java.security.NoSuchAlgorithmException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
@@ -77,5 +81,40 @@ class CryptoPayloadHandlerTest {
     @Test
     void rejectsMissingContextWhenEncryptingResponse() {
         assertThrows(ResponseEncryptionException.class, () -> handler.encrypt("response", null));
+    }
+
+    @Test
+    void missingOrResponseOnlyDecryptionContextIsAnInternalError() {
+        assertThrows(CryptoServerSideException.class, () -> handler.decrypt(null));
+        assertThrows(CryptoServerSideException.class,
+                () -> handler.decrypt(CryptoSessionContext.responseOnly(headers)));
+        verifyNoInteractions(cryptoServer);
+    }
+
+    @Test
+    void malformedJsonRemainsAClientError() {
+        assertThrows(InvalidCryptoRequestException.class,
+                () -> handler.createSessionContext("{", headers));
+    }
+
+    @Test
+    void parserInfrastructureIoFailureIsAServerError() throws IOException {
+        ObjectMapper mapper = mock(ObjectMapper.class);
+        JsonFactory factory = mock(JsonFactory.class);
+        when(mapper.getFactory()).thenReturn(factory);
+        IOException cause = new IOException("Parser infrastructure failure");
+        when(factory.createParser("body")).thenThrow(cause);
+        CryptoServerSideException exception = assertThrows(CryptoServerSideException.class,
+                () -> new CryptoPayloadHandler(cryptoServer, mapper).createSessionContext("body", headers));
+        assertSame(cause, exception.getCause());
+    }
+
+    @Test
+    void responseSessionCryptoInitializationFailureIsAServerError() throws GeneralSecurityException {
+        NoSuchAlgorithmException cause = new NoSuchAlgorithmException("RSA unavailable");
+        when(cryptoServer.decryptSessionKeyToSecretKey("test:1", "wrapped")).thenThrow(cause);
+        CryptoServerSideException exception = assertThrows(CryptoServerSideException.class,
+                () -> handler.createResponseSessionContext(headers));
+        assertSame(cause, exception.getCause());
     }
 }

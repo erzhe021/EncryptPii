@@ -1,6 +1,6 @@
 # 敏感传输加密 SDK 快速上手
 
-本 SDK 为 Spring Boot Servlet 应用提供 HTTP 请求解密、响应加密、公钥接口和可选的 Vault KV v2 密钥管理。本文面向接入团队，介绍依赖配置、最小接入方式和生产部署注意事项。
+本 SDK 为 Spring Boot Servlet 应用提供 HTTP 请求解密、响应加密、公钥接口和 Vault KV v2 密钥管理。默认使用 Vault，本地开发可显式选择内存密钥模式；Vault 失败时不会自动回退。本文面向接入团队，介绍依赖配置、最小接入方式和生产部署注意事项。
 
 本仓库中 Java SDK 仅由 `server-with-sdk` 使用；它不是 Java 客户端 SDK。原 `client` 模块已移除，微信客户端使用独立的 `wechat/sdk`。SDK 的会话状态仅存于当前 Servlet 请求，不提供无 Web 请求的 ThreadLocal 回退；核心密钥解密不依赖 HTTP 请求上下文。
 
@@ -57,6 +57,7 @@ sensitive:
   transport:
     crypto:
       enabled: true
+      key-store: vault
       auto-rotate: true
       endpoint:
         enabled: true
@@ -95,18 +96,33 @@ Vault 地址与认证由 Spring Cloud Vault 管理。静态 Token 认证可将 `
 
 ### 本地开发：内存密钥
 
-本地验证可关闭 Vault：
+本地验证必须显式选择 `key-store=memory`，并关闭 Spring Cloud Vault，避免其初始化认证或访问 Vault：
 
 ```yaml
 sensitive:
   transport:
     crypto:
       enabled: true
-      vault:
-        enabled: false
+      key-store: memory
+      memory:
+        key-alias: in-memory-test-key
+spring:
+  cloud:
+    vault:
+      enabled: false
 ```
 
-SDK 会在应用启动时生成内存 RSA 密钥。该密钥不会持久化，应用重启后会变化；不适合多实例部署或需要跨重启保留客户端公钥状态的环境。
+SDK 会在应用启动时生成内存 RSA 密钥并输出开发模式警告。alias 固定且可配置，`keyId` 仍为 `<alias>:<数字版本>`：初始版本使用随机正整数（小于 2^52），降低不同启动之间 keyId 碰撞的概率，后续轮换按版本递增。内存密钥不会持久化，重启后客户端必须重新获取公钥；固定 alias 不意味着旧密文仍可解密。此模式不适合生产、多实例或需要跨重启保留密钥的环境，也不会与 Kong/Vault 的密钥共享。
+
+本仓库的 `server-with-sdk` 提供显式的 `memory` profile（alias 为 `demo-service`），可在没有 Vault 和 `VAULT_TOKEN` 的情况下启动：
+
+```bash
+./gradlew :server-with-sdk:bootRun --args='--spring.profiles.active=memory'
+```
+
+默认 `key-store=vault`。Vault 被关闭、路径或别名未配置、缺少 `VaultTemplate`、认证或密钥加载失败均会导致启动失败，不会进入内存模式。仅设置 `vault.enabled=false` 不再支持无 Vault 启动，旧的本地配置必须改为显式选择 `key-store=memory`。Vault 中没有密钥时仍遵循 `auto-bootstrap`：`true` 时在 Vault 中初始化，`false` 时启动失败。
+
+单元测试也可通过测试配置显式提供 `CryptoServer` Bean，自动配置会退让；不需要加解密时可关闭 `sensitive.transport.crypto.enabled`，并按需关闭 Spring Cloud Vault。
 
 SDK 配置统一绑定到 `SensitiveTransportCryptoProperties`；生命周期和 Vault 设置分别作为 `key-lifecycle`、`vault` 子配置。现有 YAML 配置前缀保持不变。
 
@@ -184,6 +200,8 @@ Content-Type: application/json
 
 SDK 自动注册 `CryptoExceptionHandler`，处理 SDK 加密协议异常，并按客户端错误或服务端错误返回 HTTP 4xx/5xx。`KeyExpiredException` 返回 `KEY_EXPIRED` 及最新公钥信息；加密错误响应会设置 `X-STC-Encrypted: false`，并在密钥过期响应中设置 `Cache-Control: no-store`。
 
+请求缺少字段、JSON/Base64 格式错误、IV 长度不为 12 字节、密文缺少完整的 16 字节 GCM 标签或 AES 会话密钥长度非法，归为客户端错误（HTTP 400）。GCM 验证失败使用 `DataTamperedException`；RSA 密文与候选私钥不匹配时允许尝试其他可用密钥。内部会话 context 缺失或误用、算法/密钥初始化失败和解析器非 JSON 格式类 I/O 故障归为服务端错误（HTTP 500），响应使用通用文案，具体原因保留在异常链和服务端日志中，不会伪装成请求格式错误。
+
 应用仍需自行处理业务异常、应用系统异常及其他通用异常。SDK 不会把任意 `GeneralSecurityException` 当成全局加密异常；加密流程中的底层错误应在 SDK 的 HTTP 边界转换为语义明确的加密异常。若应用要自定义加密异常响应，可提供自己的 `CryptoExceptionHandler` Bean 替代 SDK 默认实现。
 
 客户端只应在收到 `KEY_EXPIRED` 后按协议获取新公钥、重新生成会话材料并按业务幂等性决定是否重试；不要对所有 4xx/5xx 自动重放请求。
@@ -193,15 +211,17 @@ SDK 自动注册 `CryptoExceptionHandler`，处理 SDK 加密协议异常，并�
 | 配置 | 默认值 | 说明 |
 | --- | --- | --- |
 | `sensitive.transport.crypto.enabled` | `true` | 是否启用 SDK 自动配置 |
+| `sensitive.transport.crypto.key-store` | `vault` | 密钥存储模式；`memory` 必须显式选择，仅用于开发测试 |
+| `sensitive.transport.crypto.memory.key-alias` | `in-memory-test-key` | 内存模式的稳定 alias，与 Vault alias 独立 |
 | `sensitive.transport.crypto.auto-rotate` | `true` | 是否自动轮换密钥 |
 | `sensitive.transport.crypto.endpoint.enabled` | `true` | 是否暴露公钥接口 |
 | `sensitive.transport.crypto.endpoint.base-path` | `/sensitive-transport-crypto` | 公钥接口基础路径，可通过应用配置自定义 |
 | `sensitive.transport.crypto.key-lifecycle.validity-millis` | 365 天 | 密钥有效期 |
 | `sensitive.transport.crypto.key-lifecycle.rotation-before-expiry-millis` | 30 天 | 到期前触发自动轮换的时间窗口 |
 | `sensitive.transport.crypto.key-lifecycle.grace-period-millis` | 1 天 | 替换密钥激活后，旧密钥的解密宽限期 |
-| `sensitive.transport.crypto.vault.enabled` | `false` | 是否使用 Vault 管理密钥 |
-| `sensitive.transport.crypto.vault.key-alias` | `demo-service` | 密钥别名；`keyId` 格式为 `<keyAlias>:<version>` |
-| `sensitive.transport.crypto.vault.secret-path` | `secret/data/sensitive-transport-crypto/demo-service` | Vault KV v2 密钥路径 |
+| `sensitive.transport.crypto.vault.enabled` | `true` | `key-store=vault` 时必须启用，关闭不会触发内存回退 |
+| `sensitive.transport.crypto.vault.key-alias` | 无，Vault 模式必须配置 | 密钥别名；`keyId` 格式为 `<keyAlias>:<version>` |
+| `sensitive.transport.crypto.vault.secret-path` | 无，Vault 模式必须配置 | Vault KV v2 密钥路径 |
 | `sensitive.transport.crypto.vault.auto-bootstrap` | `true` | Vault 没有密钥时是否自动创建初始密钥 |
 
 Vault 认证方式、CAS 重试参数和 Kubernetes 认证设置见 [`vault/vault.md`](../vault/vault.md)。

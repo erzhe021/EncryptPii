@@ -1,6 +1,7 @@
 package com.ikea.crypto.stc.config;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotNull;
 import lombok.Data;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -26,6 +27,30 @@ public class SensitiveTransportCryptoProperties {
      * Whether expired keys are rotated automatically. Defaults to true.
      */
     private boolean autoRotate = true;
+
+    /**
+     * Key storage backend. Memory storage must be explicitly selected for development/testing.
+     */
+    @NotNull
+    private KeyStore keyStore = KeyStore.VAULT;
+
+    public enum KeyStore {
+        VAULT, MEMORY
+    }
+
+    /**
+     * Settings for explicitly selected, non-persistent memory storage.
+     */
+    @Valid
+    private MemoryProperties memory = new MemoryProperties();
+
+    @Data
+    public static class MemoryProperties {
+        /**
+         * Stable logical alias for development keys; it does not identify a specific key version.
+         */
+        private String keyAlias = "in-memory-test-key";
+    }
 
     /**
      * Key validity, rotation, and transition grace-period configuration.
