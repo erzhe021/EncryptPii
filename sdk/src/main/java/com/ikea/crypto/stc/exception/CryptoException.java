@@ -1,5 +1,7 @@
 package com.ikea.crypto.stc.exception;
 
+import java.io.Serial;
+
 /**
  * Base class for cryptographic errors.
  * <p>
@@ -7,12 +9,16 @@ package com.ikea.crypto.stc.exception;
  * It can be used to catch any cryptographic error, whether it is client-side or server-side.
  * </p>
  */
-public class CryptoException extends RuntimeException {
-    public CryptoException(String message) {
+public abstract class CryptoException extends RuntimeException {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
+
+    protected CryptoException(String message) {
         super(message);
     }
 
-    public CryptoException(String message, Throwable cause) {
+    protected CryptoException(String message, Throwable cause) {
         super(message, cause);
     }
 }

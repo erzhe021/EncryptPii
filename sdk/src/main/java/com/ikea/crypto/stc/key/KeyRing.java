@@ -167,6 +167,7 @@ public class KeyRing {
     /**
      * Finds a key entry by keyId. If keyId is null or blank, returns the active key entry.
      * If the specified key has expired beyond the grace period, it is purged and rejected (returns empty).
+     * Expired candidates are rechecked under the registration lock before removal.
      */
     public Optional<KeyEntry> findKeyEntry(String keyId) {
         if (keyId == null || keyId.isBlank()) {
@@ -177,24 +178,34 @@ public class KeyRing {
             return Optional.empty();
         }
         if (entry != activeKeyEntry && isExpiredBeyondGrace(entry.metadata())) {
-            log.warn("Key '{}' has expired beyond grace period and is rejected.", keyId);
-            purgeKey(keyId);
-            return Optional.empty();
+            synchronized (this) {
+                entry = keyEntriesById.get(keyId);
+                if (entry == null) {
+                    return Optional.empty();
+                }
+                if (entry != activeKeyEntry && isExpiredBeyondGrace(entry.metadata())) {
+                    log.warn("Key '{}' has expired beyond grace period and is rejected.", keyId);
+                    purgeKey(keyId);
+                    return Optional.empty();
+                }
+            }
         }
         return Optional.of(entry);
     }
 
     /**
-     * Returns all available key entries (active + transition keys within their grace period).
-     * Retired keys beyond the grace period are purged and excluded.
+     * Returns an unmodifiable snapshot of available key entries (active + transition keys within their grace period).
+     * Retired keys beyond the grace period are purged and excluded under the same lock as snapshot creation.
+     * Later registrations and purges do not change the returned collection.
      */
-    public Collection<KeyEntry> getAllKeyEntries() {
+    public synchronized Collection<KeyEntry> getAllKeyEntries() {
         purgeExpiredKeys();
-        return Collections.unmodifiableCollection(keyEntriesById.values());
+        return List.copyOf(keyEntriesById.values());
     }
 
     /**
      * Finds the active or latest valid key entry for a specific key alias.
+     * The active-key return path uses a single reference snapshot.
      */
     public Optional<KeyEntry> findActiveKeyEntry(String keyAlias) {
         if (keyAlias == null || keyAlias.isBlank()) {
@@ -206,8 +217,9 @@ public class KeyRing {
             return Optional.empty();
         }
         purgeExpiredKeys();
-        if (activeKeyEntry != null) {
-            return Optional.of(activeKeyEntry);
+        KeyEntry current = activeKeyEntry;
+        if (current != null) {
+            return Optional.of(current);
         }
         String prefix = targetAlias + ":";
         KeyEntry latest = null;
@@ -243,6 +255,7 @@ public class KeyRing {
 
     /**
      * Determines the current highest known version number in memory for the given key alias.
+     * The active-key fallback uses a single reference snapshot, independent of the map scan.
      */
     public long getCurrentVersion(String keyAlias) {
         String targetName = resolveKeyAlias(keyAlias);
@@ -250,8 +263,9 @@ public class KeyRing {
         if (maxVersion > 0) {
             return maxVersion;
         }
-        if (activeKeyEntry != null) {
-            KeyMetadata metadata = activeKeyEntry.metadata();
+        KeyEntry current = activeKeyEntry;
+        if (current != null) {
+            KeyMetadata metadata = current.metadata();
             if (metadata != null && targetName.equals(metadata.keyAlias()) && metadata.version() != null) {
                 return Objects.requireNonNull(metadata.version());
             }

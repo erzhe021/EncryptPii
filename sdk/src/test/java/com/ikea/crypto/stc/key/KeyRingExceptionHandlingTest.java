@@ -100,6 +100,36 @@ class KeyRingExceptionHandlingTest {
         assertTrue(keyRing.isExpiredBeyondGrace(old.metadata(), 1_200));
     }
 
+    @Test
+    void activeLookupReturnsActiveEntryForExplicitAndDefaultAliases() {
+        KeyRing.KeyEntry active = entry("test:1", 0);
+        keyRing.registerKeyEntry(active, true);
+
+        assertSame(active, keyRing.findActiveKeyEntry("test").orElseThrow());
+        assertSame(active, keyRing.findActiveKeyEntry(" test ").orElseThrow());
+        assertSame(active, keyRing.findActiveKeyEntry(null).orElseThrow());
+        assertSame(active, keyRing.findActiveKeyEntry(" ").orElseThrow());
+    }
+
+    @Test
+    void activeLookupFallsBackToLatestValidHistoricalEntry() {
+        KeyRing.KeyEntry historical = entry("test:2", Long.MAX_VALUE - 100);
+        keyRing.registerKeyEntry(entry("test:1", Long.MAX_VALUE - 100), false);
+        keyRing.registerKeyEntry(historical, false);
+
+        assertSame(historical, keyRing.findActiveKeyEntry("test").orElseThrow());
+        assertTrue(keyRing.findActiveKeyEntry(null).isEmpty());
+    }
+
+    @Test
+    void currentVersionRetainsActiveFallbackWhenNoPositiveVersionIsPresent() {
+        assertEquals(0, keyRing.getCurrentVersion("test"));
+        keyRing.registerKeyEntry(entry("test:-1", 0), true);
+
+        assertEquals(-1, keyRing.getCurrentVersion("test"));
+        assertEquals(-1, keyRing.getCurrentVersion(null));
+    }
+
     private KeyRing.KeyEntry entry(String keyId, long expiresAt) {
         return new KeyRing.KeyEntry(new KeyMetadata(keyId, 0, expiresAt), new KeyPair(null, null));
     }

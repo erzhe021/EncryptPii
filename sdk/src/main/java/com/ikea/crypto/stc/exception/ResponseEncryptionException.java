@@ -1,10 +1,16 @@
 package com.ikea.crypto.stc.exception;
 
+import java.io.Serial;
+
 /**
- * Thrown when the response from the cryptographic service cannot be decrypted or is otherwise invalid.
- * This can occur due to issues with the encryption process, corrupted data, or mismatched keys.
+ * Exception thrown when there is an error during the encryption of a response.
+ * This exception indicates that the server encountered an issue while attempting to encrypt the response data.
  */
 public class ResponseEncryptionException extends CryptoServerSideException {
+
+    @Serial
+    private static final long serialVersionUID = 1L;
+
     public ResponseEncryptionException(String message) {
         super(message);
     }
@@ -13,4 +19,3 @@ public class ResponseEncryptionException extends CryptoServerSideException {
         super(message, cause);
     }
 }
-
