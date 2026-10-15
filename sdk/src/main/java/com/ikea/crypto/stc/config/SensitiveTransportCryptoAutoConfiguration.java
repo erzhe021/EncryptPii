@@ -60,10 +60,7 @@ public class SensitiveTransportCryptoAutoConfiguration {
         }
         VaultProperties vaultProperties = cryptoProperties.getVault();
         KeyLifecycleProperties keyLifecycleProperties = cryptoProperties.getKeyLifecycle();
-        if (vaultProperties == null || !vaultProperties.isEnabled()) {
-            throw new IllegalStateException(
-                    "Vault key management is required for key-store=VAULT: sensitive.transport.crypto.vault.enabled must be true");
-        }
+        Assert.notNull(vaultProperties, "Vault configuration is required for key-store=VAULT");
         Assert.hasText(vaultProperties.getSecretPath(),
                 "sensitive.transport.crypto.vault.secret-path must be configured");
         Assert.hasText(vaultProperties.getKeyAlias(),

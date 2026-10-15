@@ -29,8 +29,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest(properties = {
         "spring.cloud.vault.enabled=false",
         "spring.cloud.vault.token=test-token",
-        "sensitive.transport.crypto.key-store=memory",
-        "sensitive.transport.crypto.vault.enabled=false"
+        "sensitive.transport.crypto.key-store=memory"
 })
 @AutoConfigureMockMvc
 class SdkServerIntegrationTest {

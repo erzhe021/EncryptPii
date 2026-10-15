@@ -10,6 +10,7 @@ import com.ikea.crypto.stc.vault.VaultKeySynchronizer;
 import com.ikea.crypto.stc.web.advice.RequestDecryptAdvice;
 import com.ikea.crypto.stc.web.advice.ResponseEncryptAdvice;
 import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
+import com.ikea.crypto.stc.web.endpoint.PublicKeyEndpoint;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -71,13 +72,6 @@ class ServerOnlyAutoConfigurationTest {
                                 .isEqualTo("test-service:1");
                     });
         });
-    }
-
-    @Test
-    void disabledVaultDoesNotImplicitlySelectMemory() {
-        webRunner.withPropertyValues("sensitive.transport.crypto.vault.enabled=false").run(context ->
-                assertThat(context).hasFailed().getFailure().hasRootCauseMessage(
-                        "Vault key management is required for key-store=VAULT: sensitive.transport.crypto.vault.enabled must be true"));
     }
 
     @Test
@@ -150,7 +144,6 @@ class ServerOnlyAutoConfigurationTest {
         AtomicReference<String> firstPublicKey = new AtomicReference<>();
         WebApplicationContextRunner memoryRunner = webRunner.withPropertyValues(
                 "sensitive.transport.crypto.key-store=memory",
-                "sensitive.transport.crypto.vault.enabled=false",
                 "sensitive.transport.crypto.memory.key-alias=local-service");
         memoryRunner.run(context -> {
             assertThat(context).hasNotFailed();
@@ -197,6 +190,27 @@ class ServerOnlyAutoConfigurationTest {
         webRunner.withBean(CryptoServer.class, () -> testServer).run(context -> {
             assertThat(context).hasNotFailed().hasSingleBean(CryptoServer.class);
             assertThat(context.getBean(CryptoServer.class)).isSameAs(testServer);
+        });
+    }
+
+    @Test
+    void publicKeyEndpointIsEnabledByDefault() {
+        webRunner.withPropertyValues("sensitive.transport.crypto.key-store=memory")
+                .run(context -> assertThat(context).hasNotFailed().hasSingleBean(PublicKeyEndpoint.class));
+    }
+
+    @Test
+    void disablingEndpointRetainsCryptoComponents() {
+        webRunner.withPropertyValues(
+                "sensitive.transport.crypto.key-store=memory",
+                "sensitive.transport.crypto.endpoint.enabled=false",
+                "sensitive.transport.crypto.auto-rotate=false").run(context -> {
+            assertThat(context).hasNotFailed()
+                    .hasSingleBean(CryptoServer.class)
+                    .hasSingleBean(RequestDecryptAdvice.class)
+                    .hasSingleBean(ResponseEncryptAdvice.class)
+                    .doesNotHaveBean(PublicKeyEndpoint.class);
+            assertThat(context.getBean(CryptoServer.class).keyRing().isAutoRotate()).isFalse();
         });
     }
 

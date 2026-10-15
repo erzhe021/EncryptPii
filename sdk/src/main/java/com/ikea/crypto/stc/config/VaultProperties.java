@@ -16,12 +16,7 @@ import org.springframework.validation.annotation.Validated;
 public class VaultProperties {
 
     /**
-     * Whether Vault key management is enabled. Required when key-store is VAULT.
-     */
-    private boolean enabled = true;
-
-    /**
-     * Vault KV v2 secret path (relative to /v1/), e.g. secret/data/sensitive-transport-crypto/demo-service
+     * Vault KV v2 secret path, e.g. secret/data/sensitive-transport-crypto/demo-service
      */
     private String secretPath;
 

@@ -2,7 +2,7 @@
 
 本 SDK 为 Spring Boot Servlet 应用提供 HTTP 请求解密、响应加密、公钥接口和 Vault KV v2 密钥管理。默认使用 Vault，本地开发可显式选择内存密钥模式；Vault 失败时不会自动回退。本文面向接入团队，介绍依赖配置、最小接入方式和生产部署注意事项。
 
-本仓库中 Java SDK 仅由 `server-with-sdk` 使用；它不是 Java 客户端 SDK。原 `client` 模块已移除，微信客户端使用独立的 `wechat/sdk`。SDK 的会话状态仅存于当前 Servlet 请求，不提供无 Web 请求的 ThreadLocal 回退；核心密钥解密不依赖 HTTP 请求上下文。
+SDK 的会话状态仅存于当前 Servlet 请求，不提供无 Web 请求的 ThreadLocal 回退；核心密钥解密不依赖 HTTP 请求上下文。
 
 ## 1. 环境要求
 
@@ -18,16 +18,6 @@ Gradle：
 
 ```groovy
 implementation 'com.ikea.crypto:sensitive-transport-crypto-spring-boot-starter:1.0-SNAPSHOT'
-```
-
-Maven：
-
-```xml
-<dependency>
-    <groupId>com.ikea.crypto</groupId>
-    <artifactId>sensitive-transport-crypto-spring-boot-starter</artifactId>
-    <version>1.0-SNAPSHOT</version>
-</dependency>
 ```
 
 在本仓库开发或验证尚未发布的版本时，可使用 Gradle 项目依赖：
@@ -56,31 +46,28 @@ implementation project(':sdk')
 sensitive:
   transport:
     crypto:
-      enabled: true
       key-store: vault
       auto-rotate: true
-      endpoint:
-        enabled: true
-        base-path: /crypto/server
       key-lifecycle:
         validity-millis: 31536000000
         rotation-before-expiry-millis: 2592000000
         grace-period-millis: 864000000
       vault:
-        enabled: true
-        secret-path: secret/data/crypto/my-service
-        key-alias: my-service
-        auto-bootstrap: false
+        secret-path: secret/data/crypto/demo-service
+        key-alias: demo-service
+        auto-bootstrap: true
 spring:
   cloud:
     vault:
       uri: ${VAULT_ADDR}
       authentication: KUBERNETES
       kubernetes:
-        role: my-service
+        role: demo-service
         kubernetes-path: kubernetes
         service-account-token-file: /var/run/secrets/kubernetes.io/serviceaccount/token
 ```
+
+SDK 和默认公钥接口均默认启用，无需显式配置 `enabled: true`。示例显式声明自动轮换和自动引导策略，生产环境应按密钥管理流程决定是否启用。
 
 示例生命周期参数满足以下约束：
 
@@ -92,8 +79,6 @@ grace-period-millis < rotation-before-expiry-millis < validity-millis
 
 Vault 地址与认证由 Spring Cloud Vault 管理。静态 Token 认证可将 `spring.cloud.vault.authentication` 设为 `TOKEN`，并通过 `spring.cloud.vault.token` 从环境变量或密钥管理系统注入 Token。
 
-升级时将原先 `sensitive.transport.crypto.vault` 下的 Vault 地址和认证配置迁移到 `spring.cloud.vault`；密钥路径、别名和自动引导仍由 SDK 自身配置管理。
-
 ### 本地开发：内存密钥
 
 本地验证必须显式选择 `key-store=memory`，并关闭 Spring Cloud Vault，避免其初始化认证或访问 Vault：
@@ -102,7 +87,6 @@ Vault 地址与认证由 Spring Cloud Vault 管理。静态 Token 认证可将 `
 sensitive:
   transport:
     crypto:
-      enabled: true
       key-store: memory
       memory:
         key-alias: in-memory-test-key
@@ -112,19 +96,13 @@ spring:
       enabled: false
 ```
 
-SDK 会在应用启动时生成内存 RSA 密钥并输出开发模式警告。alias 固定且可配置，`keyId` 仍为 `<alias>:<数字版本>`：初始版本使用随机正整数（小于 2^52），降低不同启动之间 keyId 碰撞的概率，后续轮换按版本递增。内存密钥不会持久化，重启后客户端必须重新获取公钥；固定 alias 不意味着旧密文仍可解密。此模式不适合生产、多实例或需要跨重启保留密钥的环境，也不会与 Kong/Vault 的密钥共享。
+SDK 会在应用启动时生成内存 RSA 密钥并输出开发模式警告。alias 固定且可配置，`keyId` 仍为 `<alias>:<数字版本>`：初始版本使用随机正整数（小于 2^52），降低不同启动之间 keyId 碰撞的概率，后续轮换按版本递增。内存密钥不会持久化，重启后客户端必须重新获取公钥；固定 alias 不意味着旧密文仍可解密。此模式不适合生产、多实例或需要跨重启保留密钥的环境，也不会与 Vault 的密钥共享。
 
-本仓库的 `server-with-sdk` 提供显式的 `memory` profile（alias 为 `demo-service`），可在没有 Vault 和 `VAULT_TOKEN` 的情况下启动：
-
-```bash
-./gradlew :server-with-sdk:bootRun --args='--spring.profiles.active=memory'
-```
-
-默认 `key-store=vault`。Vault 被关闭、路径或别名未配置、缺少 `VaultTemplate`、认证或密钥加载失败均会导致启动失败，不会进入内存模式。仅设置 `vault.enabled=false` 不再支持无 Vault 启动，旧的本地配置必须改为显式选择 `key-store=memory`。Vault 中没有密钥时仍遵循 `auto-bootstrap`：`true` 时在 Vault 中初始化，`false` 时启动失败。
+默认 `key-store=vault`。Vault 被关闭、路径或别名未配置、缺少 `VaultTemplate`、认证或密钥加载失败均会导致启动失败，不会进入内存模式。无 Vault 的本地开发必须显式选择 `key-store=memory`。Vault 中没有密钥时由 `auto-bootstrap` 决定行为：`true` 时在 Vault 中初始化，`false` 时启动失败。
 
 单元测试也可通过测试配置显式提供 `CryptoServer` Bean，自动配置会退让；不需要加解密时可关闭 `sensitive.transport.crypto.enabled`，并按需关闭 Spring Cloud Vault。
 
-SDK 配置统一绑定到 `SensitiveTransportCryptoProperties`；生命周期和 Vault 设置分别作为 `key-lifecycle`、`vault` 子配置。现有 YAML 配置前缀保持不变。
+SDK 配置统一绑定到 `SensitiveTransportCryptoProperties`；生命周期和 Vault 设置分别作为 `key-lifecycle`、`vault` 子配置。
 
 ## 4. 标注需要加解密的接口
 
@@ -178,7 +156,7 @@ GET /sensitive-transport-crypto/public-key
 加密请求使用以下请求头和 JSON 请求体：
 
 ```http
-X-STC-Key-Id: my-service:1
+X-STC-Key-Id: demo-service:1
 X-STC-Session-Key: <RSA 加密后的 AES 会话密钥，Base64>
 Content-Type: application/json
 ```
@@ -216,10 +194,9 @@ SDK 自动注册 `CryptoExceptionHandler`，处理 SDK 加密协议异常，并�
 | `sensitive.transport.crypto.auto-rotate` | `true` | 是否自动轮换密钥 |
 | `sensitive.transport.crypto.endpoint.enabled` | `true` | 是否暴露公钥接口 |
 | `sensitive.transport.crypto.endpoint.base-path` | `/sensitive-transport-crypto` | 公钥接口基础路径，可通过应用配置自定义 |
-| `sensitive.transport.crypto.key-lifecycle.validity-millis` | 365 天 | 密钥有效期 |
-| `sensitive.transport.crypto.key-lifecycle.rotation-before-expiry-millis` | 30 天 | 到期前触发自动轮换的时间窗口 |
-| `sensitive.transport.crypto.key-lifecycle.grace-period-millis` | 1 天 | 替换密钥激活后，旧密钥的解密宽限期 |
-| `sensitive.transport.crypto.vault.enabled` | `true` | `key-store=vault` 时必须启用，关闭不会触发内存回退 |
+| `sensitive.transport.crypto.key-lifecycle.validity-millis` | 31536000000 (365天) | 密钥有效期 |
+| `sensitive.transport.crypto.key-lifecycle.rotation-before-expiry-millis` | 2592000000 (30天) | 到期前触发自动轮换的时间窗口 |
+| `sensitive.transport.crypto.key-lifecycle.grace-period-millis` | 864000000 (1天) | 替换密钥激活后，旧密钥的解密宽限期 |
 | `sensitive.transport.crypto.vault.key-alias` | 无，Vault 模式必须配置 | 密钥别名；`keyId` 格式为 `<keyAlias>:<version>` |
 | `sensitive.transport.crypto.vault.secret-path` | 无，Vault 模式必须配置 | Vault KV v2 密钥路径 |
 | `sensitive.transport.crypto.vault.auto-bootstrap` | `true` | Vault 没有密钥时是否自动创建初始密钥 |
@@ -238,5 +215,3 @@ Vault 认证方式、CAS 重试参数和 Kubernetes 认证设置见 [`vault/vaul
 ## 相关文档
 
 - [`../vault/vault.md`](../vault/vault.md)：Vault 密钥生命周期、多 Pod 同步和轮换设计
-- [`../README.md`](../README.md)：项目结构和演示服务说明
-- [`../wechat/README.md`](../wechat/README.md)：微信小程序客户端示例
