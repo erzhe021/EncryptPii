@@ -4,6 +4,7 @@ import com.ikea.crypto.stc.annotation.DecryptRequest;
 import com.ikea.crypto.stc.annotation.EncryptResponse;
 import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.exception.CryptoServerSideException;
+import com.ikea.crypto.stc.exception.InvalidCryptoRequestException;
 import com.ikea.crypto.stc.model.SessionKeyHeaders;
 import com.ikea.crypto.stc.session.CryptoSessionContext;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
@@ -12,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpInputMessage;
+import org.springframework.http.MediaType;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.servlet.mvc.method.annotation.RequestBodyAdvice;
@@ -61,8 +63,17 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
         try {
             CryptoSessionContext sessionContext;
             if (decryptRequest) {
+                MediaType contentType = inputMessage.getHeaders().getContentType();
+                if (contentType == null
+                        || (!MediaType.APPLICATION_JSON.equalsTypeAndSubtype(contentType)
+                        && !MediaType.APPLICATION_FORM_URLENCODED.equalsTypeAndSubtype(contentType))) {
+                    throw new InvalidCryptoRequestException(
+                            "DecryptRequest supports only application/json and application/x-www-form-urlencoded");
+                }
                 String encryptedBody = new String(inputMessage.getBody().readAllBytes(), StandardCharsets.UTF_8);
-                sessionContext = payloadHandler.createSessionContext(encryptedBody, sessionKeyHeaders);
+                sessionContext = MediaType.APPLICATION_FORM_URLENCODED.equalsTypeAndSubtype(contentType)
+                        ? payloadHandler.createFormSessionContext(encryptedBody, sessionKeyHeaders)
+                        : payloadHandler.createSessionContext(encryptedBody, sessionKeyHeaders);
                 String decryptedBody = payloadHandler.decrypt(sessionContext);
                 CryptoSessionContextAccessor.setCryptoSessionContext(sessionContext);
                 return new HttpInputMessage() {

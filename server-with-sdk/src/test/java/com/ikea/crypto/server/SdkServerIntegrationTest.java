@@ -20,6 +20,8 @@ import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilde
 import javax.crypto.Cipher;
 import javax.crypto.KeyGenerator;
 import javax.crypto.SecretKey;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -92,6 +94,21 @@ class SdkServerIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(header().doesNotExist("X-STC-Encrypted"))
                 .andExpect(jsonPath("$.data.name").value("demo"));
+    }
+
+    @Test
+    void encryptedUrlEncodedFormIsParsedAfterDecryption() throws Exception {
+        JsonNode encrypted = mapper.readTree(encryptRequest("name=Alice+Smith&phone=123%2B456"));
+        String formCiphertext = "ivBase64="
+                + URLEncoder.encode(encrypted.path("ivBase64").asText(), StandardCharsets.UTF_8)
+                + "&encryptedDataBase64="
+                + URLEncoder.encode(encrypted.path("encryptedDataBase64").asText(), StandardCharsets.UTF_8);
+        mvc.perform(sessionRequest("/crypto/server/form-urlencoded")
+                        .contentType("application/x-www-form-urlencoded")
+                        .content(formCiphertext))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.name").value("Alice Smith"))
+                .andExpect(jsonPath("$.data.phone").value("123+456"));
     }
 
     @Test

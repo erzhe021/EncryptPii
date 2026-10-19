@@ -27,6 +27,7 @@ export interface SendOptions {
   mode: TransportMode;
   endpoint: string;
   data: JsonValue;
+  contentType?: 'application/json' | 'application/x-www-form-urlencoded';
   headers?: Record<string, string>;
 }
 
@@ -53,6 +54,8 @@ export interface DetailedResult<T> {
   decryptResponse: boolean;
   cipherRequest: CipherRequest | null;
   cipherResponse: CipherResponse | null;
+  /** Content type and STC headers sent with the business request; excludes application credentials. */
+  requestHeaders: Record<string, string>;
   stcHeaders: { 'X-STC-Key-Id': string; 'X-STC-Session-Key': string } | null;
   timings: { total: number; encryption: number; http: number; decryption: number };
 }

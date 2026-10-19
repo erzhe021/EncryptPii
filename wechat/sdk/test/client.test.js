@@ -77,6 +77,14 @@ function decryptBody(payload, sessionKey) {
   return JSON.parse(Buffer.concat([cipher.update(data.subarray(0, -16)), cipher.final()]).toString());
 }
 
+function decryptText(payload, sessionKey) {
+  const data = Buffer.from(payload.encryptedDataBase64, 'base64');
+  const iv = Buffer.from(payload.ivBase64, 'base64');
+  const cipher = nodeCrypto.createDecipheriv('aes-256-gcm', sessionKey, iv);
+  cipher.setAuthTag(data.subarray(-16));
+  return Buffer.concat([cipher.update(data.subarray(0, -16)), cipher.final()]).toString();
+}
+
 function encryptResponse(data, sessionKey) {
   const iv = nodeCrypto.randomBytes(12);
   const cipher = nodeCrypto.createCipheriv('aes-256-gcm', sessionKey, iv);
@@ -132,11 +140,15 @@ test('all modes preserve routing and interoperate with independent RSA/AES primi
     assert.deepEqual(detailed.data, expected);
     assert.equal(Boolean(detailed.cipherRequest), ['bidirectional', 'request-only'].includes(mode));
     assert.equal(Boolean(detailed.cipherResponse), ['bidirectional', 'response-only'].includes(mode));
+    assert.equal(detailed.requestHeaders['Content-Type'], 'application/json');
     if (mode !== 'plain') {
       assert.equal(detailed.stcHeaders['X-STC-Key-Id'], firstKey.info.keyId);
       assert.ok(detailed.stcHeaders['X-STC-Session-Key']);
+      assert.equal(detailed.requestHeaders['X-STC-Key-Id'], firstKey.info.keyId);
+      assert.ok(detailed.requestHeaders['X-STC-Session-Key']);
     } else {
       assert.equal(detailed.stcHeaders, null);
+      assert.deepEqual(detailed.requestHeaders, { 'Content-Type': 'application/json' });
     }
     assert.equal(Object.hasOwn(detailed, 'sessionKey'), false);
     assert.equal(Object.hasOwn(detailed, 'request'), false);
@@ -144,6 +156,69 @@ test('all modes preserve routing and interoperate with independent RSA/AES primi
   }
   assert.equal(requests.filter((request) => request.method === 'GET').length, 1);
   assert.equal(new Set(sessions).size, 6);
+});
+
+test('form-url-encoded requests encrypt form serialization and preserve the media type', async () => {
+  const requests = [];
+  const client = createClient(options(async (request) => {
+    requests.push(request);
+    if (request.method === 'GET') {
+      return { statusCode: 200, data: firstKey.info };
+    }
+    assert.equal(request.headers['content-type'], 'application/x-www-form-urlencoded');
+    const payload = Object.fromEntries(new URLSearchParams(request.data));
+    const sessionKey = unwrapSession(request.headers['X-STC-Session-Key'], firstKey);
+    const plaintext = decryptText(payload, sessionKey);
+    assert.equal(plaintext, 'name=%E5%BC%A0%E4%B8%89&phone=111%2B222');
+    return { statusCode: 200, data: result({ name: '张三', phone: '111+222' }) };
+  }));
+
+  const response = await client.send({
+    mode: 'request-only',
+    endpoint: '/form',
+    contentType: 'application/x-www-form-urlencoded',
+    data: { name: '张三', phone: '111+222' }
+  });
+  assert.deepEqual(response, result({ name: '张三', phone: '111+222' }));
+  assert.equal(requests.length, 2);
+
+  const detailed = await client.sendDetailed({
+    mode: 'request-only',
+    endpoint: '/form',
+    contentType: 'application/x-www-form-urlencoded',
+    data: { name: '张三', phone: '111+222' }
+  });
+  assert.equal(detailed.requestHeaders['Content-Type'], 'application/x-www-form-urlencoded');
+});
+
+test('unsupported form values and media types fail before sending requests', async () => {
+  let requestCount = 0;
+  const client = createClient(options(async () => {
+    requestCount += 1;
+    return { statusCode: 200, data: result({}) };
+  }));
+  await assert.rejects(client.send({
+    mode: 'request-only', endpoint: '/form',
+    contentType: 'application/x-www-form-urlencoded', data: { nested: { value: 1 } }
+  }), { code: 'INVALID_ARGUMENT' });
+  await assert.rejects(client.send({
+    mode: 'request-only', endpoint: '/form',
+    contentType: 'multipart/form-data', data: { field: 'value' }
+  }), { code: 'INVALID_ARGUMENT' });
+  assert.equal(requestCount, 0);
+});
+
+test('response diagnostics retain the received content type header', async () => {
+  const client = createClient(options(async () => ({
+    statusCode: 200,
+    data: result({ ok: true }),
+    header: { 'content-type': 'application/json; charset=utf-8' }
+  })));
+
+  const details = await client.sendDetailed({ mode: 'plain', endpoint: '/plain', data: {} });
+  assert.deepEqual(details.responseHeaders, {
+    'Content-Type': 'application/json; charset=utf-8'
+  });
 });
 
 test('plain requests do not require random support or fetch public keys', async () => {

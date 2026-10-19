@@ -54,6 +54,19 @@ class CryptoPayloadHandlerTest {
     }
 
     @Test
+    void parsesUrlEncodedEncryptedPayloadAndRejectsInvalidFormFields() {
+        CryptoSessionContext context = handler.createFormSessionContext(
+                "ivBase64=iv%2Bvalue&encryptedDataBase64=data%2Fvalue%3D", headers);
+
+        assertEquals("iv+value", context.requestPayload().ivBase64());
+        assertEquals("data/value=", context.requestPayload().encryptedDataBase64());
+        assertThrows(InvalidCryptoRequestException.class, () -> handler.createFormSessionContext(
+                "ivBase64=first&ivBase64=second&encryptedDataBase64=data", headers));
+        assertThrows(InvalidCryptoRequestException.class, () -> handler.createFormSessionContext(
+                "ivBase64=iv&encryptedDataBase64=data&extra=value", headers));
+    }
+
+    @Test
     void rejectsMissingBodyOrHeaders() {
         assertThrows(InvalidCryptoRequestException.class, () -> handler.createSessionContext(null, headers));
         assertThrows(InvalidCryptoRequestException.class, () -> handler.createSessionContext(" ", headers));

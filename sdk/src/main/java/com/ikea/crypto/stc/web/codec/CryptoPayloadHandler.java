@@ -19,7 +19,11 @@ import com.ikea.crypto.stc.util.EncodingUtils;
 
 import javax.crypto.SecretKey;
 import java.io.IOException;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -71,6 +75,38 @@ public class CryptoPayloadHandler {
             throw new InvalidCryptoRequestException("Invalid encrypted request payload", e);
         } catch (IOException e) {
             throw new CryptoServerSideException("Failed to read encrypted request payload", e);
+        }
+    }
+
+    public CryptoSessionContext createFormSessionContext(String encryptedRequestBody,
+                                                         SessionKeyHeaders sessionKeyHeaders) {
+        if (encryptedRequestBody == null || encryptedRequestBody.isBlank()) {
+            throw new InvalidCryptoRequestException("Encrypted request body is required.");
+        }
+        Map<String, String> fields = new HashMap<>();
+        for (String pair : encryptedRequestBody.split("&", -1)) {
+            int separator = pair.indexOf('=');
+            if (separator < 0) {
+                throw new InvalidCryptoRequestException("Invalid URL-encoded encrypted request payload.");
+            }
+            try {
+                String name = URLDecoder.decode(pair.substring(0, separator), StandardCharsets.UTF_8);
+                String value = URLDecoder.decode(pair.substring(separator + 1), StandardCharsets.UTF_8);
+                if (fields.putIfAbsent(name, value) != null) {
+                    throw new InvalidCryptoRequestException("Duplicate field in encrypted request payload.");
+                }
+            } catch (IllegalArgumentException e) {
+                throw new InvalidCryptoRequestException("Invalid URL-encoded encrypted request payload.", e);
+            }
+        }
+        if (fields.size() != 2 || !fields.containsKey(IV_FIELD) || !fields.containsKey(ENCRYPTED_DATA_FIELD)) {
+            throw new InvalidCryptoRequestException(
+                    "Request body may contain only ivBase64 and encryptedDataBase64");
+        }
+        try {
+            return createSessionContext(objectMapper.writeValueAsString(fields), sessionKeyHeaders);
+        } catch (JsonProcessingException e) {
+            throw new CryptoServerSideException("Failed to serialize URL-encoded encrypted request payload", e);
         }
     }
 

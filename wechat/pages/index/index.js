@@ -5,6 +5,7 @@ const MODES = [
   { id: 'plain', title: '普通传输', description: '明文请求与响应' },
   { id: 'bidirectional', title: '双向加密', description: '请求和响应均加密' },
   { id: 'request-only', title: '请求加密', description: '仅加密敏感请求' },
+  { id: 'form-urlencoded', title: '请求加密(Form)', description: '加密后按 URL 编码表单解析' },
   { id: 'response-only', title: '响应加密(正常)', description: '仅加密敏感响应' },
   { id: 'response-only/business-exception', title: '响应加密(业务异常)', description: 'HTTP 200 业务异常' },
   { id: 'response-only/client-exception', title: '响应加密(客户端异常)', description: 'HTTP 400 客户端异常' },
@@ -53,16 +54,14 @@ function resultLabel(title, transmitted, value, direction) {
 }
 
 function buildResult(details) {
-  const responseHeaderName = 'x-stc-encrypted';
-  const headerKey = details.responseHeaders
-    ? Object.keys(details.responseHeaders).find(
-        (key) => key && key.toLowerCase() === responseHeaderName)
-    : null;
-  const responseHeaderValue = headerKey ? details.responseHeaders[headerKey] : null;
-
-  const normalizedHeader = responseHeaderValue !== null && responseHeaderValue !== undefined
-    ? { 'X-STC-Encrypted': String(responseHeaderValue) }
-    : null;
+  const normalizedHeader = {};
+  for (const [name, value] of Object.entries(details.responseHeaders || {})) {
+    const normalizedName = name.toLowerCase() === 'x-stc-encrypted' ? 'X-STC-Encrypted'
+      : name.toLowerCase() === 'content-type' ? 'Content-Type' : null;
+    if (normalizedName) {
+      normalizedHeader[normalizedName] = String(value);
+    }
+  }
 
   const values = {
     requestHeaders: details.requestHeaders ? formatResult(details.requestHeaders) : null,
@@ -70,7 +69,7 @@ function buildResult(details) {
     requestCipher: details.requestCipher ? formatResult(details.requestCipher) : 'N/A',
     responsePlain: details.responsePlain === null ? 'N/A' : formatResult(details.responsePlain),
     responseCipher: details.responseCipher ? formatResult(details.responseCipher) : 'N/A',
-    responseHeaders: normalizedHeader ? formatResult(normalizedHeader) : null,
+    responseHeaders: Object.keys(normalizedHeader).length > 0 ? formatResult(normalizedHeader) : null,
     latency: formatResult(details.latency)
   };
   return {

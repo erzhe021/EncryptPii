@@ -33,8 +33,10 @@ function parseResult(response) {
 // Reject oversized payloads before they reach the synchronous Forge
 // routines; a multi-megabyte string would freeze the JS thread.
 const MAX_PAYLOAD_BYTES = 1024 * 1024;
+const JSON_CONTENT_TYPE = 'application/json';
+const FORM_CONTENT_TYPE = 'application/x-www-form-urlencoded';
 
-function serializeData(data) {
+function serializeJsonData(data) {
   let serialized;
   try {
     serialized = JSON.stringify(data);
@@ -48,6 +50,46 @@ function serializeData(data) {
     throw new SdkError('INVALID_ARGUMENT', `Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
   }
   return serialized;
+}
+
+function encodeFormComponent(value) {
+  try {
+    return encodeURIComponent(value)
+      .replace(/[!'()~]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`)
+      .replace(/%20/g, '+');
+  } catch (cause) {
+    throw new SdkError('INVALID_ARGUMENT', 'Form fields must contain valid Unicode', cause);
+  }
+}
+
+function serializeFormData(data) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new SdkError('INVALID_ARGUMENT', 'Form data must be an object of scalar values');
+  }
+  const fields = [];
+  for (const [name, value] of Object.entries(data)) {
+    if (value === null || value === undefined
+        || !['string', 'number', 'boolean'].includes(typeof value)
+        || (typeof value === 'number' && !Number.isFinite(value))) {
+      throw new SdkError('INVALID_ARGUMENT', 'Form fields must have string, number or boolean values');
+    }
+    fields.push(`${encodeFormComponent(name)}=${encodeFormComponent(String(value))}`);
+  }
+  const serialized = fields.join('&');
+  if (serialized.length > MAX_PAYLOAD_BYTES) {
+    throw new SdkError('INVALID_ARGUMENT', `Payload exceeds ${MAX_PAYLOAD_BYTES} bytes`);
+  }
+  return serialized;
+}
+
+function serializeData(data, contentType) {
+  if (contentType === FORM_CONTENT_TYPE) {
+    return serializeFormData(data);
+  }
+  if (contentType === JSON_CONTENT_TYPE) {
+    return serializeJsonData(data);
+  }
+  throw new SdkError('INVALID_ARGUMENT', 'Unsupported request content type');
 }
 
 function isCipherEnvelope(value) {
@@ -79,6 +121,21 @@ function headerValue(headers, name) {
     }
   }
   return null;
+}
+
+function includeContentType(headers) {
+  if (!headers || typeof headers !== 'object' || Object.keys(headers).length === 0) {
+    return null;
+  }
+  const contentType = headerValue(headers, 'Content-Type');
+  if (contentType === null) {
+    return headers;
+  }
+  return {
+    ...Object.fromEntries(Object.entries(headers)
+      .filter(([name]) => name.toLowerCase() !== 'content-type')),
+    'Content-Type': contentType
+  };
 }
 
 function isEncryptedResponse(headers, raw) {
@@ -154,14 +211,17 @@ function createClient(options) {
 
   const keys = createKeyManager(request, publicKeyPath);
 
-  async function sendOnce(mode, endpoint, inputData, headers, serverKey, startedAt) {
+  async function sendOnce(mode, endpoint, inputData, serializedData, headers, serverKey, startedAt, contentType) {
     const encrypted = mode.encryptRequest || mode.decryptResponse;
     const encryptionStartedAt = Date.now();
     const session = encrypted
-      ? await crypto.prepare(serializeData(inputData), serverKey, mode.encryptRequest) : null;
+      ? await crypto.prepare(serializedData, serverKey, mode.encryptRequest) : null;
     const encryptionFinishedAt = Date.now();
-    const body = mode.encryptRequest ? session.payload : inputData;
+    const body = mode.encryptRequest
+      ? (contentType === FORM_CONTENT_TYPE ? serializeFormData(session.payload) : session.payload)
+      : contentType === FORM_CONTENT_TYPE ? serializedData : inputData;
     const requestHeaders = Object.assign({}, headers);
+    requestHeaders['content-type'] = contentType;
     if (encrypted) {
       requestHeaders[KEY_ID_HEADER] = serverKey.keyId;
       requestHeaders[SESSION_KEY_HEADER] = session.encryptedSessionKeyBase64;
@@ -217,7 +277,14 @@ function createClient(options) {
       decryptResponse: mode.decryptResponse,
       cipherRequest: mode.encryptRequest ? body : null,
       cipherResponse: decryptResponse ? raw : null,
-      responseHeaders: responseHeaders && Object.keys(responseHeaders).length > 0 ? responseHeaders : null,
+      requestHeaders: {
+        'Content-Type': contentType,
+        ...(encrypted ? {
+          [KEY_ID_HEADER]: requestHeaders[KEY_ID_HEADER],
+          [SESSION_KEY_HEADER]: requestHeaders[SESSION_KEY_HEADER]
+        } : {})
+      },
+      responseHeaders: includeContentType(responseHeaders),
       stcHeaders: encrypted
         ? {
           [KEY_ID_HEADER]: requestHeaders[KEY_ID_HEADER],
@@ -241,13 +308,19 @@ function createClient(options) {
     const mode = MODES[input.mode];
     const endpoint = validatePath(input.endpoint);
     const headers = normalizeHeaders(input.headers);
+    const contentType = input.contentType === undefined ? JSON_CONTENT_TYPE : input.contentType;
+    if (contentType !== JSON_CONTENT_TYPE && contentType !== FORM_CONTENT_TYPE) {
+      throw new SdkError('INVALID_ARGUMENT', 'Unsupported request content type');
+    }
+    const serializedData = serializeData(input.data, contentType);
+    const dataSnapshot = contentType === JSON_CONTENT_TYPE ? JSON.parse(serializedData) : serializedData;
     const startedAt = Date.now();
     const encrypted = mode.encryptRequest || mode.decryptResponse;
     let serverKey = encrypted ? await keys.get(headers) : null;
 
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const { details, httpError, responseError } =
-        await sendOnce(mode, endpoint, input.data, headers, serverKey, startedAt);
+        await sendOnce(mode, endpoint, dataSnapshot, serializedData, headers, serverKey, startedAt, contentType);
       if (httpError && encrypted && attempt === 0 && isKeyExpiredHttpError(httpError)) {
         if (typeof console !== 'undefined' && typeof console.log === 'function') {
           console.log('Server key expired, attempting to install new key...',

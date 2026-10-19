@@ -153,7 +153,7 @@ GET /sensitive-transport-crypto/public-key
 
 可使用 `sensitive.transport.crypto.endpoint.base-path` 修改默认前缀。公钥响应包含 `publicKeyBase64`、`keyId`、`expiresAtEpochMillis` 和 `refreshAtEpochMillis`；客户端应在建议刷新时间前更新缓存的公钥。
 
-加密请求使用以下请求头和 JSON 请求体：
+`@DecryptRequest` 仅支持 `application/json` 和 `application/x-www-form-urlencoded` 请求体；其他或缺失的 `Content-Type` 会被拒绝。加密 JSON 请求使用以下请求头和请求体：
 
 ```http
 X-STC-Key-Id: demo-service:1
@@ -169,6 +169,18 @@ Content-Type: application/json
 ```
 
 请求体中不传输 `keyId` 或 `encryptedSessionKey`。协议算法为 RSA-2048 OAEP 和 AES-256-GCM。RSA-OAEP 使用 SHA-256 摘要，MGF1 使用 SHA-1；AES-GCM 使用 12 字节 IV 和 128 位认证标签。客户端还需与服务端使用兼容的 Base64 编码格式。每次请求应生成新的会话密钥和 IV。
+
+`application/x-www-form-urlencoded` 请求头的 `Content-Type` 应设置为表单类型；线上请求体将 `ivBase64` 和 `encryptedDataBase64` 作为 URL 编码字段传输，解密后的明文则是 UTF-8 URL 编码表单内容。建议 Controller 使用 `MultiValueMap<String, String>` 接收表单，例如：
+
+```java
+@PostMapping(consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+@DecryptRequest
+public ProfileResponse update(@RequestBody MultiValueMap<String, String> form) {
+    return new ProfileResponse(form.getFirst("name"), form.getFirst("phone"));
+}
+```
+
+客户端应先将表单内容按 `application/x-www-form-urlencoded` 规则编码，再加密该 UTF-8 内容。表单中重复的字段可通过 `MultiValueMap` 读取；需要复杂嵌套结构时仍建议使用 JSON。
 
 仅加密响应的接口虽然请求体可以是明文，客户端仍需发送上述两个加密请求头，以便服务端解密会话密钥并加密响应。
 

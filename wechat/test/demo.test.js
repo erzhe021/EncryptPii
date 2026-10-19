@@ -38,6 +38,8 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
           return;
         }
         assert.equal(request.url, SDK_OPTIONS.baseUrl + expectedRequest.endpoint);
+        assert.equal(request.header['content-type'],
+          expectedRequest.contentType || 'application/json');
         const encryptRequest = ['bidirectional', 'request-only'].includes(expectedRequest.mode);
         const decryptResponse = ['bidirectional', 'response-only'].includes(expectedRequest.mode);
         let sessionKey;
@@ -53,15 +55,23 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
           ), 'binary');
         }
         if (encryptRequest) {
-          const encrypted = Buffer.from(request.data.encryptedDataBase64, 'base64');
+          const encryptedPayload = expectedRequest.contentType === 'application/x-www-form-urlencoded'
+            ? Object.fromEntries(new URLSearchParams(request.data))
+            : request.data;
+          const encrypted = Buffer.from(encryptedPayload.encryptedDataBase64, 'base64');
           const decipher = crypto.createDecipheriv(
-            'aes-256-gcm', sessionKey, Buffer.from(request.data.ivBase64, 'base64')
+            'aes-256-gcm', sessionKey, Buffer.from(encryptedPayload.ivBase64, 'base64')
           );
           decipher.setAuthTag(encrypted.subarray(-16));
           const plaintext = Buffer.concat([
             decipher.update(encrypted.subarray(0, -16)), decipher.final()
           ]).toString();
-          assert.equal(JSON.parse(plaintext).name, '张三');
+          if (expectedRequest.contentType === 'application/x-www-form-urlencoded') {
+            assert.equal(plaintext,
+              'name=%E5%BC%A0%E4%B8%89&phone=11111111111&email=zhangsan%40example.com&address=%E4%B8%8A%E6%B5%B7%E5%B8%82%E9%95%BF%E5%AE%81%E5%8C%BA%E6%9F%90%E6%9F%90%E5%B9%BF%E5%9C%BA%E5%8A%9E%E5%85%ACA%E6%A5%BC');
+          } else {
+            assert.equal(JSON.parse(plaintext).name, '张三');
+          }
         } else {
           assert.deepEqual(JSON.parse(JSON.stringify(request.data)), { data: 'hello world' });
         }
@@ -77,7 +87,12 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
           };
         }
         request.success({
-          statusCode, data, header: { 'X-STC-Encrypted': String(decryptResponse) }
+          statusCode,
+          data,
+          header: {
+            'X-STC-Encrypted': String(decryptResponse),
+            'content-type': 'application/json; charset=utf-8'
+          }
         });
       } catch (error) {
         transportError = error;
@@ -116,6 +131,16 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
       assert.equal(page.data.error, statusCode === 200 ? '' : `请求失败（HTTP ${statusCode}）`);
       assert.equal(page.data.loading, false);
       assert.deepEqual(JSON.parse(page.data.result.responsePlain), responseBody);
+      assert.equal(JSON.parse(page.data.result.requestHeaders)['Content-Type'],
+        configuration.contentType || 'application/json');
+      assert.deepEqual(JSON.parse(page.data.result.responseHeaders), {
+        'X-STC-Encrypted': String(decryptResponse),
+        'Content-Type': 'application/json; charset=utf-8'
+      });
+      if (configuration.contentType === 'application/x-www-form-urlencoded') {
+        assert.equal(page.data.result.requestPlain,
+          'name=%E5%BC%A0%E4%B8%89&phone=11111111111&email=zhangsan%40example.com&address=%E4%B8%8A%E6%B5%B7%E5%B8%82%E9%95%BF%E5%AE%81%E5%8C%BA%E6%9F%90%E6%9F%90%E5%B9%BF%E5%9C%BA%E5%8A%9E%E5%85%ACA%E6%A5%BC');
+      }
       assert.equal(page.data.result.requestCipher === 'N/A', !encryptRequest);
       assert.equal(page.data.result.responseCipher === 'N/A', !decryptResponse);
       assert.equal(page.data.result.requestPlainLabel,

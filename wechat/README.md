@@ -16,14 +16,14 @@ SDK 只允许 `localhost`、`127.0.0.1` 和 `[::1]` 的 HTTP 地址，不允许�
 真机的 `localhost` 指向手机自身；真机和生产环境应使用手机可访问的 HTTPS 地址。
 服务仍须实现下表的接口和 STC 协议。
 
-Java Server 默认允许直接访问，无需 `local` profile 或 gateway token：
+本小程序的加密接口示例使用带 SDK 的 Spring Server。可用内存密钥启动（适合本地演示）：
 
 ```sh
-./gradlew :server:bootRun
+./gradlew :server-with-sdk:bootRun --args='--spring.profiles.active=memory'
 ```
 
-密钥管理仍使用 `server/src/main/resources/application.yml` 中的 Vault 配置。
-如果 Server 已在运行，需要先停止旧实例，再重新启动以加载修改。
+如需使用 Vault，请改用 `server-with-sdk/src/main/resources/application.yml` 的配置。
+表单请求接口只在 `server-with-sdk` 中提供；如果 Server 已在运行，需要先停止旧实例，再重新启动。
 
 ## 接口映射
 
@@ -32,7 +32,8 @@ Java Server 默认允许直接访问，无需 `local` profile 或 gateway token�
 | 获取公钥 | `GET /sensitive-transport-crypto/public-key` |
 | 普通传输 | `POST /plain/server/normal` |
 | 双向加密 | `POST /crypto/server/bidirectional` |
-| 请求加密 | `POST /crypto/server/request-only` |
+| 请求加密（JSON） | `POST /crypto/server/request-only` |
+| 请求加密（URL 编码表单） | `POST /crypto/server/form-urlencoded` |
 | 响应加密 | `POST /crypto/server/response-only` |
 | 客户端异常 | `POST /crypto/server/response-only/client-exception` |
 | 系统异常 | `POST /crypto/server/response-only/system-exception` |
@@ -41,6 +42,8 @@ Java Server 默认允许直接访问，无需 `local` profile 或 gateway token�
 三种异常请求均使用明文请求内容输入框和响应加密请求头。客户端异常返回 HTTP 400，系统异常返回 HTTP 500，业务异常返回 HTTP 200 和业务错误码；页面仍展示请求明文、请求密文、响应密文、响应明文和延迟，未使用的密文项显示 `N/A`。
 
 双向、请求加密和响应加密模式均通过 `X-STC-Key-Id` 和 `X-STC-Session-Key` 请求头发送 keyId 与 RSA 加密的 AES 会话密钥；请求密文体只包含 `ivBase64` 和 `encryptedDataBase64`。旧版请求体密钥格式不再兼容。请求加密模式与 Java SDK 使用相同的 RSA OAEP 摘要参数、AES-GCM IV 和认证标签格式。公钥在内存中缓存至配置的提前刷新点；刷新由下一次加密请求触发，不运行后台定时器。收到 `KEY_EXPIRED` 时刷新并最多重试一次，重试会重新生成会话材料及请求头。
+
+页面中的“请求加密(form)”演示使用 `application/x-www-form-urlencoded`。微信端先将 `name`、`phone`、`email`、`address` 字段按 UTF-8 URL 编码，再加密编码后的内容；线上请求体将 `ivBase64` 和 `encryptedDataBase64` 密文协议字段作为 URL 编码表单字段发送。Server SDK 解密后保留该 Content-Type，由 Spring MVC 转换为 `MultiValueMap<String, String>`。JSON 请求模式及其默认行为不变。该表单密文载体用于 Spring Server 示例；Kong 插件当前仍要求 JSON 格式的密文载体。
 
 RSA/AES 实现使用 SDK 内置的 node-forge 浏览器 bundle，见 `sdk/lib/FORGE-LICENSE.txt`。会话密钥、IV 和 RSA OAEP seed 均按请求使用微信 `wx.getRandomValues` 获取；不再使用全局随机池或覆盖 Forge 随机函数。需使用支持该 API 的微信基础库。不要将真实个人信息提交到未受信任或未启用 HTTPS 的服务。
 

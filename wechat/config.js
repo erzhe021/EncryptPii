@@ -12,6 +12,11 @@ module.exports = {
         'plain': {mode: 'plain', endpoint: '/plain/server/normal'},
         'bidirectional': {mode: 'bidirectional', endpoint: '/crypto/server/bidirectional'},
         'request-only': {mode: 'request-only', endpoint: '/crypto/server/request-only'},
+        'form-urlencoded': {
+            mode: 'request-only',
+            endpoint: '/crypto/server/form-urlencoded',
+            contentType: 'application/x-www-form-urlencoded'
+        },
         'response-only': {mode: 'response-only', endpoint: '/crypto/server/response-only'},
         'response-only/client-exception': {
             mode: 'response-only', endpoint: '/crypto/server/response-only/client-exception'

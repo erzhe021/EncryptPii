@@ -56,21 +56,40 @@ production.
 
 ## API
 
-`client.send({ mode, endpoint, data, headers? })` returns the server's
+`client.send({ mode, endpoint, data, headers?, contentType? })` returns the server's
 `{ code, message, data }` result envelope. The business payload is in `data`.
-`data` must be JSON serializable. It is snapshotted before asynchronous work.
+JSON is the default request content type; `data` must be JSON serializable and is
+snapshotted before asynchronous work. Set `contentType` to
+`application/x-www-form-urlencoded` to submit a flat object of string, number or
+boolean fields as URL-encoded form data. The encoded UTF-8 bytes are encrypted;
+the encrypted request body carries `ivBase64` and `encryptedDataBase64` as
+URL-encoded fields with the selected form content type. Nested objects, arrays,
+null and undefined form values are rejected. Repeated form fields and multipart
+requests are not supported.
 
 | Mode | Request | Response |
 | --- | --- | --- |
-| `plain` | JSON | JSON |
-| `bidirectional` | Encrypted JSON + session-key headers | Decrypted JSON |
-| `request-only` | Encrypted JSON + session-key headers | JSON |
-| `response-only` | JSON + session-key headers | Decrypted JSON |
+| `plain` | JSON by default; optional URL-encoded form | JSON |
+| `bidirectional` | Encrypted JSON by default; optional encrypted URL-encoded form + session-key headers | Decrypted JSON |
+| `request-only` | Encrypted JSON by default; optional encrypted URL-encoded form + session-key headers | JSON |
+| `response-only` | JSON by default; optional URL-encoded form + session-key headers | Decrypted JSON |
 
-These are the only four modes. A mode selects encryption behavior, not a
-business operation. Supply `endpoint` on each call; multiple endpoints can use
-the same mode. Application-specific requests and error scenarios belong in the
-application, not the SDK.
+The four modes select encryption behavior, not a business operation. JSON is
+the default for each mode; `contentType` can select URL-encoded form requests.
+Supply `endpoint` on each call; multiple endpoints can use the same mode.
+Application-specific requests and error scenarios belong in the application,
+not the SDK.
+
+Example encrypted form request:
+
+```js
+client.send({
+  mode: 'request-only',
+  endpoint: '/crypto/server/form-urlencoded',
+  contentType: 'application/x-www-form-urlencoded',
+  data: { name: 'Alice Smith', phone: '123+456' }
+});
+```
 
 For encrypted modes, `X-STC-Key-Id` and `X-STC-Session-Key` are the only
 transport for key metadata and the RSA-wrapped AES session key. Encrypted
@@ -78,8 +97,9 @@ request bodies contain only `ivBase64` and `encryptedDataBase64`; Kong rejects
 the old body-key protocol.
 
 `client.sendDetailed(...)` is explicitly opt-in and returns
-`{ data, cipherRequest, cipherResponse, stcHeaders, timings }` for demos; `data` contains the
-same result envelope as `send()`. No plaintext request
+`{ data, cipherRequest, cipherResponse, requestHeaders, stcHeaders, timings }` for demos;
+`requestHeaders` includes `Content-Type` and STC headers but omits application
+credentials. `data` contains the same result envelope as `send()`. No plaintext request
 or session key is included. The business response can still contain sensitive
 information, so do not log this result in production. `total` includes key
 acquisition and retries; the other timings describe the successful attempt,
