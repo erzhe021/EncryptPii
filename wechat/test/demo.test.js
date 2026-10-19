@@ -5,7 +5,9 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const forge = require('../sdk/lib/forge.min');
 const { HttpError } = require('../sdk');
-const { SDK_OPTIONS, REQUESTS } = require('../config');
+const { SERVICES, REQUESTS } = require('../config');
+const { createClientFactory } = require('../utils/client-factory');
+const SDK_OPTIONS = SERVICES.demo;
 
 for (const enabled of [false, true]) {
 test(`demo preserves diagnostics across all modes with crypto.enabled=${enabled}`, async () => {
@@ -39,6 +41,7 @@ test(`demo preserves diagnostics across all modes with crypto.enabled=${enabled}
           request.success({ statusCode: 200, data: key });
           return;
         }
+
         assert.equal(request.url, SDK_OPTIONS.baseUrl + expectedRequest.endpoint);
         assert.equal(request.header['content-type'],
           expectedRequest.contentType || 'application/json');
@@ -108,13 +111,17 @@ test(`demo preserves diagnostics across all modes with crypto.enabled=${enabled}
     }
   };
   try {
+    const clients = createClientFactory({
+      demo: { ...SDK_OPTIONS, crypto: { enabled } }
+    });
     const apiModule = { exports: {} };
     vm.runInNewContext(fs.readFileSync(require.resolve('../utils/api'), 'utf8'), {
       require(path) {
         if (path === '../sdk/index') return require('../sdk');
         if (path === '../config') {
-          return { REQUESTS, SDK_OPTIONS: { ...SDK_OPTIONS, crypto: { enabled } } };
+          return { REQUESTS };
         }
+        if (path === './clients') return clients;
         throw new Error(`Unexpected import: ${path}`);
       },
       module: apiModule
@@ -189,3 +196,43 @@ test(`demo preserves diagnostics across all modes with crypto.enabled=${enabled}
   }
 });
 }
+
+test('application requests resolve services without passing service names into SDK requests', async () => {
+  const calls = [];
+  const clients = createClientFactory({
+    customer: { baseUrl: 'https://api.example.com', publicKeyPath: '/customer/key' },
+    order: { baseUrl: 'https://api.example.com', publicKeyPath: '/order/key' }
+  }, (options) => ({
+    async sendDetailed(input) {
+      calls.push({ options, input });
+      return { data: { code: '0', message: null, data: {} }, timings: {} };
+    }
+  }));
+  const apiModule = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(require.resolve('../utils/api'), 'utf8'), {
+    require(path) {
+      if (path === '../sdk/index') return require('../sdk');
+      if (path === './clients') return clients;
+      if (path === '../config') return { REQUESTS: {
+        customerUpdate: { service: 'customer', mode: 'bidirectional', endpoint: '/customer/update' },
+        orderRead: { service: 'order', mode: 'response-only', endpoint: '/order/read' },
+        invalid: { service: 'unregistered', mode: 'plain', endpoint: '/invalid' }
+      } };
+      throw new Error(`Unexpected import: ${path}`);
+    },
+    module: apiModule
+  });
+  const { callApi } = apiModule.exports;
+  assert.equal((await callApi('customerUpdate', {}, { Authorization: 'fresh' })).ok, true);
+  assert.equal((await callApi('orderRead', {})).ok, true);
+  assert.equal(calls[0].options.publicKeyPath, '/customer/key');
+  assert.equal(calls[0].input.headers.Authorization, 'fresh');
+  assert.equal(calls[0].input.mode, 'bidirectional');
+  assert.equal(calls[1].options.publicKeyPath, '/order/key');
+  assert.equal(calls[1].input.endpoint, '/order/read');
+  assert.equal(Object.hasOwn(calls[0].input, 'service'), false);
+  const invalid = await callApi('invalid', {});
+  assert.equal(invalid.ok, false);
+  assert.equal(invalid.error.code, 'INVALID_ARGUMENT');
+  assert.equal(calls.length, 2);
+});

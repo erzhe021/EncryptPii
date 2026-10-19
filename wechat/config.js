@@ -1,31 +1,33 @@
-const SERVER_BASE_URL = 'http://localhost:9090'; //spring web server with crypto SDK
-// const SERVER_BASE_URL = 'https://local.kong.test:18443'; //kong with lua crypto plugin
-
 module.exports = {
-    SERVER_BASE_URL,
-    SDK_OPTIONS: {
-        baseUrl: SERVER_BASE_URL,
-        crypto: { enabled: true },
-        timeoutMs: 15000,
-        publicKeyPath: '/sensitive-transport-crypto/public-key'
+    SERVICES: {
+        demo: {
+            baseUrl: 'http://localhost:9090',
+            crypto: { enabled: true },
+            timeoutMs: 15000,
+            publicKeyPath: '/sensitive-transport-crypto/public-key'
+        }
     },
     REQUESTS: {
-        'plain': {mode: 'plain', endpoint: '/plain/server/normal'},
-        'bidirectional': {mode: 'bidirectional', endpoint: '/crypto/server/bidirectional'},
-        'request-only': {mode: 'request-only', endpoint: '/crypto/server/request-only'},
+        'plain': {service: 'demo', mode: 'plain', endpoint: '/plain/server/normal'},
+        'bidirectional': {service: 'demo', mode: 'bidirectional', endpoint: '/crypto/server/bidirectional'},
+        'request-only': {service: 'demo', mode: 'request-only', endpoint: '/crypto/server/request-only'},
         'form-urlencoded': {
+            service: 'demo',
             mode: 'request-only',
             endpoint: '/crypto/server/form-urlencoded',
             contentType: 'application/x-www-form-urlencoded'
         },
-        'response-only': {mode: 'response-only', endpoint: '/crypto/server/response-only'},
+        'response-only': {service: 'demo', mode: 'response-only', endpoint: '/crypto/server/response-only'},
         'response-only/client-exception': {
+            service: 'demo',
             mode: 'response-only', endpoint: '/crypto/server/response-only/client-exception'
         },
         'response-only/system-exception': {
+            service: 'demo',
             mode: 'response-only', endpoint: '/crypto/server/response-only/system-exception'
         },
         'response-only/business-exception': {
+            service: 'demo',
             mode: 'response-only', endpoint: '/crypto/server/response-only/business-exception'
         }
     }

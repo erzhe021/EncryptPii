@@ -70,6 +70,25 @@ Request-specific authentication headers can also be passed to `send`.
 Header names are checked case-insensitively: callers cannot override
 `X-STC-Enabled`, `X-STC-Key-Id` or `X-STC-Session-Key`.
 
+### Multiple teams and services
+
+Keep service registration in the application, not in this SDK. The demo provides
+[`utils/client-factory.js`](../utils/client-factory.js) and
+[`utils/clients.js`](../utils/clients.js): configure `SERVICES` by service ID,
+then obtain clients with `getClient(service)`. Each service gets a distinct
+instance even when services share an origin, isolating public-key caches and
+crypto settings. Team-owned API modules fix the endpoint and mode and pass
+current authentication headers on each call.
+
+The factory snapshots configuration and creates clients lazily. `clear(service)`
+or `clearAll()` removes cached instances for subsequent calls without cancelling
+in-flight requests. Changed service configuration requires a new factory; clearing
+an instance does not change its settings. Use separate factories for independent
+environments or simultaneous authentication/tenant contexts.
+The factory is an application helper, not an export of the published SDK.
+See the [demo integration guide](../README.md#多-team-服务接入) for configuration
+and lifecycle examples.
+
 ### Key refresh and platform requirements
 
 The server returns `refreshAtEpochMillis` with each public key. The client uses

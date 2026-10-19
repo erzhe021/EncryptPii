@@ -1,14 +1,6 @@
-const { createWechatClient, SdkError } = require('../sdk/index');
-const { SDK_OPTIONS, REQUESTS } = require('../config');
-
-let client;
-
-function getClient() {
-  if (!client) {
-    client = createWechatClient(SDK_OPTIONS);
-  }
-  return client;
-}
+const { SdkError } = require('../sdk/index');
+const { REQUESTS } = require('../config');
+const { getClient } = require('./clients');
 
 function encodeFormComponent(value) {
   return encodeURIComponent(value)
@@ -48,14 +40,14 @@ function formatDetails(input, result, contentType) {
 
 // Always resolves to { ok, error, details } so the page never inspects
 // mutated Error objects; details is null when the failure produced none.
-async function callApi(requestName, input) {
+async function callApi(requestName, input, headers) {
   const startedAt = Date.now();
   try {
     if (!Object.prototype.hasOwnProperty.call(REQUESTS, requestName)) {
       throw new SdkError('INVALID_ARGUMENT', 'Unknown application request');
     }
-    const request = REQUESTS[requestName];
-    const details = await getClient().sendDetailed({ ...request, data: input });
+    const { service, ...request } = REQUESTS[requestName];
+    const details = await getClient(service).sendDetailed({ ...request, headers, data: input });
     return { ok: true, error: null, details: formatDetails(input, details, request.contentType) };
   } catch (error) {
     const elapsedMs = Date.now() - startedAt;

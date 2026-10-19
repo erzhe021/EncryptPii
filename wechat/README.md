@@ -4,14 +4,18 @@
 
 ## 配置与运行
 
-1. 修改 `config.js` 中的 `SERVER_BASE_URL`，设置为 Java Server 地址，默认是 `http://localhost:9090`；真机使用手机可访问的 HTTPS 域名。不要填写 Client 或 Kong Admin API 地址。
+1. 在 `config.js` 的 `SERVICES.<service>.baseUrl` 中分别配置各服务地址；`demo` 默认是 `http://localhost:9090`，连接本地 Kong 时可改为 `https://local.kong.test:18443`。真机使用手机可访问的 HTTPS 域名，不要填写 Client 或 Kong Admin API 地址。
 2. 在微信开发者工具中导入 `wechat` 目录并运行。发布前请确认 `project.config.json` 中配置的是团队自己的小程序 AppID。
 3. 在小程序管理后台将服务域名加入 `request` 合法域名；生产环境必须使用 HTTPS。
 
-服务地址、请求超时和公钥路径统一在 `config.js` 的 `SDK_OPTIONS` 中配置；具体业务请求在 `REQUESTS` 中配置 `{ mode, endpoint }`，由 `utils/api.js` 在发送时传入 SDK。SDK 只识别 `plain`、`request-only`、`response-only`、`bidirectional` 四种模式，不依赖小程序配置，也不包含业务接口或异常演示的定义。三个异常演示都使用 `response-only` 模式，仅接口路径不同；加密算法、协议请求头和模式的加解密标志仍由 SDK 管理。
+应用采用“服务配置注册表 + 客户端工厂”：`config.js` 的 `SERVICES` 按服务标识配置
+地址、超时、公钥路径和加密开关；`REQUESTS` 按业务操作配置
+`{ service, mode, endpoint, contentType? }`。`utils/api.js` 根据 `service` 取客户端，
+仅把请求参数传入 SDK。SDK 不包含 Team、服务注册表或业务路由。
+三个异常演示都使用 `response-only` 模式，仅接口路径不同。
 
-SDK 默认关闭应用层加解密；本演示当前在 `SDK_OPTIONS` 中配置
-`crypto: { enabled: false }`。如需演示各加密模式，请改为 `true`。设为 `false` 时，
+SDK 默认关闭应用层加解密；本演示在 `SERVICES.demo` 中显式配置
+`crypto: { enabled: true }`。设为 `false` 时，
 所有模式都发送明文且不解密响应，不获取公钥或发送 STC 密钥头。
 开关在客户端创建时固定，修改配置后需重新加载小程序。关闭开关不会改写接口路径；
 服务端将缺失的 `X-STC-Enabled` 视为 `false`，显式 `false` 同样跳过 STC 处理；
@@ -69,3 +73,71 @@ Server 业务接口的成功响应统一使用 `{ code, message, data }` 格式�
 独立 SDK 位于 `sdk/`，可单独打包发布到团队私有 npm 仓库，接入方式见 [SDK 文档](sdk/README.md)。核心逻辑不依赖 `wx`，微信适配器负责网络和安全随机数，每个客户端实例独立管理公钥缓存。
 
 本演示直接通过 `require('../sdk/index')` 接入，无需 npm 构建。`utils/api.js` 仅将 SDK 的显式诊断结果转换成页面展示格式；其他团队默认使用 `client.send()` 获取业务响应，不应复用演示中的明文/密文对照输出。
+
+## 多 Team 服务接入
+
+服务标识对应后端安全域，而不是前端页面或 Team 名称。同一后端可共享一个服务配置；
+需要独立密钥的后端使用不同标识和公钥入口。即使两个服务共用一个网关域名，
+工厂也按服务标识分别创建实例，不会合并公钥缓存：
+
+```js
+// config.js 中的注册表示例；配置只保存公开的服务信息，不保存密钥或登录 Token
+SERVICES: {
+  customer: {
+    baseUrl: 'https://api.example.com',
+    publicKeyPath: '/customer/public-key',
+    crypto: { enabled: true }
+  },
+  order: {
+    baseUrl: 'https://api.example.com',
+    publicKeyPath: '/order/public-key',
+    crypto: { enabled: true }
+  }
+},
+REQUESTS: {
+  updateProfile: {
+    service: 'customer',
+    mode: 'bidirectional',
+    endpoint: '/customer/profile'
+  }
+}
+```
+
+| 文件 | 职责 |
+| --- | --- |
+| `config.js` | 汇总当前环境的 `SERVICES` 与业务 `REQUESTS` |
+| `utils/client-factory.js` | `createClientFactory(services)`：惰性创建、按服务缓存、显式清理 |
+| `utils/clients.js` | 创建当前应用共用的工厂，导出 `getClient`、`clear`、`clearAll` |
+| 各 Team 的 API 模块 | 固定服务、路径和模式，按请求传入最新认证信息 |
+
+生产业务模块直接调用 `send()`，不使用演示诊断输出：
+
+```js
+const { getClient } = require('./utils/clients'); // 按当前模块位置调整相对路径
+
+function updateProfile(data, authorization) {
+  return getClient('customer').send({
+    mode: 'bidirectional',
+    endpoint: '/customer/profile',
+    headers: { Authorization: authorization },
+    data
+  });
+}
+```
+
+演示包装层也支持 `callApi(requestName, data, headers?)`，返回原有的
+`{ ok, error, details }`。Header 仍由 SDK 校验，不能覆盖 STC 保留头。
+未知服务、未知业务操作会明确报 `INVALID_ARGUMENT`，不会回退到默认服务。
+
+工厂创建时快照服务配置，获取同一服务会复用实例及公钥缓存；初始化失败不会缓存失败结果。
+登录退出、身份或租户切换时调用 `clear(service)` 或 `clearAll()`，后续获取会创建新实例；
+已发出的请求继续由旧实例完成，清理不会取消请求，也不保证立即擦除内存。
+认证 Header 应逐请求传递，不要把会变化的 Token 固定在注册表中。
+
+修改服务地址、环境或加密开关后，应使用新配置创建工厂（演示中重新加载小程序）。
+`clear()` 仅清理客户端，不会重新读取或修改工厂的配置快照。
+同一服务需要同时服务多个独立认证/租户上下文时，为每个上下文创建独立工厂，
+不要在它们之间复用实例；切换环境也使用新的工厂。
+
+RSA 私钥、Vault 路径权限和密钥轮换由后端管理；客户端只通过各服务的公钥接口获取公钥。
+注册多个服务不会自动给单个 Spring 应用增加多密钥域路由，也不替代后端鉴权。
