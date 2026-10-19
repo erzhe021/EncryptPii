@@ -66,6 +66,7 @@ jq -n \
   --arg vault_addr "http://vault.vault.svc.cluster.local:8200" \
   --arg secret_path "${ENCRYPTPII_VAULT_SECRET_PATH:?}" \
   --arg alias "${ENCRYPTPII_KEY_ALIAS:?}" \
+  --argjson crypto_enabled "$ENCRYPTPII_CRYPTO_ENABLED" \
   --argjson validity "${ENCRYPTPII_KEY_VALIDITY_MILLIS:?}" \
   --argjson grace "${ENCRYPTPII_KEY_GRACE_PERIOD_MILLIS:?}" \
   --argjson rotation_before_expiry "${ENCRYPTPII_ROTATION_BEFORE_EXPIRY_MILLIS:?}" \
@@ -73,6 +74,7 @@ jq -n \
   '
   def plugin($public; $decrypt; $encrypt; $path):
     {name:"sensitive-transport-crypto",config:{
+      crypto_enabled:$crypto_enabled,
       vault_addr:$vault_addr,vault_secret_path:$secret_path,key_alias:$alias,
       vault_auth_role:"encryptpii-kong",
       upstream_auth_token:"{vault://env/KONG_TO_ENCRYPTPII_AUTH_TOKEN}",
@@ -91,7 +93,8 @@ jq -n \
         paths:["/plain/server/normal"],
         methods:["POST"],
         strip_path:false,
-        path_handling:"v0"
+        path_handling:"v0",
+        plugins:[plugin(false;false;false;"/plain/server/normal")]
       }]
     },{
       name:"encryptpii-server",
@@ -103,6 +106,8 @@ jq -n \
          strip_path:false,plugins:[plugin(false;true;true;"/crypto/server/bidirectional")]},
         {name:"encryptpii-request-only",paths:["/crypto/server/request-only"],methods:["POST"],
          strip_path:false,plugins:[plugin(false;true;false;"/crypto/server/request-only")]},
+        {name:"encryptpii-form-urlencoded",paths:["/crypto/server/form-urlencoded"],methods:["POST"],
+         strip_path:false,plugins:[plugin(false;true;false;"/crypto/server/form-urlencoded")]},
         {name:"encryptpii-response-only",paths:["/crypto/server/response-only"],methods:["POST"],
          strip_path:false,plugins:[plugin(false;false;true;"/crypto/server/response-only")]},
         (["client-exception","system-exception","business-exception"][] as $exception |

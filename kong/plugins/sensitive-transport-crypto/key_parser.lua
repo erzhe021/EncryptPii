@@ -7,21 +7,32 @@ local MILLIS_PER_SECOND = 1000
 local KeyParser = {}
 
 function KeyParser.parse_vault_created_time(value)
-  local year, month, day, hour, minute, second
-  if type(value) == "string" then
-    year, month, day, hour, minute, second = value:match("^(%d%d%d%d)-(%d%d)-(%d%d)T(%d%d):(%d%d):(%d%d)")
-  end
-  if not year or value:sub(-1) ~= "Z" then
+  if type(value) ~= "string" then
     return nil
   end
-  return os.time({
-    year = tonumber(year),
-    month = tonumber(month),
-    day = tonumber(day),
-    hour = tonumber(hour),
-    min = tonumber(minute),
-    sec = tonumber(second),
-  }) * MILLIS_PER_SECOND
+  local year, month, day, hour, minute, second, fraction =
+    value:match("^(%d%d%d%d)-(%d%d)-(%d%d)T(%d%d):(%d%d):(%d%d)(.*)Z$")
+  if not year or (fraction ~= "" and not fraction:match("^%.%d%d?%d?%d?%d?%d?%d?%d?%d?$")) then
+    return nil
+  end
+  year, month, day = tonumber(year), tonumber(month), tonumber(day)
+  hour, minute, second = tonumber(hour), tonumber(minute), tonumber(second)
+  local leap = year % 4 == 0 and (year % 100 ~= 0 or year % 400 == 0)
+  local month_days = { 31, leap and 29 or 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 }
+  if not month_days[month] or day < 1 or day > month_days[month]
+      or hour > 23 or minute > 59 or second > 59 then
+    return nil
+  end
+  -- Civil-date conversion avoids os.time's dependence on the worker's timezone.
+  local adjusted_year = year - (month <= 2 and 1 or 0)
+  local era = math.floor(adjusted_year / 400)
+  local year_of_era = adjusted_year - era * 400
+  local adjusted_month = month + (month > 2 and -3 or 9)
+  local day_of_year = math.floor((153 * adjusted_month + 2) / 5) + day - 1
+  local days = era * 146097 + year_of_era * 365 + math.floor(year_of_era / 4)
+    - math.floor(year_of_era / 100) + day_of_year - 719468
+  local millis = math.floor((tonumber("0" .. fraction) or 0) * MILLIS_PER_SECOND)
+  return (days * 86400 + hour * 3600 + minute * 60 + second) * MILLIS_PER_SECOND + millis
 end
 
 function KeyParser.parse_private_key(private_key_base64, key_id)
@@ -39,4 +50,3 @@ function KeyParser.parse_private_key(private_key_base64, key_id)
 end
 
 return KeyParser
-

@@ -5,11 +5,14 @@ import com.ikea.crypto.server.exception.SystemException;
 import com.ikea.crypto.server.model.*;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
+import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
+import java.util.Objects;
 
 @RestController
 @RequestMapping("/crypto/server")
@@ -45,6 +48,19 @@ public class CryptoController {
                 1500L,
                 "request-only crypto")
         );
+    }
+
+    @PostMapping(value = "/form-urlencoded", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
+    public Result<DemoPlainResponse> formUrlEncoded(
+            @RequestHeader(value = GATEWAY_TOKEN_HEADER, required = false) String suppliedToken,
+            @RequestBody MultiValueMap<String, String> form) {
+        verifyGatewayToken(suppliedToken);
+        return Result.ok(new DemoPlainResponse(
+                Objects.requireNonNull(form.getFirst("name")),
+                "1234-5678-9012-3456",
+                3,
+                1500L,
+                "form-urlencoded request-only crypto"));
     }
 
     @PostMapping("/response-only")

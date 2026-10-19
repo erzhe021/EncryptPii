@@ -34,7 +34,8 @@ Kong Service :8000 / :8443 ------------------> Server Service :9090
 
 加密业务请求由 Client 为每次请求生成 AES-256 会话密钥，并使用 RSA-OAEP 加密会话密钥。Kong 根据 `keyId` 从 Vault 读取对应私钥，解密请求体后将明文转发到 Server，并注入 `X-Crypto-Gateway-Token`。需要加密响应时，Kong 使用同一会话密钥加密响应。
 
-明文演示链路与加密链路分开，不获取公钥、不加解密，也不挂载 Kong 加密插件：
+明文演示链路与加密链路分开，不获取公钥、不加解密；Kong 插件仅校验协议声明，
+拒绝在无加密方向的接口声明加密：
 
 ```text
 Client POST /plain/client/normal
@@ -109,6 +110,7 @@ openssl rand -hex 32
 
 ```dotenv
 ENCRYPTPII_UPSTREAM_URL=http://encryptpii-server.encryptpii.svc.cluster.local:9090
+ENCRYPTPII_CRYPTO_ENABLED=true
 ENCRYPTPII_VAULT_ADDR=http://vault.vault.svc.cluster.local:8200
 ENCRYPTPII_VAULT_SECRET_PATH=secret/data/sensitive-transport-crypto/demo-service
 ENCRYPTPII_KEY_ALIAS=demo-service
@@ -121,6 +123,7 @@ KONG_TO_ENCRYPTPII_AUTH_TOKEN=填入生成的随机值
 
 | 配置项 | 说明 |
 | --- | --- |
+| `ENCRYPTPII_CRYPTO_ENABLED` | Kong 服务端加密能力，默认 `false`；加密部署必须显式设置 `true`，关闭时仍校验协议声明 |
 | `ENCRYPTPII_VAULT_SECRET_PATH` | KV v2 data 路径，例如 `secret/data/sensitive-transport-crypto/demo-service` |
 | `ENCRYPTPII_KEY_ALIAS` | `keyId` 中的别名部分，例如 `demo-service`，与 Vault 路径相互独立 |
 | `ENCRYPTPII_KEY_VALIDITY_MILLIS` | 当前公钥有效期，范围 1–31536000000 毫秒 |
@@ -169,7 +172,7 @@ Server 集群内地址为 `http://encryptpii-server.encryptpii.svc.cluster.local
 
 脚本构建并导入自定义 Kong 镜像、生成 DB-less 声明式配置、将 Server 的 gateway Secret 复制到 `kong` namespace 并部署。Kong 通过 `kong/encryptpii-kong` ServiceAccount 使用 Vault 的 `encryptpii-kong` Kubernetes auth role 获取短期 token；Vault 地址为集群内的 `vault.vault.svc.cluster.local:8200`。
 
-��署前需在 `.env` 配置 TLS 证书/私钥路径并准备好 PEM 文件；脚本会创建 TLS Secret 并启用 Kong 的 `8443` HTTPS 代理端口。证书生成和本机 HTTPS 测试示例见 [`kong/README.md`](kong/README.md)。Kong 配置了四条加密路由和一条不挂插件的明文路由。不需要 PostgreSQL 或 Kong Ingress Controller。DB-less 模式不支持通过 Admin API 写入配置，因此不要对该部署运行 `configure-routes.sh`；修改路由、插件配置、镜像或 Secret 后重新运行部署脚本。
+部署前需在 `.env` 配置 TLS 证书/私钥路径并准备好 PEM 文件；脚本会创建 TLS Secret 并启用 Kong 的 `8443` HTTPS 代理端口。证书生成和本机 HTTPS 测试示例见 [`kong/README.md`](kong/README.md)。Kong 配置了七条业务加密路由、公钥路由和一条仅校验协议的明文路由。不需要 PostgreSQL 或 Kong Ingress Controller。DB-less 模式不支持通过 Admin API 写入配置，因此不要对该部署运行 `configure-routes.sh`；修改路由、插件配置、镜像或 Secret 后重新运行部署脚本。
 
 ### 6. 部署 Client
 
@@ -250,10 +253,12 @@ plain:
 | `/sensitive-transport-crypto/public-key` | GET | 无 | 插件从 Vault 读取当前公钥并直接响应 |
 | `/crypto/server/bidirectional` | POST | `/crypto/server/bidirectional` | 解密请求并加密响应 |
 | `/crypto/server/request-only` | POST | `/crypto/server/request-only` | 解密请求，响应为明文 |
+| `/crypto/server/form-urlencoded` | POST | `/crypto/server/form-urlencoded` | 解密 URL 编码表单，响应为明文 |
 | `/crypto/server/response-only` | POST | `/crypto/server/response-only` | 从请求头解密会话密钥并加密响应 |
-| `/plain/server/normal` | POST | `/plain/server/normal` | 无插件，保留路径和明文请求体 |
+| `/plain/server/normal` | POST | `/plain/server/normal` | 仅校验协议，保留明文请求体 |
 
-明文路由使用独立 Kong Service `encryptpii-server-plain`，配置 `strip_path: false`。不要全局挂载加密插件或将插件绑定到该 Service，否则会影响明文链路。修改路径时需同步更新 Client 和 Kong 配置。
+明文路由使用独立 Kong Service `encryptpii-server-plain`，配置 `strip_path: false`，
+插件的两个加密方向均关闭，仅校验协议和执行转发。修改路径时需同步更新 Client 和 Kong 配置。
 
 ## 构建、重部署与镜像导入
 
@@ -397,11 +402,17 @@ VAULT_ADDR=https://vault.example.invalid VAULT_TOKEN='<rotation-token>' \
 历史版本解密截止时间 = 轮换时刻 + key_grace_period_millis
 ```
 
-当前公钥过期后，公钥接口返回 HTTP 503；宽限期仅允许解密历史密钥，不会延长已过期公钥的签发时间。部署 Kong 或重新应用路由不会重置 Vault 的 `created_time`。无自动轮换调度任务；应在到期前安排轮换、监控失败并协调客户端刷新、宽限期与 Vault 版本保留。
+当前公钥过期后，公钥接口返回 HTTP 500；宽限期不会延长已过期公钥的签发时间。
+当前私钥仍可解密已有请求，被替换后才按替换时间计算旧版本宽限期，与 SDK 关闭自动轮换时一致。
+部署 Kong 或重新应用路由不会重置 Vault 的 `created_time`。Kong 不支持自动轮换；
+应由 SDK 或外部流程在到期前安排轮换、监控失败并协调客户端刷新、宽限期与 Vault 版本保留。
 
 Kong 公钥接口每次从 Vault 读取当前版本并设置 `Cache-Control: no-store`，不会返回私钥；轮换后无需重启 Kong。Client 仍可能在其公钥缓存有效期内发送旧 `keyId`。Kong 每个 worker 最多缓存解析后的私钥 60 秒，且受密钥截止时间约束；缓存不是即时撤销机制，空闲 worker 的过期条目会在后续私钥访问时清理。
 
-若请求引用的 `keyId` 不存在或超过宽限期，Kong 返回 HTTP 400、`code: "KEY_EXPIRED"`，并在 `data` 中附上最新公钥。Java Client 会安装新公钥、重新加密并最多重试一次，无需额外先请求公钥。别名不匹配返回 `code: "INVALID_KEY"`，不附带新公钥，也不重试；格式错误或解密失败不是刷新信号。
+Kong 先尝试指定版本，再尝试当前及宽限期内历史版本；候选均无法解密，且请求引用的
+`keyId` 不存在或超过宽限期时，才返回 HTTP 400、`code: "KEY_EXPIRED"`，并在 `data`
+中附上最新公钥。Java Client 会安装新公钥、重新加密并最多重试一次，无需额外先请求公钥。
+别名不匹配返回 `code: "INVALID_KEY"`、`data: null`，不重试；格式错误或有效版本上的错误密文不是刷新信号。
 
 ## 外部 Vault 迁移
 
@@ -451,7 +462,7 @@ kubectl -n vault port-forward service/vault 18200:8200
 
 | 现象 | 排查方向 |
 | --- | --- |
-| 公钥接口返回 503 | 检查 Vault 是否解封、token 权限、data/metadata 路径、RSA 字段和公钥是否过期，并查看 Kong 日志 |
+| 公钥接口返回 500 | 检查 Vault 是否解封、token 权限、data/metadata 路径、RSA 字段和公钥是否过期，并查看 Kong 日志 |
 | 业务调用返回 403 | 检查 Server 与 Kong 的 gateway Secret 是否一致，确认没有直接调用受保护的 Server 接口 |
 | 业务错误响应为密文 | 解密响应并查看 Server 日志；上游错误也可能被 Kong 加密 |
 | 轮换后 Client 仍使用旧 `keyId` | Client 可能缓存尚未过期的公钥；如需立即刷新，重启 Client |

@@ -12,6 +12,12 @@ load_plugin_env "$ENV_FILE"
 docker compose --env-file "$ENV_FILE" --project-directory "$KONG_DIR" -f "$COMPOSE_FILE" build kong
 
 docker run --rm \
+  --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  -e KONG_DATABASE=off \
+  -e KONG_PLUGINS=bundled,sensitive-transport-crypto \
+  encryptpii-kong:3.7 kong config parse /tmp/plugin-tests/kong-parity.yaml >/dev/null
+
+docker run --rm \
   --entrypoint /usr/local/openresty/luajit/bin/luajit \
   encryptpii-kong:3.7 \
   -e '
@@ -21,6 +27,7 @@ docker run --rm \
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/response.lua",
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/errors.lua",
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/protocol.lua",
+      "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/payload.lua",
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/size_limit.lua",
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/key_cache.lua",
       "/usr/local/share/lua/5.1/kong/plugins/sensitive-transport-crypto/key_parser.lua",
@@ -42,18 +49,48 @@ docker run --rm \
 
 docker run --rm \
   --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  -e 'LUA_CPATH=/usr/local/openresty/lualib/?.so;;' \
   --entrypoint /usr/local/openresty/luajit/bin/luajit \
   encryptpii-kong:3.7 \
   /tmp/plugin-tests/key-cache-test.lua
 
 docker run --rm \
   --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  -e 'LUA_CPATH=/usr/local/openresty/lualib/?.so;;' \
   --entrypoint /usr/local/openresty/luajit/bin/luajit \
   encryptpii-kong:3.7 \
   /tmp/plugin-tests/size-limit-log-test.lua
 
 docker run --rm \
   --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  -e 'LUA_CPATH=/usr/local/openresty/lualib/?.so;;' \
   --entrypoint /usr/local/openresty/luajit/bin/luajit \
   encryptpii-kong:3.7 \
   /tmp/plugin-tests/header-transport-test.lua
+
+docker run --rm \
+  --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  -e 'LUA_CPATH=/usr/local/openresty/lualib/?.so;;' \
+  --entrypoint /usr/local/openresty/luajit/bin/luajit \
+  encryptpii-kong:3.7 \
+  /tmp/plugin-tests/payload-test.lua
+
+docker run --rm \
+  --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  -e 'LUA_CPATH=/usr/local/openresty/lualib/?.so;;' \
+  --entrypoint /usr/local/openresty/luajit/bin/luajit \
+  encryptpii-kong:3.7 \
+  /tmp/plugin-tests/key-resolution-test.lua
+
+docker run --rm \
+  --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  -e 'LUA_CPATH=/usr/local/openresty/lualib/?.so;;' \
+  --entrypoint /usr/local/openresty/luajit/bin/luajit \
+  encryptpii-kong:3.7 \
+  /tmp/plugin-tests/response-test.lua
+
+docker run --rm \
+  --mount "type=bind,source=$KONG_DIR/tests,target=/tmp/plugin-tests,readonly" \
+  --entrypoint /usr/local/openresty/bin/resty \
+  encryptpii-kong:3.7 \
+  /tmp/plugin-tests/crypto-real-test.lua

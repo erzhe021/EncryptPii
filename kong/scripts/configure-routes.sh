@@ -113,6 +113,7 @@ upsert_plugin() {
       --arg vault_secret_path "$VAULT_SECRET_PATH" \
       --arg key_alias "$KEY_ALIAS" \
       --arg upstream_path "$upstream_path" \
+      --argjson crypto_enabled "$ENCRYPTPII_CRYPTO_ENABLED" \
       --argjson key_validity_millis "$KEY_VALIDITY_MILLIS" \
       --argjson key_grace_period_millis "$KEY_GRACE_PERIOD_MILLIS" \
       --argjson rotation_before_expiry_millis "$ROTATION_BEFORE_EXPIRY_MILLIS" \
@@ -121,6 +122,7 @@ upsert_plugin() {
       --argjson encrypt_response "$encrypt_response" \
       --argjson serve_public_key "$serve_public_key" \
       '{
+        crypto_enabled:$crypto_enabled,
         vault_addr:$vault_addr,
         vault_auth_role:"encryptpii-kong",
         vault_secret_path:$vault_secret_path,
@@ -166,12 +168,16 @@ bidirectional_route="$(
 request_only_route="$(
   upsert_route encryptpii-request-only /crypto/server/request-only POST
 )"
+form_route="$(
+  upsert_route encryptpii-form-urlencoded /crypto/server/form-urlencoded POST
+)"
 response_only_route="$(
   upsert_route encryptpii-response-only /crypto/server/response-only POST
 )"
 
 upsert_plugin "$bidirectional_route" true true /crypto/server/bidirectional
 upsert_plugin "$request_only_route" true false /crypto/server/request-only
+upsert_plugin "$form_route" true false /crypto/server/form-urlencoded
 upsert_plugin "$response_only_route" false true /crypto/server/response-only
 upsert_plugin "$public_key_route" false false /sensitive-transport-crypto/public-key true
 
@@ -198,4 +204,7 @@ api -X PUT "$ADMIN_URL/routes/encryptpii-plain" \
     "path_handling":"v0"
   }' >/dev/null
 
-printf 'Configured the Vault-backed public-key route, six protected crypto routes, and a plugin-free plaintext route. ADMIN URL: %s\n' "$ADMIN_URL"
+plain_route="$(api "$ADMIN_URL/routes/encryptpii-plain" | jq -r '.id')"
+upsert_plugin "$plain_route" false false /plain/server/normal
+
+printf 'Configured the public-key route, seven protected crypto routes, and a protocol-validated plaintext route. ADMIN URL: %s\n' "$ADMIN_URL"

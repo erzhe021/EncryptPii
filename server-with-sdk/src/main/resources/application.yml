@@ -7,7 +7,7 @@ spring:
       enabled: ${sensitive.transport.crypto.enabled:false}
       uri: ${VAULT_ADDR:http://127.0.0.1:8200}
       authentication: TOKEN # use TOKEN for local development, KUBERNETES for production
-      token: ${VAULT_TOKEN} # use VAULT_TOKEN for local development, KUBERNETES for production
+      token: ${VAULT_TOKEN:root} # use VAULT_TOKEN for local development, KUBERNETES for production
       # uncomment the following lines for production deployment with Kubernetes
 #      kubernetes:
 #        role: demo-service-role
@@ -17,7 +17,7 @@ spring:
 sensitive:
   transport:
     crypto:
-#      enabled: false # default is false; set to 'true' to enable sensitive transport crypto
+      enabled: true # default is false; set to 'true' to enable sensitive transport crypto
       auto-rotate: true # default is true; set to 'false' to require explicit key rotation
       key-lifecycle:
         validity-millis: 60000 # 60s

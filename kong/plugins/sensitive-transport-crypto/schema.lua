@@ -3,9 +3,9 @@
 local typedefs = require "kong.db.schema.typedefs"
 
 local DEFAULT_KUBERNETES_JWT_PATH = "/var/run/secrets/kubernetes.io/serviceaccount/token"
-local DEFAULT_KEY_VALIDITY_MILLIS = 60000
-local DEFAULT_KEY_GRACE_PERIOD_MILLIS = 30000
-local DEFAULT_ROTATION_BEFORE_EXPIRY_MILLIS = 40000
+local DEFAULT_KEY_VALIDITY_MILLIS = 31536000000
+local DEFAULT_KEY_GRACE_PERIOD_MILLIS = 86400000
+local DEFAULT_ROTATION_BEFORE_EXPIRY_MILLIS = 2592000000
 local MAX_KEY_PERIOD_MILLIS = 31536000000
 local DEFAULT_MAX_BODY_BYTES = 1048576
 local MAX_BODY_BYTES = 16777216
@@ -18,7 +18,15 @@ return {
     {
       config = {
         type = "record",
+        custom_validator = function(config)
+          if config.key_grace_period_millis >= config.rotation_before_expiry_millis
+            or config.rotation_before_expiry_millis >= config.key_validity_millis then
+            return nil, "Key lifecycle settings must satisfy grace period < rotation-before-expiry < validity"
+          end
+          return true
+        end,
         fields = {
+          { crypto_enabled = { type = "boolean", default = false } },
           { vault_addr = { type = "string", required = true } },
           { vault_auth_role = { type = "string", required = true, match = [[^[%w_-]+$]] } },
           { vault_kubernetes_jwt_path = { type = "string", default = DEFAULT_KUBERNETES_JWT_PATH } },

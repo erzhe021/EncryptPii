@@ -20,7 +20,13 @@ kong = {
     err = function(...) capture("err", ...) end,
   },
   request = {
+    get_headers = function()
+      local result = {}
+      for name, value in pairs(headers) do result[name:lower()] = value end
+      return result
+    end,
     get_header = function(name) return headers[name] end,
+    get_path = function() return "/test" end,
     get_raw_body = function()
       raw_body_reads = raw_body_reads + 1
       return request_body
@@ -31,13 +37,16 @@ kong = {
   },
   ctx = { plugin = {} },
 }
-ngx = { arg = {}, header = {} }
+ngx = { arg = {}, header = {}, now = function() return 1000 end }
 
 local plugin = require "kong.plugins.sensitive-transport-crypto.handler"
-local config = { decrypt_request = true, max_body_bytes = 4 }
+local config = { crypto_enabled = true, decrypt_request = true, max_body_bytes = 4 }
 
 headers["X-STC-Enabled"] = "true"
+headers["X-STC-Key-Id"] = "alias:1"
+headers["X-STC-Session-Key"] = "test"
 headers["Content-Length"] = "5"
+headers["Content-Type"] = "application/json"
 local result = plugin:access(config)
 assert(result.status == 413)
 assert(raw_body_reads == 0)
@@ -45,7 +54,8 @@ assert(#logs == 1 and logs[1].level == "warn")
 assert(logs[1].message:find("bytes=5, limit=4", 1, true))
 
 logs = {}
-headers = { ["X-STC-Enabled"] = "true" }
+headers = { ["X-STC-Enabled"] = "true", ["Content-Type"] = "application/json",
+  ["X-STC-Key-Id"] = "alias:1", ["X-STC-Session-Key"] = "test" }
 request_body = "secret"
 result = plugin:access(config)
 assert(result.status == 413)

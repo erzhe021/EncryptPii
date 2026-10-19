@@ -1,0 +1,41 @@
+# Offline configuration for plugin schema and HTTP protocol checks.
+_format_version: "3.0"
+services:
+  - name: parity-test
+    url: http://127.0.0.1:9
+    routes:
+      - name: parity-plain
+        paths: ["/plain"]
+        plugins:
+          - name: sensitive-transport-crypto
+            config: &base
+              crypto_enabled: true
+              vault_addr: http://127.0.0.1:9
+              vault_auth_role: parity-test
+              vault_secret_path: secret/data/parity-test
+              key_alias: alias
+              upstream_path: /test
+              upstream_auth_token: test-only-placeholder
+      - name: parity-disabled
+        paths: ["/disabled"]
+        plugins:
+          - name: sensitive-transport-crypto
+            config:
+              <<: *base
+              crypto_enabled: false
+              decrypt_request: true
+      - name: parity-json
+        paths: ["/crypto"]
+        plugins:
+          - name: sensitive-transport-crypto
+            config:
+              <<: *base
+              decrypt_request: true
+      - name: parity-public
+        paths: ["/public"]
+        plugins:
+          - name: sensitive-transport-crypto
+            config:
+              <<: *base
+              crypto_enabled: false
+              serve_public_key: true
