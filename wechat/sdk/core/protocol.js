@@ -15,6 +15,7 @@ const MODES = Object.freeze({
 
 module.exports = {
   MODES,
+  ENABLED_HEADER: 'X-STC-Enabled',
   KEY_ID_HEADER: 'X-STC-Key-Id',
   SESSION_KEY_HEADER: 'X-STC-Session-Key',
   ENCRYPTED_RESPONSE_HEADER: 'X-STC-Encrypted',

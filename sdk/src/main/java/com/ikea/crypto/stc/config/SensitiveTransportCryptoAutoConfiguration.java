@@ -6,7 +6,6 @@ import com.ikea.crypto.stc.key.KeyRing;
 import com.ikea.crypto.stc.model.KeyMetadata;
 import com.ikea.crypto.stc.vault.VaultClient;
 import com.ikea.crypto.stc.vault.VaultKeyRing;
-import com.ikea.crypto.stc.web.advice.CryptoExceptionHandler;
 import com.ikea.crypto.stc.web.advice.RequestDecryptAdvice;
 import com.ikea.crypto.stc.web.advice.ResponseEncryptAdvice;
 import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
@@ -40,7 +39,7 @@ import java.security.SecureRandom;
 @AutoConfiguration
 @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
 @ConditionalOnClass(RequestBodyAdvice.class)
-@ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "enabled", havingValue = "true")
 @EnableConfigurationProperties(SensitiveTransportCryptoProperties.class)
 public class SensitiveTransportCryptoAutoConfiguration {
 
@@ -125,12 +124,6 @@ public class SensitiveTransportCryptoAutoConfiguration {
     @ConditionalOnMissingBean
     public ResponseEncryptAdvice responseEncryptAdvice(CryptoPayloadHandler payloadHandler) {
         return new ResponseEncryptAdvice(payloadHandler);
-    }
-
-    @Bean
-    @ConditionalOnMissingBean
-    public CryptoExceptionHandler cryptoExceptionHandler() {
-        return new CryptoExceptionHandler();
     }
 
     @Bean

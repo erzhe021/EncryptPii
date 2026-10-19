@@ -1,1 +1,2 @@
 com.ikea.crypto.stc.config.SensitiveTransportCryptoAutoConfiguration
+com.ikea.crypto.stc.config.CryptoProtocolAutoConfiguration

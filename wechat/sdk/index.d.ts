@@ -14,20 +14,29 @@ export interface TransportResponse {
   data: unknown;
 }
 
+export interface CryptoOptions {
+  /** Defaults to false. When disabled, all modes use plaintext and X-STC-Enabled: false, without key headers. */
+  enabled?: boolean;
+}
+
 export interface ClientOptions {
   baseUrl: string;
   publicKeyPath: string;
   timeoutMs?: number;
+  /** X-STC-Enabled, X-STC-Key-Id and X-STC-Session-Key are reserved, case-insensitively. */
   headers?: Record<string, string>;
+  crypto?: CryptoOptions;
   transport: (request: TransportRequest) => Promise<TransportResponse>;
   randomBytes: (length: number) => Promise<Uint8Array>;
 }
 
 export interface SendOptions {
+  /** Must match the endpoint's directions. Only takes effect when crypto.enabled is true. */
   mode: TransportMode;
   endpoint: string;
   data: JsonValue;
   contentType?: 'application/json' | 'application/x-www-form-urlencoded';
+  /** Same reserved protocol headers as ClientOptions.headers. */
   headers?: Record<string, string>;
 }
 
@@ -49,13 +58,14 @@ export interface CipherResponse {
 
 export interface DetailedResult<T> {
   data: T;
-  /** Protocol flags of the selected mode; the demo uses them to label what was actually sent. */
+  /** Protocol flags of the effective mode (plain when crypto is disabled). */
   encryptRequest: boolean;
   decryptResponse: boolean;
   cipherRequest: CipherRequest | null;
   cipherResponse: CipherResponse | null;
-  /** Content type and STC headers sent with the business request; excludes application credentials. */
-  requestHeaders: Record<string, string>;
+  /** Content type, enable flag and key headers sent with the business request; excludes credentials. */
+  requestHeaders: Record<string, string> & { 'X-STC-Enabled': 'true' | 'false' };
+  /** Key headers only; null in effective plain mode. */
   stcHeaders: { 'X-STC-Key-Id': string; 'X-STC-Session-Key': string } | null;
   timings: { total: number; encryption: number; http: number; decryption: number };
 }
@@ -108,7 +118,9 @@ export interface WechatClientOptions {
   baseUrl: string;
   publicKeyPath: string;
   timeoutMs?: number;
+  /** Same reserved protocol headers as ClientOptions.headers. */
   headers?: Record<string, string>;
+  crypto?: CryptoOptions;
   platform?: WechatPlatform;
 }
 

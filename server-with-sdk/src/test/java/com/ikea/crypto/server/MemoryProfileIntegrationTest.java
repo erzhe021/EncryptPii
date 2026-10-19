@@ -16,7 +16,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@SpringBootTest
+@SpringBootTest(properties = "sensitive.transport.crypto.enabled=true")
 @AutoConfigureMockMvc
 @ActiveProfiles("memory")
 class MemoryProfileIntegrationTest {

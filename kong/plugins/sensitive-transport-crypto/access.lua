@@ -28,10 +28,49 @@ local function expired_or_invalid_key_response(key_error_code, config)
   return nil
 end
 
+local function read_single_header(name)
+  local value = kong.request.get_header(name)
+  if value == nil then
+    return nil
+  end
+  if type(value) ~= "string" then
+    return nil, name .. " must not be repeated"
+  end
+  return value
+end
+
 function Access.run(config)
   kong.ctx.plugin = kong.ctx.plugin or {}
-  kong.ctx.plugin.encrypt_response = config.encrypt_response
+  kong.ctx.plugin.encrypt_response = false
+  kong.ctx.plugin.session_key = nil
   kong.ctx.plugin.plain_error_response = nil
+  kong.ctx.plugin.response_failed = nil
+
+  local enabled_header, enabled_header_err = read_single_header(headers.ENABLED_HEADER)
+  local key_id, key_id_err = read_single_header(headers.KEY_ID_HEADER)
+  local encrypted_session_key, session_key_header_err = read_single_header(headers.SESSION_KEY_HEADER)
+  if enabled_header_err or key_id_err or session_key_header_err then
+    return errors.json_error(400, enabled_header_err or key_id_err or session_key_header_err)
+  end
+
+  local enabled = false
+  if enabled_header ~= nil then
+    if enabled_header == "true" then
+      enabled = true
+    elseif enabled_header ~= "false" then
+      return errors.json_error(400, "X-STC-Enabled must be exactly 'true' or 'false'")
+    end
+  end
+
+  local has_key_id = key_id ~= nil
+  local has_session_key = encrypted_session_key ~= nil
+  if (not enabled and (has_key_id or has_session_key))
+    or (config.serve_public_key and enabled and has_key_id ~= has_session_key) then
+    return errors.json_error(400, "X-STC-Key-Id and X-STC-Session-Key are only valid together with X-STC-Enabled: true")
+  end
+  if config.serve_public_key and enabled and has_key_id and (key_id == "" or encrypted_session_key == "") then
+    return errors.json_error(400, "X-STC-Key-Id and X-STC-Session-Key must not be empty")
+  end
 
   if config.serve_public_key then
     local public_key_response, public_key_err = keys.get_public_key_response(config)
@@ -45,8 +84,16 @@ function Access.run(config)
     })
   end
 
+  if enabled and not config.decrypt_request and not config.encrypt_response then
+    return errors.json_error(400, "X-STC-Enabled: true requires request decryption or response encryption on this route")
+  end
+
+  local decrypt_request = enabled and config.decrypt_request
+  local encrypt_response = enabled and config.encrypt_response
+  kong.ctx.plugin.encrypt_response = encrypt_response
+
   local encrypted_request_body
-  if config.decrypt_request then
+  if decrypt_request then
     local body, err, status = size_limit.read_encrypted_request_body(config.max_body_bytes)
     if not body then
       return errors.json_error(status or 400, err)
@@ -55,9 +102,7 @@ function Access.run(config)
   end
 
   local session_key
-  if config.decrypt_request or config.encrypt_response then
-    local key_id = kong.request.get_header(headers.KEY_ID_HEADER)
-    local encrypted_session_key = kong.request.get_header(headers.SESSION_KEY_HEADER)
+  if decrypt_request or encrypt_response then
     if type(key_id) ~= "string" or key_id == ""
       or type(encrypted_session_key) ~= "string" or encrypted_session_key == "" then
       return errors.json_error(400, "X-STC-Key-Id and X-STC-Session-Key are required; body key transport is unsupported")
@@ -75,12 +120,12 @@ function Access.run(config)
       return errors.json_error(error_status or 400, error_status and "Vault key is unavailable"
         or "Invalid request session key")
     end
-    if config.encrypt_response then
+    if encrypt_response then
       kong.ctx.plugin.session_key = session_key
     end
   end
 
-  if config.decrypt_request then
+  if decrypt_request then
     local plaintext, decrypt_err, decrypted_session_key, error_status, key_error_code =
       crypto.decrypt_request_body(encrypted_request_body, session_key)
     if not plaintext then
@@ -103,6 +148,7 @@ function Access.run(config)
 
   kong.service.request.clear_header(headers.SESSION_KEY_HEADER)
   kong.service.request.clear_header(headers.KEY_ID_HEADER)
+  kong.service.request.clear_header(headers.ENABLED_HEADER)
   local upstream_token, token_err = resolve_secret(config.upstream_auth_token)
   if not upstream_token or upstream_token == "" then
     kong.log.err("Unable to resolve the configured upstream authentication token: ", token_err)

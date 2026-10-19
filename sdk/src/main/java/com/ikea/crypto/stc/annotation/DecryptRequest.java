@@ -7,6 +7,7 @@ import java.lang.annotation.Target;
 
 /**
  * Annotation to indicate that the request body of a method or class should be decrypted.
+ * Only applies when the client explicitly sends X-STC-Enabled: true.
  * <p>
  * This annotation can be applied to methods or classes to specify that the incoming request body
  * should be decrypted before processing. It is typically used in conjunction with a decryption

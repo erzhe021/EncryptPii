@@ -5,7 +5,9 @@ import com.ikea.crypto.stc.config.SensitiveTransportCryptoProperties;
 import com.ikea.crypto.stc.config.VaultProperties;
 import com.ikea.crypto.stc.key.KeyRing;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.AllNestedConditions;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 import org.springframework.vault.core.VaultTemplate;
 
@@ -18,8 +20,22 @@ import java.security.GeneralSecurityException;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "key-store", havingValue = "vault", matchIfMissing = true)
+@Conditional(VaultKeySynchronizer.EnabledVaultCondition.class)
 public class VaultKeySynchronizer {
+
+    static class EnabledVaultCondition extends AllNestedConditions {
+        EnabledVaultCondition() {
+            super(ConfigurationPhase.REGISTER_BEAN);
+        }
+
+        @ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "enabled", havingValue = "true")
+        static class CryptoEnabled {
+        }
+
+        @ConditionalOnProperty(prefix = "sensitive.transport.crypto", name = "key-store", havingValue = "vault", matchIfMissing = true)
+        static class VaultKeyStore {
+        }
+    }
 
     private final VaultProperties properties;
     private final KeyLifecycleProperties lifecycleProperties;

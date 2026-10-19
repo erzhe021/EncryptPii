@@ -7,7 +7,8 @@ const forge = require('../sdk/lib/forge.min');
 const { HttpError } = require('../sdk');
 const { SDK_OPTIONS, REQUESTS } = require('../config');
 
-test('demo maps all business requests to four SDK modes and preserves diagnostics', async () => {
+for (const enabled of [false, true]) {
+test(`demo preserves diagnostics across all modes with crypto.enabled=${enabled}`, async () => {
   const pair = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
   const privateKey = forge.pki.privateKeyFromPem(pair.privateKey.export({
     type: 'pkcs8', format: 'pem'
@@ -33,6 +34,7 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
         requests.push(request);
         assert.equal(request.timeout, SDK_OPTIONS.timeoutMs);
         if (request.method === 'GET') {
+          assert.equal(request.header['X-STC-Enabled'], undefined);
           assert.equal(request.url, SDK_OPTIONS.baseUrl + SDK_OPTIONS.publicKeyPath);
           request.success({ statusCode: 200, data: key });
           return;
@@ -40,10 +42,11 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
         assert.equal(request.url, SDK_OPTIONS.baseUrl + expectedRequest.endpoint);
         assert.equal(request.header['content-type'],
           expectedRequest.contentType || 'application/json');
-        const encryptRequest = ['bidirectional', 'request-only'].includes(expectedRequest.mode);
-        const decryptResponse = ['bidirectional', 'response-only'].includes(expectedRequest.mode);
+        const encryptRequest = enabled && ['bidirectional', 'request-only'].includes(expectedRequest.mode);
+        const decryptResponse = enabled && ['bidirectional', 'response-only'].includes(expectedRequest.mode);
+        assert.equal(request.header['X-STC-Enabled'], String(encryptRequest || decryptResponse));
         let sessionKey;
-        if (expectedRequest.mode !== 'plain') {
+        if (encryptRequest || decryptResponse) {
           assert.equal(request.header['X-STC-Key-Id'], key.keyId);
           const block = crypto.privateDecrypt(
             { key: pair.privateKey, padding: crypto.constants.RSA_NO_PADDING },
@@ -72,8 +75,12 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
           } else {
             assert.equal(JSON.parse(plaintext).name, '张三');
           }
-        } else {
+        } else if (['plain', 'response-only'].includes(expectedRequest.mode)) {
           assert.deepEqual(JSON.parse(JSON.stringify(request.data)), { data: 'hello world' });
+        } else if (expectedRequest.contentType === 'application/x-www-form-urlencoded') {
+          assert.equal(new URLSearchParams(request.data).get('name'), '张三');
+        } else {
+          assert.equal(request.data.name, '张三');
         }
         let data = responseBody;
         if (decryptResponse) {
@@ -101,7 +108,18 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
     }
   };
   try {
-    const api = require('../utils/api');
+    const apiModule = { exports: {} };
+    vm.runInNewContext(fs.readFileSync(require.resolve('../utils/api'), 'utf8'), {
+      require(path) {
+        if (path === '../sdk/index') return require('../sdk');
+        if (path === '../config') {
+          return { REQUESTS, SDK_OPTIONS: { ...SDK_OPTIONS, crypto: { enabled } } };
+        }
+        throw new Error(`Unexpected import: ${path}`);
+      },
+      module: apiModule
+    });
+    const api = apiModule.exports;
     const source = fs.readFileSync(require.resolve('../pages/index/index.js'), 'utf8');
     for (const [name, configuration] of Object.entries(REQUESTS)) {
       expectedRequest = configuration;
@@ -123,9 +141,10 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
       page.setData = function (values) { Object.assign(this.data, values); };
       assert.ok(page.data.modes.some((entry) => entry.id === name));
       page.selectMode({ currentTarget: { dataset: { mode: name } } });
-      const encryptRequest = ['bidirectional', 'request-only'].includes(configuration.mode);
-      const decryptResponse = ['bidirectional', 'response-only'].includes(configuration.mode);
-      assert.equal(page.data.usesPlainInput, !encryptRequest);
+      const encryptRequest = enabled && ['bidirectional', 'request-only'].includes(configuration.mode);
+      const decryptResponse = enabled && ['bidirectional', 'response-only'].includes(configuration.mode);
+      assert.equal(page.data.usesPlainInput,
+        !['bidirectional', 'request-only'].includes(configuration.mode));
       await page.submit();
       assert.ifError(transportError);
       assert.equal(page.data.error, statusCode === 200 ? '' : `请求失败（HTTP ${statusCode}）`);
@@ -133,6 +152,8 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
       assert.deepEqual(JSON.parse(page.data.result.responsePlain), responseBody);
       assert.equal(JSON.parse(page.data.result.requestHeaders)['Content-Type'],
         configuration.contentType || 'application/json');
+      assert.equal(JSON.parse(page.data.result.requestHeaders)['X-STC-Enabled'],
+        String(encryptRequest || decryptResponse));
       assert.deepEqual(JSON.parse(page.data.result.responseHeaders), {
         'X-STC-Encrypted': String(decryptResponse),
         'Content-Type': 'application/json; charset=utf-8'
@@ -148,11 +169,13 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
       assert.equal(page.data.result.responseCipherLabel,
         decryptResponse ? '响应体密文(实收)' : '响应体密文');
       assert.ok(JSON.parse(page.data.result.latency).total >= 0);
-      if (configuration.mode !== 'plain') {
+      if (encryptRequest || decryptResponse) {
         assert.ok(page.data.result.requestHeaders.includes('X-STC-Session-Key'));
+      } else {
+        assert.ok(!page.data.result.requestHeaders.includes('X-STC-Session-Key'));
       }
     }
-    assert.equal(requests.filter((request) => request.method === 'GET').length, 1);
+    assert.equal(requests.filter((request) => request.method === 'GET').length, enabled ? 1 : 0);
     assert.equal(requests.filter((request) => request.method === 'POST').length,
       Object.keys(REQUESTS).length);
     const count = requests.length;
@@ -165,3 +188,4 @@ test('demo maps all business requests to four SDK modes and preserves diagnostic
     else global.wx = previousWx;
   }
 });
+}

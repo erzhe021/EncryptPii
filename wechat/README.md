@@ -1,6 +1,6 @@
 # EncryptPii 微信小程序
 
-此小程序提供普通传输、双向加密、请求加密和响应加密四种传输演示，以及响应加密的客户端异常、系统异常、业务异常三种请求。小程序默认直接连接 Java Server：从 Server 获取 RSA 公钥，在本机执行 RSA-OAEP-SHA-256（MGF1-SHA-1）和 AES-256-GCM 加解密，再按 STC 协议提交请求。
+此小程序提供普通传输、双向加密、请求加密和响应加密四种传输演示，以及响应加密的客户端异常、系统异常、业务异常三种请求。小程序默认直接连接 Java Server：开启加密后，从 Server 获取 RSA 公钥，在本机执行 RSA-OAEP-SHA-256（MGF1-SHA-1）和 AES-256-GCM 加解密，再按 STC 协议提交请求。
 
 ## 配置与运行
 
@@ -9,6 +9,21 @@
 3. 在小程序管理后台将服务域名加入 `request` 合法域名；生产环境必须使用 HTTPS。
 
 服务地址、请求超时和公钥路径统一在 `config.js` 的 `SDK_OPTIONS` 中配置；具体业务请求在 `REQUESTS` 中配置 `{ mode, endpoint }`，由 `utils/api.js` 在发送时传入 SDK。SDK 只识别 `plain`、`request-only`、`response-only`、`bidirectional` 四种模式，不依赖小程序配置，也不包含业务接口或异常演示的定义。三个异常演示都使用 `response-only` 模式，仅接口路径不同；加密算法、协议请求头和模式的加解密标志仍由 SDK 管理。
+
+SDK 默认关闭应用层加解密；本演示当前在 `SDK_OPTIONS` 中配置
+`crypto: { enabled: false }`。如需演示各加密模式，请改为 `true`。设为 `false` 时，
+所有模式都发送明文且不解密响应，不获取公钥或发送 STC 密钥头。
+开关在客户端创建时固定，修改配置后需重新加载小程序。关闭开关不会改写接口路径；
+服务端将缺失的 `X-STC-Enabled` 视为 `false`，显式 `false` 同样跳过 STC 处理；
+`true` 仅启用协议，实际加解密方向由服务端接口注解决定，SDK 的有效模式必须匹配接口。
+连接其他网关时需确认其是否支持此协议及明文请求。
+
+每个业务 POST 都由 SDK 发送字符串 `X-STC-Enabled: true` 或 `false`：
+仅当有效模式加密请求或解密响应时为 `true`。即使全局开启，`plain` 仍为 `false`；
+全局关闭时四种模式均为 `false`。公钥 GET 不发送此标志。
+`X-STC-Enabled`、`X-STC-Key-Id` 和 `X-STC-Session-Key` 为 SDK 保留请求头，
+不区分大小写，调用方在全局或单次 `headers` 中设置均会报 `INVALID_ARGUMENT`。
+诊断信息 `requestHeaders` 包含启用标志；`stcHeaders` 仍只包含密钥头，明文模式为 `null`。
 
 本地开发者工具可直接使用 `http://localhost:9090`，无需额外开关。
 在开发者工具的本地设置中勾选“不校验合法域名、web-view（业务域名）、TLS 版本以及 HTTPS 证书”。
@@ -39,9 +54,9 @@ SDK 只允许 `localhost`、`127.0.0.1` 和 `[::1]` 的 HTTP 地址，不允许�
 | 系统异常 | `POST /crypto/server/response-only/system-exception` |
 | 业务异常 | `POST /crypto/server/response-only/business-exception` |
 
-三种异常请求均使用明文请求内容输入框和响应加密请求头。客户端异常返回 HTTP 400，系统异常返回 HTTP 500，业务异常返回 HTTP 200 和业务错误码；页面仍展示请求明文、请求密文、响应密文、响应明文和延迟，未使用的密文项显示 `N/A`。
+三种异常请求均使用明文请求内容输入框，开启加密后发送响应加密所需的请求头。客户端异常返回 HTTP 400，系统异常返回 HTTP 500，业务异常返回 HTTP 200 和业务错误码；页面仍展示请求明文、请求密文、响应密文、响应明文和延迟，未使用的密文项显示 `N/A`。
 
-双向、请求加密和响应加密模式均通过 `X-STC-Key-Id` 和 `X-STC-Session-Key` 请求头发送 keyId 与 RSA 加密的 AES 会话密钥；请求密文体只包含 `ivBase64` 和 `encryptedDataBase64`。旧版请求体密钥格式不再兼容。请求加密模式与 Java SDK 使用相同的 RSA OAEP 摘要参数、AES-GCM IV 和认证标签格式。公钥在内存中缓存至配置的提前刷新点；刷新由下一次加密请求触发，不运行后台定时器。收到 `KEY_EXPIRED` 时刷新并最多重试一次，重试会重新生成会话材料及请求头。
+开启加密后，双向、请求加密和响应加密模式均通过 `X-STC-Key-Id` 和 `X-STC-Session-Key` 请求头发送 keyId 与 RSA 加密的 AES 会话密钥；请求密文体只包含 `ivBase64` 和 `encryptedDataBase64`。旧版请求体密钥格式不再兼容。请求加密模式与 Java SDK 使用相同的 RSA OAEP 摘要参数、AES-GCM IV 和认证标签格式。公钥在内存中缓存至配置的提前刷新点；刷新由下一次加密请求触发，不运行后台定时器。收到 `KEY_EXPIRED` 时刷新并最多重试一次，重试会重新生成会话材料及请求头。
 
 页面中的“请求加密(form)”演示使用 `application/x-www-form-urlencoded`。微信端先将 `name`、`phone`、`email`、`address` 字段按 UTF-8 URL 编码，再加密编码后的内容；线上请求体将 `ivBase64` 和 `encryptedDataBase64` 密文协议字段作为 URL 编码表单字段发送。Server SDK 解密后保留该 Content-Type，由 Spring MVC 转换为 `MultiValueMap<String, String>`。JSON 请求模式及其默认行为不变。该表单密文载体用于 Spring Server 示例；Kong 插件当前仍要求 JSON 格式的密文载体。
 

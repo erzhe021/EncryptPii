@@ -33,6 +33,7 @@ class ServerOnlyAutoConfigurationTest {
             .withConfiguration(AutoConfigurations.of(SensitiveTransportCryptoAutoConfiguration.class))
             .withBean(ObjectMapper.class, ObjectMapper::new)
             .withPropertyValues(
+                    "sensitive.transport.crypto.enabled=true",
                     "sensitive.transport.crypto.vault.secret-path=secret/data/test-service",
                     "sensitive.transport.crypto.vault.key-alias=test-service",
                     "sensitive.transport.crypto.key-lifecycle.validity-millis=120000",
@@ -139,6 +140,16 @@ class ServerOnlyAutoConfigurationTest {
     }
 
     @Test
+    void enabledVaultModeRetainsComponentScannedSynchronizer() {
+        CryptoServer testServer = new CryptoServer(new KeyRing("test-service", 120000, 10000, false, 20000));
+        webRunner.withUserConfiguration(VaultKeySynchronizer.class)
+                .withBean(CryptoServer.class, () -> testServer)
+                .withBean(VaultTemplate.class, () -> mock(VaultTemplate.class))
+                .run(context -> assertThat(context).hasNotFailed()
+                        .hasSingleBean(VaultKeySynchronizer.class));
+    }
+
+    @Test
     void memoryAliasIsStableAcrossContextsButKeyIdsAndKeysChange() {
         AtomicReference<String> firstKeyId = new AtomicReference<>();
         AtomicReference<String> firstPublicKey = new AtomicReference<>();
@@ -219,8 +230,47 @@ class ServerOnlyAutoConfigurationTest {
         webRunner.withPropertyValues("sensitive.transport.crypto.enabled=false").run(context -> {
             assertThat(context).hasNotFailed()
                     .doesNotHaveBean(CryptoServer.class)
-                    .doesNotHaveBean(CryptoPayloadHandler.class);
+                    .doesNotHaveBean(CryptoPayloadHandler.class)
+                    .doesNotHaveBean(RequestDecryptAdvice.class)
+                    .doesNotHaveBean(ResponseEncryptAdvice.class)
+                    .doesNotHaveBean(PublicKeyEndpoint.class);
         });
+    }
+
+    @Test
+    void omittedServerSwitchDefaultsToDisabledWithoutVault() {
+        new WebApplicationContextRunner()
+                .withConfiguration(AutoConfigurations.of(
+                        SensitiveTransportCryptoAutoConfiguration.class, CryptoProtocolAutoConfiguration.class))
+                .run(context -> assertThat(context).hasNotFailed()
+                        .doesNotHaveBean(CryptoServer.class)
+                        .doesNotHaveBean(VaultKeySynchronizer.class)
+                        .hasBean("cryptoProtocolConfigurer")
+                        .hasBean("cryptoExceptionHandler"));
+    }
+
+    @Test
+    void disabledCryptoDoesNotAccessVaultEvenWhenSynchronizerIsScanned() {
+        VaultTemplate template = mock(VaultTemplate.class);
+        webRunner.withUserConfiguration(VaultKeySynchronizer.class)
+                .withBean(VaultTemplate.class, () -> template)
+                .withPropertyValues("sensitive.transport.crypto.enabled=false")
+                .run(context -> {
+                    assertThat(context).hasNotFailed()
+                            .doesNotHaveBean(CryptoServer.class)
+                            .doesNotHaveBean(VaultKeySynchronizer.class);
+                    verify(template).afterPropertiesSet();
+                    verifyNoMoreInteractions(template);
+                });
+    }
+
+    @Test
+    void disabledCryptoDoesNotRequireVaultEvenWhenSynchronizerIsScanned() {
+        webRunner.withUserConfiguration(VaultKeySynchronizer.class)
+                .withPropertyValues("sensitive.transport.crypto.enabled=false")
+                .run(context -> assertThat(context).hasNotFailed()
+                        .doesNotHaveBean(CryptoServer.class)
+                        .doesNotHaveBean(VaultKeySynchronizer.class));
     }
 
     @Test

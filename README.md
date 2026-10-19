@@ -346,6 +346,13 @@ Vault KV v2 的每个 RSA 密钥版本包含：
 
 例如 `secret/data/sensitive-transport-crypto/demo-service` 对应 metadata 路径 `secret/metadata/sensitive-transport-crypto/demo-service`。建议按应用或安全边界隔离路径和别名。
 
+客户端通过 `X-STC-Enabled` 声明本次是否启用应用层加密：缺失或 `false`
+表示明文，`true` 才按 Spring 接口注解或 Kong 路由配置执行对应方向的加解密。
+非法或重复声明、未启用却携带密钥头都会被拒绝。旧加密客户端必须补上
+`X-STC-Enabled: true`；微信 SDK 自动管理该 Header，调用方不能覆盖。
+Spring SDK 服务端加密能力默认关闭，需设置 `sensitive.transport.crypto.enabled=true`；
+关闭时仍会拒绝显式声明加密的请求。允许明文是本协议的设计选择，注解不表示强制加密。
+
 双向加密和请求加密模式的请求体只包含以下密文。所有加密模式均通过 `X-STC-Key-Id` 和 `X-STC-Session-Key` 请求头传递 keyId 和 RSA-OAEP 加密的 AES 会话密钥：
 
 ```json

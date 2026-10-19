@@ -8,6 +8,7 @@ import com.ikea.crypto.stc.exception.InvalidCryptoRequestException;
 import com.ikea.crypto.stc.model.SessionKeyHeaders;
 import com.ikea.crypto.stc.session.CryptoSessionContext;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
+import com.ikea.crypto.stc.web.CryptoRequestMode;
 import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
@@ -52,12 +53,16 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
                                          Type targetType,
                                          Class<? extends HttpMessageConverter<?>> converterType)
             throws IOException {
-        log.debug("【api pre-called】start to decrypting request body");
+        if (!CryptoRequestMode.parse(inputMessage.getHeaders())) {
+            return inputMessage;
+        }
         boolean decryptRequest = findDecryptRequest(parameter) != null;
         boolean encryptResponse = findEncryptResponse(parameter) != null;
         if (!decryptRequest && !encryptResponse) {
             return inputMessage;
         }
+
+        log.debug("【api pre-called】start to decrypting request body");
         SessionKeyHeaders sessionKeyHeaders = sessionKeyHeaders(inputMessage.getHeaders());
 
         try {
@@ -88,8 +93,10 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
                     }
                 };
             }
-            sessionContext = payloadHandler.createResponseSessionContext(sessionKeyHeaders);
-            CryptoSessionContextAccessor.setCryptoSessionContext(sessionContext);
+            if (CryptoSessionContextAccessor.getCryptoSessionContext() == null) {
+                sessionContext = payloadHandler.createResponseSessionContext(sessionKeyHeaders);
+                CryptoSessionContextAccessor.setCryptoSessionContext(sessionContext);
+            }
             return inputMessage;
         } catch (GeneralSecurityException e) {
             throw new CryptoServerSideException("Failed to process request decryption", e);
@@ -111,7 +118,14 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
                                   MethodParameter parameter,
                                   Type targetType,
                                   Class<? extends HttpMessageConverter<?>> converterType) {
-        if (findDecryptRequest(parameter) == null && findEncryptResponse(parameter) != null) {
+        if (!CryptoRequestMode.parse(inputMessage.getHeaders())) {
+            return body;
+        }
+        if (findDecryptRequest(parameter) != null) {
+            throw new InvalidCryptoRequestException("Encrypted request body is required.");
+        }
+        if (findEncryptResponse(parameter) != null
+                && CryptoSessionContextAccessor.getCryptoSessionContext() == null) {
             CryptoSessionContextAccessor.setCryptoSessionContext(
                     payloadHandler.createResponseSessionContext(sessionKeyHeaders(inputMessage.getHeaders())));
         }

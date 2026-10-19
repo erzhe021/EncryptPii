@@ -5,6 +5,7 @@ import com.ikea.crypto.stc.constant.CryptoConstants;
 import com.ikea.crypto.stc.exception.ResponseEncryptionException;
 import com.ikea.crypto.stc.session.CryptoSessionContext;
 import com.ikea.crypto.stc.session.CryptoSessionContextAccessor;
+import com.ikea.crypto.stc.web.CryptoRequestMode;
 import com.ikea.crypto.stc.web.codec.CryptoPayloadHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.MethodParameter;
@@ -46,12 +47,15 @@ public class ResponseEncryptAdvice implements ResponseBodyAdvice<Object> {
                                   Class<? extends HttpMessageConverter<?>> selectedConverterType,
                                   ServerHttpRequest request,
                                   ServerHttpResponse response) {
-        log.debug("【api post-called】start to encrypting response body");
         try {
+            if (!(request instanceof ServletServerHttpRequest servletRequest)
+                    || !CryptoRequestMode.isEnabled(servletRequest.getServletRequest())) {
+                return body;
+            }
+            log.debug("【api post-called】start to encrypting response body");
             CryptoSessionContext sessionContext = CryptoSessionContextAccessor.getCryptoSessionContext();
             EncryptResponse encryptResponse = findEncryptResponse(returnType);
-            if (encryptResponse == null && sessionContext != null
-                    && request instanceof ServletServerHttpRequest servletRequest) {
+            if (encryptResponse == null && sessionContext != null) {
                 Object handler = servletRequest.getServletRequest()
                         .getAttribute(HandlerMapping.BEST_MATCHING_HANDLER_ATTRIBUTE);
                 if (handler instanceof HandlerMethod handlerMethod) {

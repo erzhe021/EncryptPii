@@ -10,10 +10,12 @@ test('SDK request decrypts in JCA and JCA response decrypts in SDK', async () =>
   const privateKey = pair.privateKey.export({ type: 'pkcs8', format: 'der' }).toString('base64');
   const client = createClient({
     baseUrl: 'https://kong.example.com',
+    crypto: { enabled: true },
     publicKeyPath: '/test/key',
     randomBytes: async (length) => new Uint8Array(crypto.randomBytes(length)),
     transport: async (request) => {
       if (request.method === 'GET') {
+        assert.equal(request.headers['X-STC-Enabled'], undefined);
         return {
           statusCode: 200,
           data: {
@@ -25,6 +27,7 @@ test('SDK request decrypts in JCA and JCA response decrypts in SDK', async () =>
         };
       }
       const payload = request.data;
+      assert.equal(request.headers['X-STC-Enabled'], 'true');
       assert.deepEqual(Object.keys(payload).sort(), ['encryptedDataBase64', 'ivBase64']);
       assert.equal(request.headers['X-STC-Key-Id'], 'java');
       const java = spawnSync('java', [path.join(__dirname, 'JavaInterop.java')], {

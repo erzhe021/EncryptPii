@@ -7,6 +7,7 @@ spring:
 sensitive:
   transport:
     crypto:
+      enabled: true
       key-store: memory
       memory:
         key-alias: demo-service

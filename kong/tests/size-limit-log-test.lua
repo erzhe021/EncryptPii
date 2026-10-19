@@ -36,6 +36,7 @@ ngx = { arg = {}, header = {} }
 local plugin = require "kong.plugins.sensitive-transport-crypto.handler"
 local config = { decrypt_request = true, max_body_bytes = 4 }
 
+headers["X-STC-Enabled"] = "true"
 headers["Content-Length"] = "5"
 local result = plugin:access(config)
 assert(result.status == 413)
@@ -44,7 +45,7 @@ assert(#logs == 1 and logs[1].level == "warn")
 assert(logs[1].message:find("bytes=5, limit=4", 1, true))
 
 logs = {}
-headers = {}
+headers = { ["X-STC-Enabled"] = "true" }
 request_body = "secret"
 result = plugin:access(config)
 assert(result.status == 413)

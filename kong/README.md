@@ -42,12 +42,15 @@
 
 ### 统一请求头与请求体
 
-所有加密模式均使用以下请求头，不再支持旧版 Body 密钥传输：
+加密路由仅在请求头 `X-STC-Enabled: true` 时执行路由配置的加解密；未发送该头或设置为 `false` 均按普通明文请求转发。请求头只接受小写字面值 `true` 或 `false`，重复该头（即使值相同）会返回 HTTP 400。`X-STC-Enabled` 不会转发到上游。仅在显式启用且路由配置了请求解密或响应加密时，才需要以下会话材料；不再支持旧版 Body 密钥传输：
 
 | 请求头 | 内容 |
 | --- | --- |
+| `X-STC-Enabled` | `true` 启用本路由配置的加解密；`false` 或缺失表示明文传输 |
 | `X-STC-Key-Id` | `<keyAlias>:<version>`，例如 `demo-service:2` |
 | `X-STC-Session-Key` | RSA 加密后的 AES 会话密钥的 Base64 字符串，不能传明文会话密钥 |
+
+启用加解密时，`X-STC-Key-Id` 和 `X-STC-Session-Key` 必须同时提供；未启用时若出现任一密钥头（包括空值）会返回 HTTP 400。公钥接口仍可在不带 `X-STC-Enabled` 的情况下调用。
 
 双向加密和请求加密的请求体只包含以下两个字段；响应加密的请求体保持原业务明文结构，也可无请求体：
 
@@ -60,7 +63,7 @@
 
 RSA 使用 OAEP-SHA-256，MGF1 使用 SHA-1，以匹配 Java SDK 的 `RSA/ECB/OAEPWithSHA-256AndMGF1Padding` 默认参数。会话密钥为 256-bit AES，数据采用 GCM，IV 为 12 字节、认证标签为 16 字节。响应体包含 `ivBase64` 和 `encryptedDataBase64`。
 
-Kong 在所有加密路由转发上游前移除这两个请求头，并注入 `X-Crypto-Gateway-Token`。需要解密的请求体中出现旧版 `keyId` 或 `encryptedSessionKeyBase64` 字段、或其他非协议字段时会明确返回 HTTP 400；不支持 body/header 混用或回退。Server 必须配置相同的 `KONG_TO_ENCRYPTPII_AUTH_TOKEN`，且不能将受保护的内部明文接口直接暴露给不可信网络。
+Kong 在请求转发上游前移除三个 STC 请求头，并注入 `X-Crypto-Gateway-Token`，明文绕过仍执行认证注入和上游路径改写。需要解密的请求体中出现旧版 `keyId` 或 `encryptedSessionKeyBase64` 字段、或其他非协议字段时会明确返回 HTTP 400；不支持 body/header 混用或回退。Server 必须配置相同的 `KONG_TO_ENCRYPTPII_AUTH_TOKEN`，且不能将受保护的内部明文接口直接暴露给不可信网络。
 
 ### 响应与异常
 
@@ -263,7 +266,7 @@ plugins:
       max_body_bytes: 1048576
 ```
 
-请求解密单向路由使用 `decrypt_request: true`、`encrypt_response: false`；仅响应加密路由使用 `decrypt_request: false`、`encrypt_response: true`。所有这类加密路由都从固定的两个 STC 请求头读取会话材料。公钥路由使用 `serve_public_key: true`，由插件直接返回 Vault 中的当前公钥、`keyId`、`expiresAtEpochMillis` 和 `refreshAtEpochMillis`。刷新时间为公钥到期时间减去 `rotation_before_expiry_millis`。
+请求解密单向路由使用 `decrypt_request: true`、`encrypt_response: false`；仅响应加密路由使用 `decrypt_request: false`、`encrypt_response: true`。客户端必须对这些路由发送 `X-STC-Enabled: true` 才启用相应配置；缺失或 `false` 表示明文绕过。显式启用时，路由必须至少配置一个加密方向，并且双向/单向加密请求都从固定的两个 STC 请求头读取会话材料。公钥路由使用 `serve_public_key: true`，由插件直接返回 Vault 中的当前公钥、`keyId`、`expiresAtEpochMillis` 和 `refreshAtEpochMillis`。刷新时间为公钥到期时间减去 `rotation_before_expiry_millis`。
 
 主要配置项：
 

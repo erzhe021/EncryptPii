@@ -5,6 +5,7 @@ module.exports = {
     SERVER_BASE_URL,
     SDK_OPTIONS: {
         baseUrl: SERVER_BASE_URL,
+        crypto: { enabled: true },
         timeoutMs: 15000,
         publicKeyPath: '/sensitive-transport-crypto/public-key'
     },

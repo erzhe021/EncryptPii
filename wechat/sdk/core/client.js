@@ -1,5 +1,5 @@
 const { SdkError, HttpError } = require('./errors');
-const { MODES, KEY_ID_HEADER, SESSION_KEY_HEADER, ENCRYPTED_RESPONSE_HEADER } = require('./protocol');
+const { MODES, ENABLED_HEADER, KEY_ID_HEADER, SESSION_KEY_HEADER, ENCRYPTED_RESPONSE_HEADER } = require('./protocol');
 const { createKeyManager } = require('./key-manager');
 const { createCrypto } = require('./crypto');
 
@@ -11,7 +11,7 @@ function normalizeHeaders(headers = {}) {
   }
   const normalized = Object.create(null);
   for (const name of Object.keys(headers)) {
-    if ([KEY_ID_HEADER.toLowerCase(), SESSION_KEY_HEADER.toLowerCase()]
+    if ([ENABLED_HEADER.toLowerCase(), KEY_ID_HEADER.toLowerCase(), SESSION_KEY_HEADER.toLowerCase()]
       .includes(name.toLowerCase()) || !/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name)
       || typeof headers[name] !== 'string' || /[\r\n]/.test(headers[name])) {
       throw new SdkError('INVALID_ARGUMENT', 'Invalid or reserved request header');
@@ -171,6 +171,12 @@ function createClient(options) {
   if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new SdkError('INVALID_ARGUMENT', 'Timeout must be a positive number');
   }
+  if (options.crypto !== undefined && (!options.crypto || typeof options.crypto !== 'object'
+      || Array.isArray(options.crypto)
+      || (options.crypto.enabled !== undefined && typeof options.crypto.enabled !== 'boolean'))) {
+    throw new SdkError('INVALID_ARGUMENT', 'Crypto configuration must contain a boolean enabled flag');
+  }
+  const cryptoEnabled = options.crypto !== undefined && options.crypto.enabled === true;
   const defaultHeaders = normalizeHeaders(options.headers);
   const publicKeyPath = validatePath(options.publicKeyPath);
   const transport = options.transport;
@@ -222,6 +228,7 @@ function createClient(options) {
       : contentType === FORM_CONTENT_TYPE ? serializedData : inputData;
     const requestHeaders = Object.assign({}, headers);
     requestHeaders['content-type'] = contentType;
+    requestHeaders[ENABLED_HEADER] = String(encrypted);
     if (encrypted) {
       requestHeaders[KEY_ID_HEADER] = serverKey.keyId;
       requestHeaders[SESSION_KEY_HEADER] = session.encryptedSessionKeyBase64;
@@ -279,6 +286,7 @@ function createClient(options) {
       cipherResponse: decryptResponse ? raw : null,
       requestHeaders: {
         'Content-Type': contentType,
+        [ENABLED_HEADER]: requestHeaders[ENABLED_HEADER],
         ...(encrypted ? {
           [KEY_ID_HEADER]: requestHeaders[KEY_ID_HEADER],
           [SESSION_KEY_HEADER]: requestHeaders[SESSION_KEY_HEADER]
@@ -305,7 +313,7 @@ function createClient(options) {
     if (!input || !hasOwn(MODES, input.mode)) {
       throw new SdkError('INVALID_ARGUMENT', 'Unknown transport mode');
     }
-    const mode = MODES[input.mode];
+    const mode = MODES[cryptoEnabled ? input.mode : 'plain'];
     const endpoint = validatePath(input.endpoint);
     const headers = normalizeHeaders(input.headers);
     const contentType = input.contentType === undefined ? JSON_CONTENT_TYPE : input.contentType;

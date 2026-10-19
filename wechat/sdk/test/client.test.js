@@ -100,17 +100,193 @@ function result(data) {
 
 function options(transport, extra) {
   return Object.assign({
-    baseUrl: 'https://kong.example.com', publicKeyPath: '/test/key', transport, randomBytes
+    baseUrl: 'https://kong.example.com', publicKeyPath: '/test/key', transport, randomBytes,
+    crypto: { enabled: true }
   }, extra);
 }
+
+test('disabled and omitted crypto switches force all modes to plain without keys or randomness', async () => {
+  for (const crypto of [undefined, {}, { enabled: false }]) {
+    const requests = [];
+    const client = createSdkClient(options(async (request) => {
+      requests.push(request);
+      assert.equal(request.method, 'POST');
+      assert.equal(request.url, 'https://kong.example.com/unchanged');
+      assert.deepEqual(request.headers, {
+        'content-type': 'application/json', authorization: 'test', 'X-STC-Enabled': 'false'
+      });
+      assert.deepEqual(request.data, { hello: 'world' });
+      return { statusCode: 200, data: result(request.data) };
+    }, {
+      crypto,
+      randomBytes: async () => { throw new Error('must not request randomness'); }
+    }));
+    for (const mode of Object.keys(MODES)) {
+      const input = {
+        mode, endpoint: '/unchanged', data: { hello: 'world' }, headers: { Authorization: 'test' }
+      };
+      assert.deepEqual(await client.send(input), result(input.data));
+      const details = await client.sendDetailed(input);
+      assert.deepEqual(details.data, result(input.data));
+      assert.equal(details.encryptRequest, false);
+      assert.equal(details.decryptResponse, false);
+      assert.equal(details.cipherRequest, null);
+      assert.equal(details.cipherResponse, null);
+      assert.equal(details.stcHeaders, null);
+      assert.deepEqual(details.requestHeaders, {
+        'Content-Type': 'application/json', 'X-STC-Enabled': 'false'
+      });
+      assert.equal(details.timings.encryption, 0);
+      assert.equal(details.timings.decryption, 0);
+    }
+    assert.equal(requests.length, 8);
+  }
+});
+
+test('disabled crypto preserves form serialization and HTTP failures without key-expiry retries', async () => {
+  let count = 0;
+  const failure = { code: 'KEY_EXPIRED', data: firstKey.info };
+  const client = createSdkClient(options(async (request) => {
+    count += 1;
+    assert.equal(request.method, 'POST');
+    assert.equal(request.data, 'name=Alice+Smith&phone=123%2B456');
+    assert.deepEqual(request.headers, {
+      'content-type': 'application/x-www-form-urlencoded', 'X-STC-Enabled': 'false'
+    });
+    return { statusCode: 400, data: failure };
+  }, { crypto: { enabled: false } }));
+  await assert.rejects(client.sendDetailed({
+    mode: 'bidirectional',
+    endpoint: '/form',
+    contentType: 'application/x-www-form-urlencoded',
+    data: { name: 'Alice Smith', phone: '123+456' }
+  }), (error) => {
+    assert.ok(error instanceof HttpError);
+    assert.equal(error.data, failure);
+    assert.equal(error.details.encryptRequest, false);
+    assert.equal(error.details.decryptResponse, false);
+    assert.equal(error.details.stcHeaders, null);
+    return true;
+  });
+  assert.equal(count, 1);
+});
+
+test('crypto configuration is validated rather than treating truthy values as enabled', () => {
+  for (const crypto of [null, true, false, 'true', [], { enabled: 'true' },
+    { enabled: 1 }, { enabled: null }]) {
+    assert.throws(() => createSdkClient(options(async () => {}, { crypto })),
+      { code: 'INVALID_ARGUMENT' });
+  }
+});
+
+test('enable header is reserved case-insensitively for both switches and all modes', async () => {
+  let calls = 0;
+  const transport = async () => { calls += 1; };
+  for (const enabled of [false, true]) {
+    for (const name of ['X-STC-Enabled', 'x-stc-enabled', 'X-sTc-EnAbLeD']) {
+      for (const value of ['true', 'false']) {
+        const headers = { [name]: value };
+        assert.throws(() => createSdkClient(options(transport, {
+          crypto: { enabled }, headers
+        })), { code: 'INVALID_ARGUMENT' });
+        const client = createSdkClient(options(transport, { crypto: { enabled } }));
+        for (const mode of Object.keys(MODES)) {
+          for (const method of ['send', 'sendDetailed']) {
+            await assert.rejects(client[method]({
+              mode, endpoint: '/unchanged', data: {}, headers
+            }), { code: 'INVALID_ARGUMENT' });
+          }
+        }
+      }
+    }
+  }
+  assert.equal(calls, 0);
+});
+
+test('disabled crypto never decrypts ciphertext responses or bypasses mode validation', async () => {
+  let count = 0;
+  const ciphertext = { ivBase64: 'not-an-iv', encryptedDataBase64: 'not-ciphertext' };
+  const client = createSdkClient(options(async () => {
+    count += 1;
+    return {
+      statusCode: count === 1 ? 200 : 500,
+      headers: { 'X-STC-Encrypted': 'true' },
+      data: ciphertext
+    };
+  }, { crypto: { enabled: false } }));
+  const input = { mode: 'response-only', endpoint: '/resource', data: {} };
+  await assert.rejects(client.send(input), { code: 'INVALID_RESPONSE' });
+  await assert.rejects(client.sendDetailed(input), (error) => {
+    assert.ok(error instanceof HttpError);
+    assert.equal(error.data, ciphertext);
+    assert.equal(error.details.data, ciphertext);
+    assert.equal(error.details.cipherResponse, null);
+    assert.equal(error.details.decryptResponse, false);
+    return true;
+  });
+  await assert.rejects(client.send({ ...input, mode: 'unknown' }), { code: 'INVALID_ARGUMENT' });
+  assert.equal(count, 2);
+});
+
+test('crypto switch is captured per instance and cannot change an in-flight response', async () => {
+  const crypto = { enabled: true };
+  const requests = [];
+  const client = createSdkClient(options(gateway(firstKey, requests, []), { crypto }));
+  const pending = client.send({
+    mode: 'bidirectional', endpoint: '/test/bidirectional', data: { ok: true }
+  });
+  crypto.enabled = false;
+  assert.deepEqual(await pending, result({ ok: true }));
+  assert.deepEqual(await client.send({
+    mode: 'bidirectional', endpoint: '/test/bidirectional', data: { ok: true }
+  }), result({ ok: true }));
+  assert.equal(requests.filter((request) => request.method === 'POST').length, 2);
+  assert.ok(requests.filter((request) => request.method === 'POST')
+    .every((request) => request.headers['X-STC-Session-Key']));
+});
+
+test('WeChat crypto switch is forwarded and encryption failure never falls back to plaintext', async () => {
+  for (const enabled of [undefined, false, true]) {
+    let count = 0;
+    const client = createWechatClient({
+      baseUrl: 'https://kong.example.com',
+      publicKeyPath: '/test/key',
+      crypto: { enabled },
+      platform: {
+        request(request) {
+          count += 1;
+          if (request.method === 'GET') {
+            request.success({ statusCode: 200, data: firstKey.info });
+          } else {
+            assert.notEqual(enabled, true);
+            assert.deepEqual(request.data, { ok: true });
+            assert.equal(request.header['X-STC-Session-Key'], undefined);
+            request.success({ statusCode: 200, data: result(request.data) });
+          }
+        }
+      }
+    });
+    const pending = client.send({
+      mode: 'bidirectional', endpoint: '/resource', data: { ok: true }
+    });
+    if (enabled) {
+      await assert.rejects(pending, { code: 'RANDOM_UNAVAILABLE' });
+    } else {
+      assert.deepEqual(await pending, result({ ok: true }));
+    }
+    assert.equal(count, 1);
+  }
+});
 
 function gateway(key, requests, sessions) {
   return async (request) => {
     requests.push(request);
     if (request.method === 'GET') {
+      assert.equal(request.headers['X-STC-Enabled'], undefined);
       return { statusCode: 200, data: key.info };
     }
     const mode = request.url.split('/').pop();
+    assert.equal(request.headers['X-STC-Enabled'], String(mode !== 'plain'));
     if (mode === 'plain') {
       return { statusCode: 200, data: result(request.data) };
     }
@@ -141,14 +317,19 @@ test('all modes preserve routing and interoperate with independent RSA/AES primi
     assert.equal(Boolean(detailed.cipherRequest), ['bidirectional', 'request-only'].includes(mode));
     assert.equal(Boolean(detailed.cipherResponse), ['bidirectional', 'response-only'].includes(mode));
     assert.equal(detailed.requestHeaders['Content-Type'], 'application/json');
+    assert.equal(detailed.requestHeaders['X-STC-Enabled'], String(mode !== 'plain'));
     if (mode !== 'plain') {
       assert.equal(detailed.stcHeaders['X-STC-Key-Id'], firstKey.info.keyId);
       assert.ok(detailed.stcHeaders['X-STC-Session-Key']);
+      assert.deepEqual(Object.keys(detailed.stcHeaders).sort(),
+        ['X-STC-Key-Id', 'X-STC-Session-Key']);
       assert.equal(detailed.requestHeaders['X-STC-Key-Id'], firstKey.info.keyId);
       assert.ok(detailed.requestHeaders['X-STC-Session-Key']);
     } else {
       assert.equal(detailed.stcHeaders, null);
-      assert.deepEqual(detailed.requestHeaders, { 'Content-Type': 'application/json' });
+      assert.deepEqual(detailed.requestHeaders, {
+        'Content-Type': 'application/json', 'X-STC-Enabled': 'false'
+      });
     }
     assert.equal(Object.hasOwn(detailed, 'sessionKey'), false);
     assert.equal(Object.hasOwn(detailed, 'request'), false);

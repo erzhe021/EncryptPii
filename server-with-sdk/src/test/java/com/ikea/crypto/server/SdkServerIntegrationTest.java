@@ -8,11 +8,16 @@ import com.ikea.crypto.stc.crypto.GcmIvGenerator;
 import com.ikea.crypto.stc.key.CryptoServer;
 import com.ikea.crypto.stc.model.CipherRequestPayload;
 import com.ikea.crypto.stc.model.PublicKeyResponse;
+import com.ikea.crypto.stc.annotation.EncryptResponse;
+import com.ikea.crypto.server.model.Result;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.context.annotation.Import;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
@@ -29,12 +34,23 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest(properties = {
+        "sensitive.transport.crypto.enabled=true",
         "spring.cloud.vault.enabled=false",
         "spring.cloud.vault.token=test-token",
         "sensitive.transport.crypto.key-store=memory"
 })
 @AutoConfigureMockMvc
+@Import(SdkServerIntegrationTest.HeaderOnlyController.class)
 class SdkServerIntegrationTest {
+
+    @RestController
+    @EncryptResponse
+    static class HeaderOnlyController {
+        @GetMapping("/header-tests/response")
+        Result<String> response() {
+            return Result.ok("header-only");
+        }
+    }
 
     @Autowired private MockMvc mvc;
     @Autowired private ObjectMapper mapper;
@@ -132,8 +148,33 @@ class SdkServerIntegrationTest {
     }
 
     @Test
+    void classLevelResponseAnnotationWorksWithoutRequestBodyAdvice() throws Exception {
+        MvcResult response = mvc.perform(get("/header-tests/response")
+                        .header("X-STC-Enabled", "TRUE")
+                        .header("X-STC-Key-Id", keyId)
+                        .header("X-STC-Session-Key", wrappedKey))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-STC-Encrypted", "true"))
+                .andReturn();
+        assertEquals("header-only", decryptResponse(response).path("data").asText());
+        mvc.perform(get("/header-tests/response"))
+                .andExpect(status().isOk())
+                .andExpect(header().doesNotExist("X-STC-Encrypted"))
+                .andExpect(jsonPath("$.data").value("header-only"));
+    }
+
+    @Test
+    void enabledDecryptionRequiresRequestBody() throws Exception {
+        mvc.perform(sessionRequest("/crypto/server/bidirectional"))
+                .andExpect(status().isBadRequest())
+                .andExpect(header().string("X-STC-Encrypted", "false"))
+                .andExpect(jsonPath("$.message").value("Encrypted request body is required."));
+    }
+
+    @Test
     void missingHeadersAreRejected() throws Exception {
         mvc.perform(post("/crypto/server/response-only")
+                        .header("X-STC-Enabled", "true")
                         .contentType("application/json").content("{\"data\":\"demo\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(header().string("X-STC-Encrypted", "false"));
@@ -142,6 +183,7 @@ class SdkServerIntegrationTest {
     @Test
     void malformedSessionKeyProducesPlainCryptoError() throws Exception {
         mvc.perform(post("/crypto/server/response-only/client-exception")
+                        .header("X-STC-Enabled", "true")
                         .contentType("application/json")
                         .header("X-STC-Key-Id", keyId)
                         .header("X-STC-Session-Key", "not-base64!"))
@@ -211,6 +253,7 @@ class SdkServerIntegrationTest {
 
     private MockHttpServletRequestBuilder sessionRequest(String endpoint) {
         return post(endpoint).contentType("application/json")
+                .header("X-STC-Enabled", "true")
                 .header("X-STC-Key-Id", keyId)
                 .header("X-STC-Session-Key", wrappedKey);
     }

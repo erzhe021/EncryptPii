@@ -66,6 +66,7 @@ class RequestDecryptAdviceExceptionTest {
                 .build();
 
         mvc.perform(post("/form")
+                        .header("X-STC-Enabled", "true")
                         .contentType(MediaType.APPLICATION_FORM_URLENCODED)
                         .header("X-STC-Key-Id", "test:1")
                         .header("X-STC-Session-Key", "wrapped")
@@ -84,6 +85,7 @@ class RequestDecryptAdviceExceptionTest {
         CryptoPayloadHandler handler = mock(CryptoPayloadHandler.class);
         MockHttpInputMessage input = new MockHttpInputMessage("body".getBytes(StandardCharsets.UTF_8));
         input.getHeaders().setContentType(MediaType.TEXT_PLAIN);
+        input.getHeaders().set("X-STC-Enabled", "true");
         MethodParameter parameter = new MethodParameter(
                 getClass().getMethod("endpoint", String.class), 0);
 
@@ -126,6 +128,7 @@ class RequestDecryptAdviceExceptionTest {
     private void invoke(CryptoPayloadHandler handler) throws Exception {
         MockHttpInputMessage input = new MockHttpInputMessage("body".getBytes(StandardCharsets.UTF_8));
         input.getHeaders().setContentType(MediaType.APPLICATION_JSON);
+        input.getHeaders().set("X-STC-Enabled", "true");
         input.getHeaders().set("X-STC-Key-Id", "test:1");
         input.getHeaders().set("X-STC-Session-Key", "wrapped");
         MethodParameter parameter = new MethodParameter(

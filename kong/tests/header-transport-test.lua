@@ -2,6 +2,8 @@ local headers = {}
 local request_body
 local forwarded_body
 local cleared_headers = {}
+local forwarded_headers = {}
+local forwarded_path
 local captured_key_id
 local captured_encrypted_session_key
 
@@ -99,8 +101,8 @@ kong = {
     request = {
       set_raw_body = function(body) forwarded_body = body end,
       clear_header = function(name) cleared_headers[name] = true end,
-      set_header = function() end,
-      set_path = function() end,
+      set_header = function(name, value) forwarded_headers[name] = value end,
+      set_path = function(path) forwarded_path = path end,
     },
   },
   ctx = { plugin = {} },
@@ -119,6 +121,7 @@ local encrypted_config = {
   upstream_auth_token = "upstream-token",
   upstream_path = "/upstream",
 }
+headers["X-STC-Enabled"] = "true"
 headers["X-STC-Key-Id"] = "alias:1"
 headers["X-STC-Session-Key"] = encrypted_session_key
 headers["Content-Length"] = tostring(#valid_body)
@@ -130,8 +133,13 @@ assert(result == nil)
 assert(captured_key_id == "alias:1")
 assert(captured_encrypted_session_key ~= nil)
 assert(forwarded_body == "decrypted request")
-assert(cleared_headers["X-STC-Key-Id"] and cleared_headers["X-STC-Session-Key"])
+assert(cleared_headers["X-STC-Key-Id"] and cleared_headers["X-STC-Session-Key"]
+  and cleared_headers["X-STC-Enabled"])
+assert(forwarded_headers["X-Crypto-Gateway-Token"] == "upstream-token")
+assert(forwarded_headers["Accept-Encoding"] == "identity")
+assert(forwarded_path == "/upstream")
 
+headers["X-STC-Enabled"] = "true"
 headers["X-STC-Key-Id"] = "alias:1"
 headers["X-STC-Session-Key"] = encrypted_session_key
 headers["Content-Length"] = nil
@@ -148,8 +156,102 @@ result = plugin:access({
 assert(result == nil)
 assert(forwarded_body == nil, "response-only mode must preserve its plaintext request body")
 assert(kong.ctx.plugin.session_key == string.rep("s", 32))
-assert(cleared_headers["X-STC-Key-Id"] and cleared_headers["X-STC-Session-Key"])
+assert(cleared_headers["X-STC-Key-Id"] and cleared_headers["X-STC-Session-Key"]
+  and cleared_headers["X-STC-Enabled"])
 
+headers = {}
+headers["Content-Length"] = nil
+request_body = '{"data":"plain request"}'
+forwarded_body = nil
+cleared_headers = {}
+forwarded_headers = {}
+forwarded_path = nil
+kong.ctx.plugin = {}
+result = plugin:access(encrypted_config)
+assert(result == nil, "missing X-STC-Enabled must bypass route crypto")
+assert(forwarded_body == nil, "plain bypass must not decrypt or replace the body")
+assert(kong.ctx.plugin.session_key == nil and kong.ctx.plugin.encrypt_response == false)
+assert(cleared_headers["X-STC-Key-Id"] and cleared_headers["X-STC-Session-Key"]
+  and cleared_headers["X-STC-Enabled"])
+assert(forwarded_headers["X-Crypto-Gateway-Token"] == "upstream-token")
+assert(forwarded_headers["Accept-Encoding"] == "identity")
+assert(forwarded_path == "/upstream", "plain bypass must preserve the configured upstream path")
+
+headers = { ["X-STC-Enabled"] = "false" }
+forwarded_body = nil
+cleared_headers = {}
+forwarded_headers = {}
+forwarded_path = nil
+kong.ctx.plugin = {}
+result = plugin:access(encrypted_config)
+assert(result == nil, "X-STC-Enabled: false must bypass route crypto")
+assert(forwarded_body == nil and kong.ctx.plugin.encrypt_response == false)
+assert(cleared_headers["X-STC-Enabled"])
+assert(forwarded_headers["X-Crypto-Gateway-Token"] == "upstream-token")
+assert(forwarded_path == "/upstream")
+
+headers["X-STC-Enabled"] = "false"
+headers["X-STC-Key-Id"] = "alias:1"
+request_body = '{"data":"plain request"}'
+exited = nil
+kong.ctx.plugin = {}
+result = plugin:access(encrypted_config)
+assert(result.status == 400, "key headers must be rejected when crypto is disabled")
+assert(result.body.message ==
+  "X-STC-Key-Id and X-STC-Session-Key are only valid together with X-STC-Enabled: true")
+
+for _, invalid_enabled in ipairs({
+  "",
+  "TRUE",
+  "yes",
+  { "true", "true" },
+  { "true", "false" },
+}) do
+  headers = { ["X-STC-Enabled"] = invalid_enabled }
+  exited = nil
+  kong.ctx.plugin = {}
+  result = plugin:access(encrypted_config)
+  assert(result.status == 400, "malformed or repeated enable headers must be rejected")
+end
+
+headers = { ["X-STC-Enabled"] = "true" }
+exited = nil
+kong.ctx.plugin = {}
+result = plugin:access({
+  decrypt_request = false,
+  encrypt_response = false,
+  upstream_auth_token = "upstream-token",
+  upstream_path = "/plain",
+})
+assert(result.status == 400, "enable=true must not be accepted on a route without crypto")
+
+headers = {}
+exited = nil
+kong.ctx.plugin = {}
+result = plugin:access({ serve_public_key = true })
+assert(result.status == 200, "public-key endpoint must remain usable without X-STC-Enabled")
+
+headers["X-STC-Enabled"] = { "true", "true" }
+exited = nil
+kong.ctx.plugin = {}
+result = plugin:access({ serve_public_key = true })
+assert(result.status == 400, "public-key endpoint must reject repeated enable headers")
+
+headers = {
+  ["X-STC-Enabled"] = "true",
+  ["X-STC-Key-Id"] = "",
+  ["X-STC-Session-Key"] = "",
+}
+exited = nil
+kong.ctx.plugin = {}
+result = plugin:access({ serve_public_key = true })
+assert(result.status == 400, "public-key endpoint must reject empty supplied key material")
+
+headers = {
+  ["X-STC-Enabled"] = "true",
+  ["X-STC-Key-Id"] = "alias:1",
+  ["X-STC-Session-Key"] = encrypted_session_key,
+}
 for _, legacy_fields in ipairs({
   '"keyId":"alias:1"',
   '"encryptedSessionKeyBase64":"' .. encrypted_session_key .. '"',
@@ -166,14 +268,26 @@ for _, legacy_fields in ipairs({
     result.body.message)
 end
 
-headers["X-STC-Session-Key"] = nil
+headers = { ["X-STC-Enabled"] = "true", ["X-STC-Key-Id"] = { "alias:1", "alias:1" } }
 request_body = valid_body
-headers["Content-Length"] = tostring(#request_body)
 exited = nil
 kong.ctx.plugin = {}
 result = plugin:access(encrypted_config)
-assert(result.status == 400)
+assert(result.status == 400, "duplicate key headers must be rejected even when identical")
+
+headers = { ["X-STC-Enabled"] = "true", ["X-STC-Key-Id"] = "alias:1" }
+request_body = valid_body
+exited = nil
+kong.ctx.plugin = {}
+result = plugin:access(encrypted_config)
+assert(result.status == 400, "missing session key must still be rejected when enabled")
 assert(result.body.message ==
   "X-STC-Key-Id and X-STC-Session-Key are required; body key transport is unsupported")
+
+headers = { ["X-STC-Enabled"] = "false", ["X-STC-Session-Key"] = "" }
+exited = nil
+kong.ctx.plugin = {}
+result = plugin:access(encrypted_config)
+assert(result.status == 400, "even an empty key header must be rejected when crypto is disabled")
 
 print("Header transport tests passed")

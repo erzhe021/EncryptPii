@@ -2,6 +2,7 @@
 
 local Protocol = {
   -- Transport headers.
+  ENABLED_HEADER = "X-STC-Enabled",
   KEY_ID_HEADER = "X-STC-Key-Id",
   SESSION_KEY_HEADER = "X-STC-Session-Key",
   GATEWAY_TOKEN_HEADER = "X-Crypto-Gateway-Token",

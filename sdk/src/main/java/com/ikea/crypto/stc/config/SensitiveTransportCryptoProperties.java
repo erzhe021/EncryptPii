@@ -19,9 +19,9 @@ import org.springframework.validation.annotation.Validated;
 public class SensitiveTransportCryptoProperties {
 
     /**
-     * Whether sensitive transport crypto functionality is enabled. Defaults to true.
+     * Whether sensitive transport crypto functionality is enabled. Defaults to false.
      */
-    private boolean enabled = true;
+    private boolean enabled = false;
 
     /**
      * Whether expired keys are rotated automatically. Defaults to true.
