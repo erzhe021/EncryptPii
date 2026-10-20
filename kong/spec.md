@@ -47,7 +47,7 @@
 
 ## 6. SDK 一致性与 Kong 边界
 
-- 请求解密支持 JSON 与 URL 编码表单，必须携带相应 Content-Type；协议字段只能各出现一次。
+- 请求解密仅支持 JSON；协议字段只能各出现一次。
 - 无加密方向的路由及公钥接口拒绝 `X-STC-Enabled: true`。
 - 密钥读取失败返回 HTTP 500；普通错误使用 SDK 的五字段错误结构，密钥错误使用 `code/msg/data`。
 - RSA 使用 OAEP-SHA-256/MGF1-SHA-1；AES-GCM 接受 16/24/32 字节密钥，推荐客户端使用 32 字节。

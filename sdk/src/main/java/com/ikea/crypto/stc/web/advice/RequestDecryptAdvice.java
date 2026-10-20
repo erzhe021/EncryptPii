@@ -69,16 +69,12 @@ public class RequestDecryptAdvice implements RequestBodyAdvice {
             CryptoSessionContext sessionContext;
             if (decryptRequest) {
                 MediaType contentType = inputMessage.getHeaders().getContentType();
-                if (contentType == null
-                        || (!MediaType.APPLICATION_JSON.equalsTypeAndSubtype(contentType)
-                        && !MediaType.APPLICATION_FORM_URLENCODED.equalsTypeAndSubtype(contentType))) {
+                if (contentType == null || !MediaType.APPLICATION_JSON.equalsTypeAndSubtype(contentType)) {
                     throw new InvalidCryptoRequestException(
-                            "DecryptRequest supports only application/json and application/x-www-form-urlencoded");
+                            "DecryptRequest supports only application/json");
                 }
                 String encryptedBody = new String(inputMessage.getBody().readAllBytes(), StandardCharsets.UTF_8);
-                sessionContext = MediaType.APPLICATION_FORM_URLENCODED.equalsTypeAndSubtype(contentType)
-                        ? payloadHandler.createFormSessionContext(encryptedBody, sessionKeyHeaders)
-                        : payloadHandler.createSessionContext(encryptedBody, sessionKeyHeaders);
+                sessionContext = payloadHandler.createSessionContext(encryptedBody, sessionKeyHeaders);
                 String decryptedBody = payloadHandler.decrypt(sessionContext);
                 CryptoSessionContextAccessor.setCryptoSessionContext(sessionContext);
                 return new HttpInputMessage() {

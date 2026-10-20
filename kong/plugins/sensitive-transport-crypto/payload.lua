@@ -62,54 +62,22 @@ local function parse_json(body)
   return fields
 end
 
-local function url_decode(value)
-  if value:gsub("%%[0-9a-fA-F][0-9a-fA-F]", ""):find("%%") then
-    return nil
-  end
-  return (value:gsub("+", " "):gsub("%%(%x%x)", function(hex)
-    return string.char(tonumber(hex, 16))
-  end))
-end
-
-local function parse_form(body)
-  local fields = {}
-  for pair in (body .. "&"):gmatch("(.-)&") do
-    local name, value = pair:match("^([^=]*)=(.*)$")
-    if not name then
-      return nil
-    end
-    name, value = url_decode(name), url_decode(value)
-    if not name or not value or fields[name] ~= nil then
-      return nil
-    end
-    fields[name] = value
-  end
-  return fields
-end
-
 function Payload.content_type(value)
   if type(value) ~= "string" then
     return nil
   end
   local media_type = value:match("^%s*([^;]+)")
   media_type = media_type and media_type:gsub("%s+$", ""):lower()
-  if media_type == "application/json" or media_type == "application/x-www-form-urlencoded" then
+  if media_type == "application/json" then
     return media_type
   end
 end
 
-function Payload.parse(body, content_type)
+function Payload.parse(body)
   if type(body) ~= "string" or body == "" then
     return nil, "Encrypted request body is required."
   end
-  local fields
-  if content_type == "application/x-www-form-urlencoded" then
-    fields = parse_form(body)
-  elseif content_type == "application/json" then
-    fields = parse_json(body)
-  else
-    return nil, "DecryptRequest supports only application/json and application/x-www-form-urlencoded"
-  end
+  local fields = parse_json(body)
   if not fields then
     return nil, "Request body may contain only ivBase64 and encryptedDataBase64"
   end

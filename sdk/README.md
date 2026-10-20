@@ -225,7 +225,7 @@ GET /sensitive-transport-crypto/public-key
 客户端可缓存至建议刷新时间，并在下一次加密请求前刷新，无需后台定时器。
 公钥接口可独立关闭；接口存在不代表客户端已自动启用加密。
 
-`@DecryptRequest` 仅支持 `application/json` 和 `application/x-www-form-urlencoded` 请求体；其他或缺失的 `Content-Type` 会被拒绝。加密 JSON 请求使用以下请求头和请求体：
+`@DecryptRequest` 仅支持 `application/json` 请求体；其他或缺失的 `Content-Type` 会被拒绝。加密 JSON 请求使用以下请求头和请求体：
 
 ```http
 X-STC-Enabled: true
@@ -242,18 +242,6 @@ Content-Type: application/json
 ```
 
 请求体中不传输 `keyId` 或 `encryptedSessionKey`。协议算法为 RSA-2048 OAEP 和 AES-256-GCM。RSA-OAEP 使用 SHA-256 摘要，MGF1 使用 SHA-1；AES-GCM 使用 12 字节 IV 和 128 位认证标签。客户端还需与服务端使用兼容的 Base64 编码格式。每次请求应生成新的会话密钥和 IV。
-
-`application/x-www-form-urlencoded` 请求头的 `Content-Type` 应设置为表单类型；线上请求体将 `ivBase64` 和 `encryptedDataBase64` 作为 URL 编码字段传输，解密后的明文则是 UTF-8 URL 编码表单内容。建议 Controller 使用 `MultiValueMap<String, String>` 接收表单，例如：
-
-```java
-@PostMapping(consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-@DecryptRequest
-public ProfileResponse update(@RequestBody MultiValueMap<String, String> form) {
-    return new ProfileResponse(form.getFirst("name"), form.getFirst("phone"));
-}
-```
-
-客户端应先将表单内容按 `application/x-www-form-urlencoded` 规则编码，再加密该 UTF-8 内容。表单中重复的字段可通过 `MultiValueMap` 读取；需要复杂嵌套结构时仍建议使用 JSON。
 
 会话密钥会在读取请求时解析验证，再进入 Controller；非法 Base64、无法解密或长度不合法的 AES 密钥返回明文加密协议错误，不执行业务逻辑。
 
@@ -316,6 +304,6 @@ SDK 的 CAS 参数见 `VaultProperties`，自动轮换由 SDK 自身的密钥管
 ## 相关文档
 
 - [`../wechat/sdk/README.md`](../wechat/sdk/README.md)：客户端配置、模式、诊断和重试
-- [`../server-with-sdk/README.md`](../server-with-sdk/README.md)：Spring 示例与表单请求
+- [`../server-with-sdk/README.md`](../server-with-sdk/README.md)：Spring 示例
 - [`../kong/README.md`](../kong/README.md)：由 Kong 承担加解密时的部署与协议
 - [`../vault/README.md`](../vault/README.md)：Vault 部署、认证和密钥轮换

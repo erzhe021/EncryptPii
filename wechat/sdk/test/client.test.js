@@ -143,22 +143,21 @@ test('disabled and omitted crypto switches force all modes to plain without keys
   }
 });
 
-test('disabled crypto preserves form serialization and HTTP failures without key-expiry retries', async () => {
+test('disabled crypto preserves JSON requests and HTTP failures without key-expiry retries', async () => {
   let count = 0;
   const failure = { code: 'KEY_EXPIRED', data: firstKey.info };
   const client = createSdkClient(options(async (request) => {
     count += 1;
     assert.equal(request.method, 'POST');
-    assert.equal(request.data, 'name=Alice+Smith&phone=123%2B456');
+    assert.deepEqual(request.data, { name: 'Alice Smith', phone: '123+456' });
     assert.deepEqual(request.headers, {
-      'content-type': 'application/x-www-form-urlencoded', 'X-STC-Enabled': 'false'
+      'content-type': 'application/json', 'X-STC-Enabled': 'false'
     });
     return { statusCode: 400, data: failure };
   }, { crypto: { enabled: false } }));
   await assert.rejects(client.sendDetailed({
     mode: 'bidirectional',
-    endpoint: '/form',
-    contentType: 'application/x-www-form-urlencoded',
+    endpoint: '/request',
     data: { name: 'Alice Smith', phone: '123+456' }
   }), (error) => {
     assert.ok(error instanceof HttpError);
@@ -339,54 +338,28 @@ test('all modes preserve routing and interoperate with independent RSA/AES primi
   assert.equal(new Set(sessions).size, 6);
 });
 
-test('form-url-encoded requests encrypt form serialization and preserve the media type', async () => {
-  const requests = [];
-  const client = createClient(options(async (request) => {
-    requests.push(request);
-    if (request.method === 'GET') {
-      return { statusCode: 200, data: firstKey.info };
-    }
-    assert.equal(request.headers['content-type'], 'application/x-www-form-urlencoded');
-    const payload = Object.fromEntries(new URLSearchParams(request.data));
-    const sessionKey = unwrapSession(request.headers['X-STC-Session-Key'], firstKey);
-    const plaintext = decryptText(payload, sessionKey);
-    assert.equal(plaintext, 'name=%E5%BC%A0%E4%B8%89&phone=111%2B222');
-    return { statusCode: 200, data: result({ name: '张三', phone: '111+222' }) };
-  }));
-
-  const response = await client.send({
-    mode: 'request-only',
-    endpoint: '/form',
-    contentType: 'application/x-www-form-urlencoded',
-    data: { name: '张三', phone: '111+222' }
-  });
-  assert.deepEqual(response, result({ name: '张三', phone: '111+222' }));
-  assert.equal(requests.length, 2);
-
-  const detailed = await client.sendDetailed({
-    mode: 'request-only',
-    endpoint: '/form',
-    contentType: 'application/x-www-form-urlencoded',
-    data: { name: '张三', phone: '111+222' }
-  });
-  assert.equal(detailed.requestHeaders['Content-Type'], 'application/x-www-form-urlencoded');
-});
-
-test('unsupported form values and media types fail before sending requests', async () => {
+test('non-JSON media types fail before sending requests', async () => {
   let requestCount = 0;
   const client = createClient(options(async () => {
     requestCount += 1;
     return { statusCode: 200, data: result({}) };
   }));
-  await assert.rejects(client.send({
-    mode: 'request-only', endpoint: '/form',
-    contentType: 'application/x-www-form-urlencoded', data: { nested: { value: 1 } }
-  }), { code: 'INVALID_ARGUMENT' });
-  await assert.rejects(client.send({
-    mode: 'request-only', endpoint: '/form',
-    contentType: 'multipart/form-data', data: { field: 'value' }
-  }), { code: 'INVALID_ARGUMENT' });
+  for (const contentType of ['application/x-www-form-urlencoded', 'multipart/form-data']) {
+    await assert.rejects(client.send({
+      mode: 'request-only', endpoint: '/request', contentType, data: { field: 'value' }
+    }), { code: 'INVALID_ARGUMENT' });
+    assert.throws(() => createSdkClient(options(async () => {}, { headers: { 'Content-Type': contentType } })),
+      { code: 'INVALID_ARGUMENT' });
+    await assert.rejects(client.send({
+      mode: 'request-only', endpoint: '/request', headers: { 'Content-Type': contentType },
+      data: { field: 'value' }
+    }), { code: 'INVALID_ARGUMENT' });
+  }
   assert.equal(requestCount, 0);
+  await client.send({
+    mode: 'plain', endpoint: '/request', contentType: 'Application/JSON; charset=UTF-8', data: {}
+  });
+  assert.equal(requestCount, 1);
 });
 
 test('response diagnostics retain the received content type header', async () => {

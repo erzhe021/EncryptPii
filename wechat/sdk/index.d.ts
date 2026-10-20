@@ -35,7 +35,6 @@ export interface SendOptions {
   mode: TransportMode;
   endpoint: string;
   data: JsonValue;
-  contentType?: 'application/json' | 'application/x-www-form-urlencoded';
   /** Same reserved protocol headers as ClientOptions.headers. */
   headers?: Record<string, string>;
 }

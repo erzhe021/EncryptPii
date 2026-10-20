@@ -94,8 +94,8 @@ function Crypto.decrypt_session_key(config, key_id, encrypted_session_key_base64
   return nil, "request session key could not be decrypted"
 end
 
-function Crypto.decrypt_request_body(body, session_key, content_type)
-  local payload, err = payload_codec.parse(body, content_type)
+function Crypto.decrypt_request_body(body, session_key)
+  local payload, err = payload_codec.parse(body)
   if not payload then
     return nil, err
   end

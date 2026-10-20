@@ -11,12 +11,6 @@ module.exports = {
         'plain': {service: 'demo', mode: 'plain', endpoint: '/plain/server/normal'},
         'bidirectional': {service: 'demo', mode: 'bidirectional', endpoint: '/crypto/server/bidirectional'},
         'request-only': {service: 'demo', mode: 'request-only', endpoint: '/crypto/server/request-only'},
-        'form-urlencoded': {
-            service: 'demo',
-            mode: 'request-only',
-            endpoint: '/crypto/server/form-urlencoded',
-            contentType: 'application/x-www-form-urlencoded'
-        },
         'response-only': {service: 'demo', mode: 'response-only', endpoint: '/crypto/server/response-only'},
         'response-only/client-exception': {
             service: 'demo',

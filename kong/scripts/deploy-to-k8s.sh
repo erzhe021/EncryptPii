@@ -106,8 +106,6 @@ jq -n \
          strip_path:false,plugins:[plugin(false;true;true;"/crypto/server/bidirectional")]},
         {name:"encryptpii-request-only",paths:["/crypto/server/request-only"],methods:["POST"],
          strip_path:false,plugins:[plugin(false;true;false;"/crypto/server/request-only")]},
-        {name:"encryptpii-form-urlencoded",paths:["/crypto/server/form-urlencoded"],methods:["POST"],
-         strip_path:false,plugins:[plugin(false;true;false;"/crypto/server/form-urlencoded")]},
         {name:"encryptpii-response-only",paths:["/crypto/server/response-only"],methods:["POST"],
          strip_path:false,plugins:[plugin(false;false;true;"/crypto/server/response-only")]},
         (["client-exception","system-exception","business-exception"][] as $exception |

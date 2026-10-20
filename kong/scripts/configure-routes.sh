@@ -168,16 +168,12 @@ bidirectional_route="$(
 request_only_route="$(
   upsert_route encryptpii-request-only /crypto/server/request-only POST
 )"
-form_route="$(
-  upsert_route encryptpii-form-urlencoded /crypto/server/form-urlencoded POST
-)"
 response_only_route="$(
   upsert_route encryptpii-response-only /crypto/server/response-only POST
 )"
 
 upsert_plugin "$bidirectional_route" true true /crypto/server/bidirectional
 upsert_plugin "$request_only_route" true false /crypto/server/request-only
-upsert_plugin "$form_route" true false /crypto/server/form-urlencoded
 upsert_plugin "$response_only_route" false true /crypto/server/response-only
 upsert_plugin "$public_key_route" false false /sensitive-transport-crypto/public-key true
 

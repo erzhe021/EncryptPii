@@ -321,13 +321,16 @@ assert(plugin:access({ serve_public_key = true, crypto_enabled = false }).status
 headers = {
   ["X-STC-Enabled"] = "true", ["X-STC-Key-Id"] = "alias:1",
   ["X-STC-Session-Key"] = encrypted_session_key,
-  ["Content-Type"] = "application/x-www-form-urlencoded; charset=UTF-8",
+  ["Content-Type"] = "application/json",
 }
-request_body = "ivBase64=AAAAAAAAAAAAAAAA&encryptedDataBase64=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
+request_body = valid_body
 forwarded_body = nil
 assert(plugin:access(encrypted_config) == nil)
 assert(forwarded_body == "decrypted request")
-for _, content_type in ipairs({ "", "text/plain", "application/json-patch+json", "multipart/form-data" }) do
+for _, content_type in ipairs({
+  "", "text/plain", "application/json-patch+json", "multipart/form-data",
+  "application/x-www-form-urlencoded; charset=UTF-8"
+}) do
   headers["Content-Type"] = content_type
   assert(plugin:access(encrypted_config).status == 400)
 end

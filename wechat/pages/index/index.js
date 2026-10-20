@@ -5,7 +5,6 @@ const MODES = [
   { id: 'plain', title: '普通传输', description: '明文请求与响应' },
   { id: 'bidirectional', title: '双向加密', description: '请求和响应均加密' },
   { id: 'request-only', title: '请求加密', description: '仅加密敏感请求' },
-  { id: 'form-urlencoded', title: '请求加密(Form)', description: '加密后按 URL 编码表单解析' },
   { id: 'response-only', title: '响应加密(正常)', description: '仅加密敏感响应' },
   { id: 'response-only/business-exception', title: '响应加密(业务异常)', description: 'HTTP 200 业务异常' },
   { id: 'response-only/client-exception', title: '响应加密(客户端异常)', description: 'HTTP 400 客户端异常' },

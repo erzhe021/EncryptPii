@@ -10,7 +10,7 @@
 
 应用采用“服务配置注册表 + 客户端工厂”：`config.js` 的 `SERVICES` 按服务标识配置
 地址、超时、公钥路径和加密开关；`REQUESTS` 按业务操作配置
-`{ service, mode, endpoint, contentType? }`。`utils/api.js` 根据 `service` 取客户端，
+`{ service, mode, endpoint }`。`utils/api.js` 根据 `service` 取客户端，
 仅把请求参数传入 SDK。SDK 不包含 Team、服务注册表或业务路由。
 三个异常演示都使用 `response-only` 模式，仅接口路径不同。
 
@@ -42,7 +42,7 @@ SDK 只允许 `localhost`、`127.0.0.1` 和 `[::1]` 的 HTTP 地址，不允许�
 ```
 
 如需使用 Vault，请改用 `server-with-sdk/src/main/resources/application.yml` 的配置。
-表单请求接口只在 `server-with-sdk` 中提供；如果 Server 已在运行，需要先停止旧实例，再重新启动。
+如果 Server 已在运行，需要先停止旧实例，再重新启动。
 
 ## 接口映射
 
@@ -52,7 +52,6 @@ SDK 只允许 `localhost`、`127.0.0.1` 和 `[::1]` 的 HTTP 地址，不允许�
 | 普通传输 | `POST /plain/server/normal` |
 | 双向加密 | `POST /crypto/server/bidirectional` |
 | 请求加密（JSON） | `POST /crypto/server/request-only` |
-| 请求加密（URL 编码表单） | `POST /crypto/server/form-urlencoded` |
 | 响应加密 | `POST /crypto/server/response-only` |
 | 客户端异常 | `POST /crypto/server/response-only/client-exception` |
 | 系统异常 | `POST /crypto/server/response-only/system-exception` |
@@ -62,7 +61,7 @@ SDK 只允许 `localhost`、`127.0.0.1` 和 `[::1]` 的 HTTP 地址，不允许�
 
 开启加密后，双向、请求加密和响应加密模式均通过 `X-STC-Key-Id` 和 `X-STC-Session-Key` 请求头发送 keyId 与 RSA 加密的 AES 会话密钥；请求密文体只包含 `ivBase64` 和 `encryptedDataBase64`。旧版请求体密钥格式不再兼容。请求加密模式与 Java SDK 使用相同的 RSA OAEP 摘要参数、AES-GCM IV 和认证标签格式。公钥在内存中缓存至配置的提前刷新点；刷新由下一次加密请求触发，不运行后台定时器。收到 `KEY_EXPIRED` 时刷新并最多重试一次，重试会重新生成会话材料及请求头。
 
-页面中的“请求加密(form)”演示使用 `application/x-www-form-urlencoded`。微信端先将 `name`、`phone`、`email`、`address` 字段按 UTF-8 URL 编码，再加密编码后的内容；线上请求体将 `ivBase64` 和 `encryptedDataBase64` 密文协议字段作为 URL 编码表单字段发送。Server SDK 解密后保留该 Content-Type，由 Spring MVC 转换为 `MultiValueMap<String, String>`。JSON 请求模式及其默认行为不变。该表单密文载体用于 Spring Server 示例；Kong 插件当前仍要求 JSON 格式的密文载体。
+请求加密仅支持 JSON：线上请求体是仅包含 `ivBase64` 和 `encryptedDataBase64` 的 JSON 密文信封。
 
 RSA/AES 实现使用 SDK 内置的 node-forge 浏览器 bundle，见 `sdk/lib/FORGE-LICENSE.txt`。会话密钥、IV 和 RSA OAEP seed 均按请求使用微信 `wx.getRandomValues` 获取；不再使用全局随机池或覆盖 Forge 随机函数。需使用支持该 API 的微信基础库。不要将真实个人信息提交到未受信任或未启用 HTTPS 的服务。
 

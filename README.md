@@ -253,7 +253,6 @@ plain:
 | `/sensitive-transport-crypto/public-key` | GET | 无 | 插件从 Vault 读取当前公钥并直接响应 |
 | `/crypto/server/bidirectional` | POST | `/crypto/server/bidirectional` | 解密请求并加密响应 |
 | `/crypto/server/request-only` | POST | `/crypto/server/request-only` | 解密请求，响应为明文 |
-| `/crypto/server/form-urlencoded` | POST | `/crypto/server/form-urlencoded` | 解密 URL 编码表单，响应为明文 |
 | `/crypto/server/response-only` | POST | `/crypto/server/response-only` | 从请求头解密会话密钥并加密响应 |
 | `/plain/server/normal` | POST | `/plain/server/normal` | 仅校验协议，保留明文请求体 |
 

@@ -119,7 +119,7 @@ Application-layer encryption is **disabled by default**. Set
 behavior selected by each request's `mode`. With the option omitted, an empty
 `crypto` object, or `enabled: false`, **all four modes use plain transport**:
 the SDK does not fetch public keys, acquire randomness, send STC key headers, or
-decrypt responses. JSON and URL-encoded form serialization remain unchanged.
+decrypt responses. JSON serialization remains unchanged.
 The flag must be a boolean when supplied; strings such as `"true"` are rejected.
 
 The SDK captures this setting when the client is created. Create another client
@@ -132,15 +132,14 @@ The Header is a request declaration, not capability discovery or a remote
 switch. The SDK does not fetch server policy or automatically synchronize its
 switch with the server.
 
-With `crypto.enabled: true`, the modes behave as follows. Request bodies are JSON
-by default; URL-encoded forms are also supported by the client:
+With `crypto.enabled: true`, the modes behave as follows. Request bodies use JSON:
 
 | Mode | Request | Response | `X-STC-Enabled` |
 | --- | --- | --- | --- |
-| `plain` | JSON by default; optional URL-encoded form | JSON | `false` |
-| `bidirectional` | Encrypted JSON by default; optional encrypted URL-encoded form + session-key headers | Decrypted JSON | `true` |
-| `request-only` | Encrypted JSON by default; optional encrypted URL-encoded form + session-key headers | JSON | `true` |
-| `response-only` | JSON by default; optional URL-encoded form + session-key headers | Decrypted JSON | `true` |
+| `plain` | JSON | JSON | `false` |
+| `bidirectional` | Encrypted JSON + session-key headers | Decrypted JSON | `true` |
+| `request-only` | Encrypted JSON + session-key headers | JSON | `true` |
+| `response-only` | JSON + session-key headers | Decrypted JSON | `true` |
 
 For Spring endpoints, `request-only` maps to `@DecryptRequest`, `response-only`
 to `@EncryptResponse`, and `bidirectional` to both. The enable Header carries
@@ -155,41 +154,18 @@ this flag. `X-STC-Enabled`, `X-STC-Key-Id` and `X-STC-Session-Key` are SDK-owned
 reserved case-insensitively: setting them in client or per-request `headers`
 fails with `INVALID_ARGUMENT` before any network request.
 
-The four modes select encryption behavior, not a business operation. JSON is
-the default for each mode; `contentType` can select URL-encoded form requests.
-Supply `endpoint` on each call; multiple endpoints can use the same mode.
+The four modes select encryption behavior, not a business operation. Requests
+use JSON. Supply `endpoint` on each call; multiple endpoints can use the same mode.
 Application-specific requests and error scenarios belong in the application,
 not the SDK.
 
-### Sending JSON and forms
+### Sending JSON
 
-`client.send({ mode, endpoint, data, headers?, contentType? })` returns the server's
+`client.send({ mode, endpoint, data, headers? })` returns the server's
 `{ code, message, data }` result envelope. The business payload is in `data`.
 This result shape is required by the client SDK, not by the Java encryption SDK.
 JSON is the default request content type; `data` must be JSON serializable and is
 snapshotted before asynchronous work.
-
-Set `contentType` to `application/x-www-form-urlencoded` to submit a flat object
-of string, finite number or boolean fields. Nested objects, arrays, null and
-undefined values are rejected; repeated fields and multipart are unsupported.
-For an effective plain or response-only request, the URL-encoded body is sent
-unchanged. For request encryption, the SDK encrypts its encoded UTF-8 bytes and
-sends `ivBase64` and `encryptedDataBase64` as URL-encoded fields.
-
-Example encrypted form request:
-
-```js
-client.send({
-  mode: 'request-only',
-  endpoint: '/crypto/server/form-urlencoded',
-  contentType: 'application/x-www-form-urlencoded',
-  data: { name: 'Alice Smith', phone: '123+456' }
-});
-```
-
-The form example requires `crypto.enabled: true` and a Spring endpoint with
-`@DecryptRequest`. The current Kong plugin expects encrypted request envelopes
-in JSON; do not use encrypted form bodies with that plugin.
 
 ### Opt-in diagnostics
 

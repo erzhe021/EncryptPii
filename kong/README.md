@@ -35,7 +35,6 @@ Kong 仅使用 Vault 存储，不支持 SDK 的内存开发模式、自动初始
 | --- | --- | --- |
 | `/crypto/server/bidirectional` | POST | 从请求头解密会话密钥、解密请求体，转发明文请求，并使用同一会话密钥加密响应 |
 | `/crypto/server/request-only` | POST | 从请求头解密会话密钥、解密请求体后转发明文响应 |
-| `/crypto/server/form-urlencoded` | POST | URL 编码的加密表单，解密后保留表单 Content-Type，转发明文响应 |
 | `/crypto/server/response-only` | POST | 从请求头解密会话密钥，转发请求，并加密响应 |
 | `/crypto/server/response-only/business-exception` | POST | 独立响应加密路由，转发到业务异常接口（HTTP 200） |
 | `/crypto/server/response-only/client-exception` | POST | 独立响应加密路由，转发到客户端异常接口（HTTP 400） |
@@ -59,8 +58,8 @@ Kong 仅使用 Vault 存储，不支持 SDK 的内存开发模式、自动初始
 
 启用加解密时，`X-STC-Key-Id` 和 `X-STC-Session-Key` 必须同时提供，且必须是单个非空白值；未启用时若出现任一密钥头（包括空值）会返回 HTTP 400。公钥接口在能力开启后可不带 `X-STC-Enabled` 调用；公钥接口没有加密方向，声明 `true` 会返回 HTTP 400。
 
-双向加密和请求加密仅支持 `application/json` 或 `application/x-www-form-urlencoded`；
-缺失或其他 Content-Type 返回 HTTP 400。JSON 请求体必须恰好是一个对象，只包含以下
+双向加密和请求加密仅支持 `application/json`；缺失或其他 Content-Type 返回 HTTP 400。
+JSON 请求体必须恰好是一个对象，只包含以下
 两个字符串字段；重复字段（包括 Unicode 转义后的同名字段）、额外字段和尾随 JSON 均被拒绝。
 仅响应加密的请求体保持原业务明文结构，也可无请求体：
 
@@ -70,10 +69,6 @@ Kong 仅使用 Vault 存储，不支持 SDK 的内存开发模式、自动初始
   "encryptedDataBase64": "<AES-GCM ciphertext followed by the 16-byte tag>"
 }
 ```
-
-表单请求将上述两个字段按 URL 编码传输。解密后的内容仍是 UTF-8 URL 编码表单，例如
-`name=Alice+Smith&phone=123%2B456`，Kong 不会把它转换为 JSON。协议字段必须恰好各出现
-一次；无效百分号转义、重复或额外字段返回 HTTP 400。业务表单自身仍可包含重复字段。
 
 RSA 使用 OAEP-SHA-256，MGF1 使用 SHA-1，以匹配 Java SDK 的 `RSA/ECB/OAEPWithSHA-256AndMGF1Padding` 默认参数。客户端推荐生成 256-bit AES 会话密钥；与 SDK 一致，服务端也接受合法的 128/192-bit AES 密钥。数据采用 GCM，IV 为 12 字节、认证标签为 16 字节。Base64 不接受空白或非法字符，允许省略合法的尾部填充。响应体包含 `ivBase64` 和 `encryptedDataBase64`。
 

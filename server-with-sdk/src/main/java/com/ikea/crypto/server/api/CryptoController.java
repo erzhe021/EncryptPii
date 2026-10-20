@@ -5,14 +5,10 @@ import com.ikea.crypto.server.exception.SystemException;
 import com.ikea.crypto.server.model.*;
 import com.ikea.crypto.stc.annotation.DecryptRequest;
 import com.ikea.crypto.stc.annotation.EncryptResponse;
-import org.springframework.http.MediaType;
-import org.springframework.util.MultiValueMap;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
-
-import java.util.Objects;
 
 @RestController
 @RequestMapping("/crypto/server")
@@ -52,19 +48,6 @@ public class CryptoController {
                 "zhangsan@example.com",
                 "上海市长宁区某某广场办公A楼",
                 "response-only crypto for request: " + request.data()));
-    }
-
-    @PostMapping(value = "/form-urlencoded", consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE)
-    @DecryptRequest
-    public Result<DemoPlainResponse> formUrlEncoded(
-            @RequestBody MultiValueMap<String, String> form) {
-        return Result.ok(new DemoPlainResponse(
-                Objects.requireNonNull(form.getFirst("name")),
-                "1234-5678-9012-3456",
-                3,
-                1500L,
-                "form-urlencoded request-only crypto")
-        );
     }
 
     @PostMapping("/response-only/client-exception")

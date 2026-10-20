@@ -113,14 +113,14 @@ function Access.run(config)
   if decrypt_request then
     local content_type = payload_codec.content_type(kong.request.get_header("Content-Type"))
     if not content_type then
-      return errors.json_error(400, "DecryptRequest supports only application/json and application/x-www-form-urlencoded")
+      return errors.json_error(400, "DecryptRequest supports only application/json")
     end
     local body, err, status = size_limit.read_encrypted_request_body(config.max_body_bytes)
     if not body then
       return errors.json_error(status or 400, err)
     end
     local payload_err
-    request_payload, payload_err = payload_codec.parse(body, content_type)
+    request_payload, payload_err = payload_codec.parse(body)
     if not request_payload then
       return errors.json_error(400, payload_err)
     end

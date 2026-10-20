@@ -34,9 +34,7 @@ for _, length in ipairs({ 16, 24, 32 }) do
   local tag = assert(aes:get_aead_tag(16))
   local payload = { ivBase64 = ngx.encode_base64(iv),
     encryptedDataBase64 = ngx.encode_base64(encrypted .. tag) }
-  assert(crypto.decrypt_request_body(cjson.encode(payload), key, "application/json") == plaintext)
-  local form = ngx.encode_args(payload)
-  assert(crypto.decrypt_request_body(form, key, "application/x-www-form-urlencoded") == plaintext)
+  assert(crypto.decrypt_request_body(cjson.encode(payload), key) == plaintext)
   local response = assert(cjson.decode(assert(crypto.encrypt_response(key, plaintext))))
   local response_iv = assert(ngx.decode_base64(response.ivBase64))
   local response_data = assert(ngx.decode_base64(response.encryptedDataBase64))
@@ -45,7 +43,7 @@ for _, length in ipairs({ 16, 24, 32 }) do
     response_data:sub(-16)) == plaintext)
   local tampered_tag = string.char((tag:byte(1) + 1) % 256) .. tag:sub(2)
   payload.encryptedDataBase64 = ngx.encode_base64(encrypted .. tampered_tag)
-  assert(not crypto.decrypt_request_body(cjson.encode(payload), key, "application/json"))
+  assert(not crypto.decrypt_request_body(cjson.encode(payload), key))
 
   deferred_error, deferred_status, deferred_code = "stale", 400, "stale_key"
   assert(crypto.decrypt_session_key({}, "alias:999", encoded_key) == key,
